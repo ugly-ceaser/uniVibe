@@ -37,6 +37,9 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="profile" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="tip-detail" />
         <Stack.Screen name="post-detail" />

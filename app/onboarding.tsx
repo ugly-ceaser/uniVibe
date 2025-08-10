@@ -51,12 +51,12 @@ export default function OnboardingScreen() {
         animated: true,
       });
     } else {
-      router.replace('/(tabs)');
+      router.replace('/login');
     }
   };
 
   const handleSkip = () => {
-    router.replace('/(tabs)');
+    router.replace('/login');
   };
 
   return (
