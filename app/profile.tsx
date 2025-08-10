@@ -10,20 +10,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { 
-  ArrowLeft, 
-  User, 
-  Mail, 
-  Phone, 
-  BookOpen, 
-  Settings, 
-  Bell, 
-  Shield, 
-  HelpCircle, 
-  LogOut,
-  Edit3,
-  ChevronRight
-} from 'lucide-react-native';
+import { ArrowLeft, User, Mail, Phone, BookOpen, Settings, Bell, Shield, CircleHelp as HelpCircle, LogOut, CreditCard as Edit3, ChevronRight } from 'lucide-react-native';
 
 // Mock user data - replace with actual user data from context/state
 const mockUser = {
