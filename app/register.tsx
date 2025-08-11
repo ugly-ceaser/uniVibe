@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, User, Mail, Lock, Eye, EyeOff, Phone } from 'lucide-react-native';
+import { ArrowLeft, User, Mail, Lock, Eye, EyeOff, Phone, Shield, BookOpen } from 'lucide-react-native';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -21,6 +21,8 @@ export default function RegisterScreen() {
     fullName: '',
     email: '',
     phone: '',
+    nin: '',
+    regNumber: '',
     password: '',
     confirmPassword: '',
   });
@@ -33,10 +35,15 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    const { fullName, email, phone, password, confirmPassword } = formData;
+    const { fullName, email, phone, nin, regNumber, password, confirmPassword } = formData;
 
-    if (!fullName || !email || !phone || !password || !confirmPassword) {
+    if (!fullName || !email || !phone || !nin || !regNumber || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (nin.length !== 11) {
+      Alert.alert('Error', 'NIN must be 11 digits');
       return;
     }
 
@@ -122,6 +129,29 @@ export default function RegisterScreen() {
                   value={formData.phone}
                   onChangeText={(value) => handleInputChange('phone', value)}
                   keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Shield size={20} color="#9ca3af" strokeWidth={2} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="National ID Number (NIN)"
+                  value={formData.nin}
+                  onChangeText={(value) => handleInputChange('nin', value)}
+                  keyboardType="numeric"
+                  maxLength={11}
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <BookOpen size={20} color="#9ca3af" strokeWidth={2} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Registration Number (e.g., CS/2024/001)"
+                  value={formData.regNumber}
+                  onChangeText={(value) => handleInputChange('regNumber', value)}
+                  autoCapitalize="characters"
                 />
               </View>
 

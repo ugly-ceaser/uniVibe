@@ -17,10 +17,18 @@ const mockUser = {
   fullName: 'John Adebayo',
   email: 'john.adebayo@student.university.edu.ng',
   phone: '+234 803 123 4567',
+  nin: '12345678901',
+  regNumber: 'CS/2024/001',
   studentId: 'CS/2024/001',
   level: '100 Level',
   department: 'Computer Science',
   semester: 'First Semester',
+  verificationStatus: {
+    email: true,
+    phone: false,
+    nin: false,
+    regNumber: true,
+  },
 };
 
 export default function ProfileScreen() {
@@ -29,6 +37,14 @@ export default function ProfileScreen() {
 
   const handleEditProfile = () => {
     Alert.alert('Edit Profile', 'Profile editing feature coming soon!');
+  };
+
+  const handleVerifyField = (field: string) => {
+    Alert.alert(
+      `Verify ${field}`,
+      `Verification process for ${field} will be implemented soon!`,
+      [{ text: 'OK' }]
+    );
   };
 
   const handleLogout = () => {
@@ -116,20 +132,97 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
           
-          <View style={styles.infoItem}>
+          <View style={styles.verificationItem}>
             <Mail size={20} color="#667eea" strokeWidth={2} />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Email</Text>
               <Text style={styles.infoValue}>{user.email}</Text>
             </View>
+            <TouchableOpacity
+              style={[
+                styles.verificationBadge,
+                user.verificationStatus.email ? styles.verifiedBadge : styles.unverifiedBadge
+              ]}
+              onPress={() => handleVerifyField('Email')}
+            >
+              <Text style={[
+                styles.verificationText,
+                user.verificationStatus.email ? styles.verifiedText : styles.unverifiedText
+              ]}>
+                {user.verificationStatus.email ? 'Verified' : 'Verify'}
+              </Text>
+            </TouchableOpacity>
           </View>
           
-          <View style={styles.infoItem}>
+          <View style={styles.verificationItem}>
             <Phone size={20} color="#667eea" strokeWidth={2} />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Phone</Text>
               <Text style={styles.infoValue}>{user.phone}</Text>
             </View>
+            <TouchableOpacity
+              style={[
+                styles.verificationBadge,
+                user.verificationStatus.phone ? styles.verifiedBadge : styles.unverifiedBadge
+              ]}
+              onPress={() => handleVerifyField('Phone')}
+            >
+              <Text style={[
+                styles.verificationText,
+                user.verificationStatus.phone ? styles.verifiedText : styles.unverifiedText
+              ]}>
+                {user.verificationStatus.phone ? 'Verified' : 'Verify'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Identity Verification */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Identity Verification</Text>
+          
+          <View style={styles.verificationItem}>
+            <Shield size={20} color="#667eea" strokeWidth={2} />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>National ID Number (NIN)</Text>
+              <Text style={styles.infoValue}>{user.nin}</Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.verificationBadge,
+                user.verificationStatus.nin ? styles.verifiedBadge : styles.unverifiedBadge
+              ]}
+              onPress={() => handleVerifyField('NIN')}
+            >
+              <Text style={[
+                styles.verificationText,
+                user.verificationStatus.nin ? styles.verifiedText : styles.unverifiedText
+              ]}>
+                {user.verificationStatus.nin ? 'Verified' : 'Verify'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.verificationItem}>
+            <BookOpen size={20} color="#667eea" strokeWidth={2} />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Registration Number</Text>
+              <Text style={styles.infoValue}>{user.regNumber}</Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.verificationBadge,
+                user.verificationStatus.regNumber ? styles.verifiedBadge : styles.unverifiedBadge
+              ]}
+              onPress={() => handleVerifyField('Registration Number')}
+            >
+              <Text style={[
+                styles.verificationText,
+                user.verificationStatus.regNumber ? styles.verifiedText : styles.unverifiedText
+              ]}>
+                {user.verificationStatus.regNumber ? 'Verified' : 'Verify'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -301,6 +394,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#1f2937',
+  },
+  verificationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  verificationBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  verifiedBadge: {
+    backgroundColor: '#dcfce7',
+  },
+  unverifiedBadge: {
+    backgroundColor: '#fef3c7',
+  },
+  verificationText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  verifiedText: {
+    color: '#16a34a',
+  },
+  unverifiedText: {
+    color: '#d97706',
   },
   menuItem: {
     flexDirection: 'row',
