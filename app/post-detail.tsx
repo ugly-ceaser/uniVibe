@@ -6,10 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, User, Clock, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, User, Clock, MessageSquare, Send } from 'lucide-react-native';
 import { forumPosts } from '@/data/forumPosts';
 
 const categoryColors = {
@@ -22,6 +24,7 @@ const categoryColors = {
 export default function PostDetailScreen() {
   const router = useRouter();
   const { postId } = useLocalSearchParams();
+  const [newComment, setNewComment] = React.useState('');
   
   const post = forumPosts.find(p => p.id === postId);
 
@@ -32,6 +35,18 @@ export default function PostDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  const handleAddComment = () => {
+    if (!newComment.trim()) {
+      Alert.alert('Error', 'Please enter a comment');
+      return;
+    }
+
+    // Mock adding comment - in real app this would be an API call
+    Alert.alert('Success', 'Comment added successfully!', [
+      { text: 'OK', onPress: () => setNewComment('') }
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -110,6 +125,28 @@ export default function PostDetailScreen() {
               <Text style={styles.commentContent}>{comment.content}</Text>
             </View>
           ))}
+        </View>
+
+        {/* Add Comment Section */}
+        <View style={styles.addCommentSection}>
+          <Text style={styles.addCommentTitle}>Add a Comment</Text>
+          <View style={styles.commentInputContainer}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Share your thoughts or ask a follow-up question..."
+              value={newComment}
+              onChangeText={setNewComment}
+              multiline
+              maxLength={500}
+            />
+            <TouchableOpacity
+              style={[styles.commentSendButton, !newComment.trim() && styles.commentSendButtonDisabled]}
+              onPress={handleAddComment}
+              disabled={!newComment.trim()}
+            >
+              <Send size={20} color="#ffffff" strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -281,5 +318,52 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     textAlign: 'center',
     marginTop: 50,
+  },
+  addCommentSection: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addCommentTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1f2937',
+    marginBottom: 12,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  commentInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    maxHeight: 100,
+    marginRight: 12,
+    backgroundColor: '#f9fafb',
+    textAlignVertical: 'top',
+  },
+  commentSendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#667eea',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  commentSendButtonDisabled: {
+    opacity: 0.5,
   },
 });
