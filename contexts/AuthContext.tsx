@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useContext,
   useState,
   useCallback,
   useEffect,
@@ -21,6 +22,15 @@ export const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   logout: async () => {},
 });
+
+// Custom hook to use the AuthContext
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
 type AuthProviderProps = {
   children: ReactNode;
