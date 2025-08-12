@@ -18,21 +18,24 @@ const onboardingData = [
     id: 1,
     icon: BookOpen,
     title: 'Academic Excellence',
-    description: 'Get survival tips, course guides, and study strategies to excel in your first year.',
+    description:
+      'Get survival tips, course guides, and study strategies to excel in your first year.',
     color: ['#667eea', '#764ba2'],
   },
   {
     id: 2,
     icon: MapPin,
     title: 'Navigate Campus',
-    description: 'Find your way around campus with our comprehensive location guide and maps.',
+    description:
+      'Find your way around campus with our comprehensive location guide and maps.',
     color: ['#f093fb', '#f5576c'],
   },
   {
     id: 3,
     icon: Users,
     title: 'Connect & Learn',
-    description: 'Join discussions, ask questions, and connect with fellow students in our forum.',
+    description:
+      'Join discussions, ask questions, and connect with fellow students in our forum.',
     color: ['#4facfe', '#00f2fe'],
   },
 ];
@@ -66,7 +69,7 @@ export default function OnboardingScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(event) => {
+        onMomentumScrollEnd={event => {
           const index = Math.round(event.nativeEvent.contentOffset.x / width);
           setCurrentIndex(index);
         }}
@@ -79,9 +82,9 @@ export default function OnboardingScreen() {
           >
             <View style={styles.content}>
               <View style={styles.iconContainer}>
-                <item.icon size={80} color="#ffffff" strokeWidth={1.5} />
+                <item.icon size={80} color='#ffffff' strokeWidth={1.5} />
               </View>
-              
+
               <Text style={styles.title}>{item.title}</Text>
               <Text style={styles.description}>{item.description}</Text>
             </View>
@@ -94,10 +97,7 @@ export default function OnboardingScreen() {
           {onboardingData.map((_, index) => (
             <View
               key={index}
-              style={[
-                styles.dot,
-                index === currentIndex && styles.activeDot,
-              ]}
+              style={[styles.dot, index === currentIndex && styles.activeDot]}
             />
           ))}
         </View>
@@ -109,7 +109,9 @@ export default function OnboardingScreen() {
 
           <TouchableOpacity onPress={handleNext} style={styles.nextButton}>
             <Text style={styles.nextText}>
-              {currentIndex === onboardingData.length - 1 ? 'Get Started' : 'Next'}
+              {currentIndex === onboardingData.length - 1
+                ? 'Get Started'
+                : 'Next'}
             </Text>
           </TouchableOpacity>
         </View>

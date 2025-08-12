@@ -10,41 +10,65 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, ExternalLink, Building, Chrome as Home, Coffee, FlaskConical, CreditCard, BookOpen, Settings, Gamepad2 } from 'lucide-react-native';
+import {
+  MapPin,
+  ExternalLink,
+  Building,
+  Chrome as Home,
+  Coffee,
+  FlaskConical,
+  CreditCard,
+  BookOpen,
+  Settings,
+  Gamepad2,
+} from 'lucide-react-native';
 import { campusLocations, CampusLocation } from '@/data/campusLocations';
 
 const categoryIcons = {
   'Lecture Hall': Building,
-  'Hostel': Home,
-  'Cafeteria': Coffee,
-  'Lab': FlaskConical,
-  'ATM': CreditCard,
-  'Library': BookOpen,
-  'Admin': Settings,
-  'Recreation': Gamepad2,
+  Hostel: Home,
+  Cafeteria: Coffee,
+  Lab: FlaskConical,
+  ATM: CreditCard,
+  Library: BookOpen,
+  Admin: Settings,
+  Recreation: Gamepad2,
 };
 
 const categoryColors = {
   'Lecture Hall': ['#667eea', '#764ba2'],
-  'Hostel': ['#f093fb', '#f5576c'],
-  'Cafeteria': ['#4facfe', '#00f2fe'],
-  'Lab': ['#43e97b', '#38f9d7'],
-  'ATM': ['#fa709a', '#fee140'],
-  'Library': ['#a8edea', '#fed6e3'],
-  'Admin': ['#ffecd2', '#fcb69f'],
-  'Recreation': ['#ff9a9e', '#fecfef'],
+  Hostel: ['#f093fb', '#f5576c'],
+  Cafeteria: ['#4facfe', '#00f2fe'],
+  Lab: ['#43e97b', '#38f9d7'],
+  ATM: ['#fa709a', '#fee140'],
+  Library: ['#a8edea', '#fed6e3'],
+  Admin: ['#ffecd2', '#fcb69f'],
+  Recreation: ['#ff9a9e', '#fecfef'],
 };
 
 export default function MapScreen() {
-  const [selectedCategory, setSelectedCategory] = useState<CampusLocation['category'] | 'All'>('All');
+  const [selectedCategory, setSelectedCategory] = useState<
+    CampusLocation['category'] | 'All'
+  >('All');
 
   const categories: (CampusLocation['category'] | 'All')[] = [
-    'All', 'Lecture Hall', 'Hostel', 'Cafeteria', 'Lab', 'ATM', 'Library', 'Admin', 'Recreation'
+    'All',
+    'Lecture Hall',
+    'Hostel',
+    'Cafeteria',
+    'Lab',
+    'ATM',
+    'Library',
+    'Admin',
+    'Recreation',
   ];
 
-  const filteredLocations = selectedCategory === 'All' 
-    ? campusLocations 
-    : campusLocations.filter(location => location.category === selectedCategory);
+  const filteredLocations =
+    selectedCategory === 'All'
+      ? campusLocations
+      : campusLocations.filter(
+          location => location.category === selectedCategory
+        );
 
   const handleOpenMaps = async (location: CampusLocation) => {
     try {
@@ -55,29 +79,26 @@ export default function MapScreen() {
         Alert.alert('Error', 'Cannot open Google Maps');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to open Google Maps');
+      Alert.alert('Error', `Failed to open Google Maps: ${error}`);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <Text style={styles.headerTitle}>Campus Map</Text>
         <Text style={styles.headerSubtitle}>Find your way around campus</Text>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Category Filter */}
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoryContainer}
           contentContainerStyle={styles.categoryContent}
         >
-          {categories.map((category) => (
+          {categories.map(category => (
             <TouchableOpacity
               key={category}
               style={[
@@ -100,10 +121,10 @@ export default function MapScreen() {
 
         {/* Locations List */}
         <View style={styles.locationsContainer}>
-          {filteredLocations.map((location) => {
+          {filteredLocations.map(location => {
             const IconComponent = categoryIcons[location.category];
             const colors = categoryColors[location.category];
-            
+
             return (
               <View key={location.id} style={styles.locationCard}>
                 <LinearGradient
@@ -112,26 +133,30 @@ export default function MapScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <IconComponent size={24} color="#ffffff" strokeWidth={2} />
+                  <IconComponent size={24} color='#ffffff' strokeWidth={2} />
                 </LinearGradient>
-                
+
                 <View style={styles.locationContent}>
                   <View style={styles.locationHeader}>
-                    <Text style={styles.locationCategory}>{location.category}</Text>
-                    <MapPin size={16} color="#9ca3af" strokeWidth={2} />
+                    <Text style={styles.locationCategory}>
+                      {location.category}
+                    </Text>
+                    <MapPin size={16} color='#9ca3af' strokeWidth={2} />
                   </View>
                   <Text style={styles.locationName}>{location.name}</Text>
                   <Text style={styles.locationDescription} numberOfLines={2}>
                     {location.description}
                   </Text>
-                  
+
                   <TouchableOpacity
                     style={styles.mapsButton}
                     onPress={() => handleOpenMaps(location)}
                     activeOpacity={0.7}
                   >
-                    <ExternalLink size={16} color="#667eea" strokeWidth={2} />
-                    <Text style={styles.mapsButtonText}>Open in Google Maps</Text>
+                    <ExternalLink size={16} color='#667eea' strokeWidth={2} />
+                    <Text style={styles.mapsButtonText}>
+                      Open in Google Maps
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>

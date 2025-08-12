@@ -1,11 +1,17 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, Map, MessageSquare, BookOpen, User } from 'lucide-react-native';
+import {
+  Chrome as Home,
+  Map,
+  MessageSquare,
+  BookOpen,
+  User,
+} from 'lucide-react-native';
 import GlobalChatButton from '@/components/GlobalChatButton';
-import { View } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 
 export default function TabLayout() {
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -26,7 +32,7 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen
-          name="index"
+          name='index'
           options={{
             title: 'Home',
             tabBarIcon: ({ size, color }) => (
@@ -35,7 +41,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="map"
+          name='map'
           options={{
             title: 'Map',
             tabBarIcon: ({ size, color }) => (
@@ -44,7 +50,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="forum"
+          name='forum'
           options={{
             title: 'Forum',
             tabBarIcon: ({ size, color }) => (
@@ -53,7 +59,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="courses"
+          name='courses'
           options={{
             title: 'Courses',
             tabBarIcon: ({ size, color }) => (
@@ -62,7 +68,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="profile"
+          name='profile'
           options={{
             title: 'Profile',
             tabBarIcon: ({ size, color }) => (
@@ -75,3 +81,9 @@ export default function TabLayout() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

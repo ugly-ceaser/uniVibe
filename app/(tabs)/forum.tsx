@@ -9,30 +9,45 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { MessageSquare, User, Clock, Plus, ChevronRight } from 'lucide-react-native';
+import {
+  MessageSquare,
+  User,
+  Clock,
+  Plus,
+  ChevronRight,
+} from 'lucide-react-native';
 import { forumPosts, ForumPost } from '@/data/forumPosts';
 
 const categoryColors = {
-  'Academic': '#667eea',
-  'Social': '#f093fb',
-  'General': '#4facfe',
-  'Technical': '#43e97b',
+  Academic: '#667eea',
+  Social: '#f093fb',
+  General: '#4facfe',
+  Technical: '#43e97b',
 };
 
 export default function ForumScreen() {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState<ForumPost['category'] | 'All'>('All');
+  const [selectedCategory, setSelectedCategory] = useState<
+    ForumPost['category'] | 'All'
+  >('All');
 
-  const categories: (ForumPost['category'] | 'All')[] = ['All', 'Academic', 'Social', 'General', 'Technical'];
+  const categories: (ForumPost['category'] | 'All')[] = [
+    'All',
+    'Academic',
+    'Social',
+    'General',
+    'Technical',
+  ];
 
-  const filteredPosts = selectedCategory === 'All' 
-    ? forumPosts 
-    : forumPosts.filter(post => post.category === selectedCategory);
+  const filteredPosts =
+    selectedCategory === 'All'
+      ? forumPosts
+      : forumPosts.filter(post => post.category === selectedCategory);
 
   const handlePostPress = (post: ForumPost) => {
     router.push({
       pathname: '/post-detail',
-      params: { postId: post.id }
+      params: { postId: post.id },
     });
   };
 
@@ -43,23 +58,22 @@ export default function ForumScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <Text style={styles.headerTitle}>Student Forum</Text>
-        <Text style={styles.headerSubtitle}>Ask questions and share knowledge</Text>
+        <Text style={styles.headerSubtitle}>
+          Ask questions and share knowledge
+        </Text>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Category Filter */}
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoryContainer}
           contentContainerStyle={styles.categoryContent}
         >
-          {categories.map((category) => (
+          {categories.map(category => (
             <TouchableOpacity
               key={category}
               style={[
@@ -82,7 +96,7 @@ export default function ForumScreen() {
 
         {/* Posts List */}
         <View style={styles.postsContainer}>
-          {filteredPosts.map((post) => (
+          {filteredPosts.map(post => (
             <TouchableOpacity
               key={post.id}
               style={styles.postCard}
@@ -92,26 +106,26 @@ export default function ForumScreen() {
               <View style={styles.postHeader}>
                 <View style={styles.authorInfo}>
                   <View style={styles.avatarContainer}>
-                    <User size={16} color="#667eea" strokeWidth={2} />
+                    <User size={16} color='#667eea' strokeWidth={2} />
                   </View>
                   <View>
                     <Text style={styles.authorName}>{post.author}</Text>
                     <View style={styles.postMeta}>
-                      <Clock size={12} color="#9ca3af" strokeWidth={2} />
+                      <Clock size={12} color='#9ca3af' strokeWidth={2} />
                       <Text style={styles.postTime}>{post.createdAt}</Text>
                     </View>
                   </View>
                 </View>
-                <View 
+                <View
                   style={[
-                    styles.categoryBadge, 
-                    { backgroundColor: categoryColors[post.category] + '20' }
+                    styles.categoryBadge,
+                    { backgroundColor: categoryColors[post.category] + '20' },
                   ]}
                 >
-                  <Text 
+                  <Text
                     style={[
-                      styles.categoryBadgeText, 
-                      { color: categoryColors[post.category] }
+                      styles.categoryBadgeText,
+                      { color: categoryColors[post.category] },
                     ]}
                   >
                     {post.category}
@@ -126,12 +140,13 @@ export default function ForumScreen() {
 
               <View style={styles.postFooter}>
                 <View style={styles.commentsInfo}>
-                  <MessageSquare size={16} color="#9ca3af" strokeWidth={2} />
+                  <MessageSquare size={16} color='#9ca3af' strokeWidth={2} />
                   <Text style={styles.commentsCount}>
-                    {post.comments.length} {post.comments.length === 1 ? 'comment' : 'comments'}
+                    {post.comments.length}{' '}
+                    {post.comments.length === 1 ? 'comment' : 'comments'}
                   </Text>
                 </View>
-                <ChevronRight size={16} color="#9ca3af" strokeWidth={2} />
+                <ChevronRight size={16} color='#9ca3af' strokeWidth={2} />
               </View>
             </TouchableOpacity>
           ))}
@@ -148,7 +163,7 @@ export default function ForumScreen() {
           colors={['#667eea', '#764ba2']}
           style={styles.fabGradient}
         >
-          <Plus size={24} color="#ffffff" strokeWidth={2} />
+          <Plus size={24} color='#ffffff' strokeWidth={2} />
         </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>

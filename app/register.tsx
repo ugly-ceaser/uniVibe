@@ -13,7 +13,17 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, User, Mail, Lock, Eye, EyeOff, Phone, Shield, BookOpen } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  Phone,
+  Shield,
+  BookOpen,
+} from 'lucide-react-native';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -35,9 +45,25 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    const { fullName, email, phone, nin, regNumber, password, confirmPassword } = formData;
+    const {
+      fullName,
+      email,
+      phone,
+      nin,
+      regNumber,
+      password,
+      confirmPassword,
+    } = formData;
 
-    if (!fullName || !email || !phone || !nin || !regNumber || !password || !confirmPassword) {
+    if (
+      !fullName ||
+      !email ||
+      !phone ||
+      !nin ||
+      !regNumber ||
+      !password ||
+      !confirmPassword
+    ) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -58,150 +84,152 @@ export default function RegisterScreen() {
     }
 
     setIsLoading(true);
-    
+
     // Mock registration - replace with actual API call
     setTimeout(() => {
       setIsLoading(false);
-      Alert.alert(
-        'Success', 
-        'Account created successfully!',
-        [{ text: 'OK', onPress: () => router.replace('/login') }]
-      );
+      Alert.alert('Success', 'Account created successfully!', [
+        { text: 'OK', onPress: () => router.replace('/login') },
+      ]);
     }, 1500);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <LinearGradient
-            colors={['#667eea', '#764ba2']}
-            style={styles.header}
-          >
+          <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}
               activeOpacity={0.7}
             >
-              <ArrowLeft size={24} color="#ffffff" strokeWidth={2} />
+              <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
             </TouchableOpacity>
-            
+
             <View style={styles.headerContent}>
               <Text style={styles.headerTitle}>Create Account</Text>
-              <Text style={styles.headerSubtitle}>Join the Fresher Companion community</Text>
+              <Text style={styles.headerSubtitle}>
+                Join the Fresher Companion community
+              </Text>
             </View>
           </LinearGradient>
 
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
               <View style={styles.inputWrapper}>
-                <User size={20} color="#9ca3af" strokeWidth={2} />
+                <User size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Full Name"
+                  placeholder='Full Name'
                   value={formData.fullName}
-                  onChangeText={(value) => handleInputChange('fullName', value)}
-                  autoCapitalize="words"
+                  onChangeText={value => handleInputChange('fullName', value)}
+                  autoCapitalize='words'
                 />
               </View>
 
               <View style={styles.inputWrapper}>
-                <Mail size={20} color="#9ca3af" strokeWidth={2} />
+                <Mail size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Email address"
+                  placeholder='Email address'
                   value={formData.email}
-                  onChangeText={(value) => handleInputChange('email', value)}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
+                  onChangeText={value => handleInputChange('email', value)}
+                  keyboardType='email-address'
+                  autoCapitalize='none'
                   autoCorrect={false}
                 />
               </View>
 
               <View style={styles.inputWrapper}>
-                <Phone size={20} color="#9ca3af" strokeWidth={2} />
+                <Phone size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Phone number"
+                  placeholder='Phone number'
                   value={formData.phone}
-                  onChangeText={(value) => handleInputChange('phone', value)}
-                  keyboardType="phone-pad"
+                  onChangeText={value => handleInputChange('phone', value)}
+                  keyboardType='phone-pad'
                 />
               </View>
 
               <View style={styles.inputWrapper}>
-                <Shield size={20} color="#9ca3af" strokeWidth={2} />
+                <Shield size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
-                  placeholder="National ID Number (NIN)"
+                  placeholder='National ID Number (NIN)'
                   value={formData.nin}
-                  onChangeText={(value) => handleInputChange('nin', value)}
-                  keyboardType="numeric"
+                  onChangeText={value => handleInputChange('nin', value)}
+                  keyboardType='numeric'
                   maxLength={11}
                 />
               </View>
 
               <View style={styles.inputWrapper}>
-                <BookOpen size={20} color="#9ca3af" strokeWidth={2} />
+                <BookOpen size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Registration Number (e.g., CS/2024/001)"
+                  placeholder='Registration Number (e.g., CS/2024/001)'
                   value={formData.regNumber}
-                  onChangeText={(value) => handleInputChange('regNumber', value)}
-                  autoCapitalize="characters"
+                  onChangeText={value => handleInputChange('regNumber', value)}
+                  autoCapitalize='characters'
                 />
               </View>
 
               <View style={styles.inputWrapper}>
-                <Lock size={20} color="#9ca3af" strokeWidth={2} />
+                <Lock size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Password"
+                  placeholder='Password'
                   value={formData.password}
-                  onChangeText={(value) => handleInputChange('password', value)}
+                  onChangeText={value => handleInputChange('password', value)}
                   secureTextEntry={!showPassword}
-                  autoCapitalize="none"
+                  autoCapitalize='none'
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeButton}
                 >
                   {showPassword ? (
-                    <EyeOff size={20} color="#9ca3af" strokeWidth={2} />
+                    <EyeOff size={20} color='#9ca3af' strokeWidth={2} />
                   ) : (
-                    <Eye size={20} color="#9ca3af" strokeWidth={2} />
+                    <Eye size={20} color='#9ca3af' strokeWidth={2} />
                   )}
                 </TouchableOpacity>
               </View>
 
               <View style={styles.inputWrapper}>
-                <Lock size={20} color="#9ca3af" strokeWidth={2} />
+                <Lock size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Confirm Password"
+                  placeholder='Confirm Password'
                   value={formData.confirmPassword}
-                  onChangeText={(value) => handleInputChange('confirmPassword', value)}
+                  onChangeText={value =>
+                    handleInputChange('confirmPassword', value)
+                  }
                   secureTextEntry={!showConfirmPassword}
-                  autoCapitalize="none"
+                  autoCapitalize='none'
                 />
                 <TouchableOpacity
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                   style={styles.eyeButton}
                 >
                   {showConfirmPassword ? (
-                    <EyeOff size={20} color="#9ca3af" strokeWidth={2} />
+                    <EyeOff size={20} color='#9ca3af' strokeWidth={2} />
                   ) : (
-                    <Eye size={20} color="#9ca3af" strokeWidth={2} />
+                    <Eye size={20} color='#9ca3af' strokeWidth={2} />
                   )}
                 </TouchableOpacity>
               </View>
             </View>
 
             <TouchableOpacity
-              style={[styles.registerButton, isLoading && styles.registerButtonDisabled]}
+              style={[
+                styles.registerButton,
+                isLoading && styles.registerButtonDisabled,
+              ]}
               onPress={handleRegister}
               disabled={isLoading}
               activeOpacity={0.8}

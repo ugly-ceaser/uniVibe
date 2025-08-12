@@ -9,27 +9,34 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Clock, BookOpen, Users, DollarSign, Shield } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Clock,
+  BookOpen,
+  Users,
+  DollarSign,
+  Shield,
+} from 'lucide-react-native';
 import { survivalTips, SurvivalTip } from '@/data/survivalTips';
 
 const categoryIcons = {
-  'Academics': BookOpen,
+  Academics: BookOpen,
   'Social Life': Users,
-  'Budgeting': DollarSign,
-  'Safety': Shield,
+  Budgeting: DollarSign,
+  Safety: Shield,
 };
 
 const categoryColors = {
-  'Academics': ['#667eea', '#764ba2'],
+  Academics: ['#667eea', '#764ba2'],
   'Social Life': ['#f093fb', '#f5576c'],
-  'Budgeting': ['#4facfe', '#00f2fe'],
-  'Safety': ['#43e97b', '#38f9d7'],
+  Budgeting: ['#4facfe', '#00f2fe'],
+  Safety: ['#43e97b', '#38f9d7'],
 };
 
 export default function TipDetailScreen() {
   const router = useRouter();
   const { tipId } = useLocalSearchParams();
-  
+
   const tip = survivalTips.find(t => t.id === tipId);
 
   if (!tip) {
@@ -45,26 +52,23 @@ export default function TipDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={colors}
-        style={styles.header}
-      >
+      <LinearGradient colors={colors} style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={24} color="#ffffff" strokeWidth={2} />
+          <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
         </TouchableOpacity>
-        
+
         <View style={styles.headerContent}>
           <View style={styles.iconContainer}>
-            <IconComponent size={32} color="#ffffff" strokeWidth={2} />
+            <IconComponent size={32} color='#ffffff' strokeWidth={2} />
           </View>
           <Text style={styles.category}>{tip.category}</Text>
           <Text style={styles.title}>{tip.title}</Text>
           <View style={styles.readTimeContainer}>
-            <Clock size={16} color="rgba(255, 255, 255, 0.8)" strokeWidth={2} />
+            <Clock size={16} color='rgba(255, 255, 255, 0.8)' strokeWidth={2} />
             <Text style={styles.readTime}>{tip.readTime}</Text>
           </View>
         </View>

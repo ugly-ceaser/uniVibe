@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { BookOpen, User, Clock, ChevronRight } from 'lucide-react-native';
-import { courses, getCoursesBySemester } from '@/data/courses';
+import { BookOpen, User, ChevronRight } from 'lucide-react-native';
+import { getCoursesBySemester } from '@/data/courses';
 
 export default function CoursesScreen() {
   const router = useRouter();
@@ -21,18 +21,17 @@ export default function CoursesScreen() {
   const handleCoursePress = (courseId: string) => {
     router.push({
       pathname: '/course-detail',
-      params: { courseId }
+      params: { courseId },
     });
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <Text style={styles.headerTitle}>CS Year 1 Courses</Text>
-        <Text style={styles.headerSubtitle}>Computer Science curriculum overview</Text>
+        <Text style={styles.headerSubtitle}>
+          Computer Science curriculum overview
+        </Text>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -74,7 +73,7 @@ export default function CoursesScreen() {
 
         {/* Courses List */}
         <View style={styles.coursesContainer}>
-          {semesterCourses.map((course) => (
+          {semesterCourses.map(course => (
             <TouchableOpacity
               key={course.id}
               style={styles.courseCard}
@@ -82,9 +81,9 @@ export default function CoursesScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.courseIconContainer}>
-                <BookOpen size={24} color="#667eea" strokeWidth={2} />
+                <BookOpen size={24} color='#667eea' strokeWidth={2} />
               </View>
-              
+
               <View style={styles.courseContent}>
                 <View style={styles.courseHeader}>
                   <Text style={styles.courseCode}>{course.courseCode}</Text>
@@ -94,14 +93,16 @@ export default function CoursesScreen() {
                 <Text style={styles.courseDescription} numberOfLines={2}>
                   {course.description}
                 </Text>
-                
+
                 <View style={styles.coordinatorInfo}>
-                  <User size={14} color="#9ca3af" strokeWidth={2} />
-                  <Text style={styles.coordinatorName}>{course.coordinator}</Text>
+                  <User size={14} color='#9ca3af' strokeWidth={2} />
+                  <Text style={styles.coordinatorName}>
+                    {course.coordinator}
+                  </Text>
                 </View>
               </View>
-              
-              <ChevronRight size={20} color="#9ca3af" strokeWidth={2} />
+
+              <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
             </TouchableOpacity>
           ))}
         </View>
@@ -121,7 +122,10 @@ export default function CoursesScreen() {
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>
-                  {semesterCourses.reduce((total, course) => total + course.unitLoad, 0)}
+                  {semesterCourses.reduce(
+                    (total, course) => total + course.unitLoad,
+                    0
+                  )}
                 </Text>
                 <Text style={styles.statLabel}>Total Units</Text>
               </View>

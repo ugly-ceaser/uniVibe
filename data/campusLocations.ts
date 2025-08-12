@@ -2,7 +2,15 @@ export interface CampusLocation {
   id: string;
   name: string;
   description: string;
-  category: 'Lecture Hall' | 'Hostel' | 'Cafeteria' | 'Lab' | 'ATM' | 'Library' | 'Admin' | 'Recreation';
+  category:
+    | 'Lecture Hall'
+    | 'Hostel'
+    | 'Cafeteria'
+    | 'Lab'
+    | 'ATM'
+    | 'Library'
+    | 'Admin'
+    | 'Recreation';
   coordinates: {
     latitude: number;
     longitude: number;
@@ -64,7 +72,7 @@ export const campusLocations: CampusLocation[] = [
     name: 'GTBank ATM',
     description: 'ATM services available 24/7',
     category: 'ATM',
-    coordinates: { latitude: 6.5250, longitude: 3.3798 },
+    coordinates: { latitude: 6.525, longitude: 3.3798 },
     googleMapsUrl: 'https://maps.google.com/?q=6.5250,3.3798',
   },
   {
@@ -80,7 +88,7 @@ export const campusLocations: CampusLocation[] = [
     name: 'Administrative Block',
     description: 'Student affairs, registrar, and administrative offices',
     category: 'Admin',
-    coordinates: { latitude: 6.5252, longitude: 3.3800 },
+    coordinates: { latitude: 6.5252, longitude: 3.38 },
     googleMapsUrl: 'https://maps.google.com/?q=6.5252,3.3800',
   },
   {
@@ -93,7 +101,9 @@ export const campusLocations: CampusLocation[] = [
   },
 ];
 
-export const getLocationsByCategory = (category: CampusLocation['category']) => {
+export const getLocationsByCategory = (
+  category: CampusLocation['category']
+) => {
   return campusLocations.filter(location => location.category === category);
 };
 

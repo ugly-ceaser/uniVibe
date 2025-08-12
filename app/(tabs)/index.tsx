@@ -9,59 +9,73 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { BookOpen, Users, DollarSign, Shield, ChevronRight } from 'lucide-react-native';
+import {
+  BookOpen,
+  Users,
+  DollarSign,
+  Shield,
+  ChevronRight,
+} from 'lucide-react-native';
 import { survivalTips, SurvivalTip } from '@/data/survivalTips';
 
 const categoryIcons = {
-  'Academics': BookOpen,
+  Academics: BookOpen,
   'Social Life': Users,
-  'Budgeting': DollarSign,
-  'Safety': Shield,
+  Budgeting: DollarSign,
+  Safety: Shield,
 };
 
 const categoryColors = {
-  'Academics': ['#667eea', '#764ba2'],
+  Academics: ['#667eea', '#764ba2'],
   'Social Life': ['#f093fb', '#f5576c'],
-  'Budgeting': ['#4facfe', '#00f2fe'],
-  'Safety': ['#43e97b', '#38f9d7'],
+  Budgeting: ['#4facfe', '#00f2fe'],
+  Safety: ['#43e97b', '#38f9d7'],
 };
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState<SurvivalTip['category'] | 'All'>('All');
+  const [selectedCategory, setSelectedCategory] = useState<
+    SurvivalTip['category'] | 'All'
+  >('All');
 
-  const categories: (SurvivalTip['category'] | 'All')[] = ['All', 'Academics', 'Social Life', 'Budgeting', 'Safety'];
+  const categories: (SurvivalTip['category'] | 'All')[] = [
+    'All',
+    'Academics',
+    'Social Life',
+    'Budgeting',
+    'Safety',
+  ];
 
-  const filteredTips = selectedCategory === 'All' 
-    ? survivalTips 
-    : survivalTips.filter(tip => tip.category === selectedCategory);
+  const filteredTips =
+    selectedCategory === 'All'
+      ? survivalTips
+      : survivalTips.filter(tip => tip.category === selectedCategory);
 
   const handleTipPress = (tip: SurvivalTip) => {
     router.push({
       pathname: '/tip-detail',
-      params: { tipId: tip.id }
+      params: { tipId: tip.id },
     });
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <Text style={styles.headerTitle}>Survival Guide</Text>
-        <Text style={styles.headerSubtitle}>Tips for your first year success</Text>
+        <Text style={styles.headerSubtitle}>
+          Tips for your first year success
+        </Text>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Category Filter */}
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoryContainer}
           contentContainerStyle={styles.categoryContent}
         >
-          {categories.map((category) => (
+          {categories.map(category => (
             <TouchableOpacity
               key={category}
               style={[
@@ -84,10 +98,10 @@ export default function HomeScreen() {
 
         {/* Tips List */}
         <View style={styles.tipsContainer}>
-          {filteredTips.map((tip) => {
+          {filteredTips.map(tip => {
             const IconComponent = categoryIcons[tip.category];
             const colors = categoryColors[tip.category];
-            
+
             return (
               <TouchableOpacity
                 key={tip.id}
@@ -101,9 +115,9 @@ export default function HomeScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <IconComponent size={24} color="#ffffff" strokeWidth={2} />
+                  <IconComponent size={24} color='#ffffff' strokeWidth={2} />
                 </LinearGradient>
-                
+
                 <View style={styles.tipContent}>
                   <View style={styles.tipHeader}>
                     <Text style={styles.tipCategory}>{tip.category}</Text>
@@ -114,8 +128,8 @@ export default function HomeScreen() {
                     {tip.description}
                   </Text>
                 </View>
-                
-                <ChevronRight size={20} color="#9ca3af" strokeWidth={2} />
+
+                <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
               </TouchableOpacity>
             );
           })}

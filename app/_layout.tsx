@@ -1,52 +1,49 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { AuthProvider } from '@/contexts/AuthContext';
 
+// Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  useFrameworkReady();
-  
-  const [fontsLoaded] = useFonts({
-    'Inter-Regular': Inter_400Regular,
-    'Inter-Medium': Inter_500Medium,
-    'Inter-SemiBold': Inter_600SemiBold,
-    'Inter-Bold': Inter_700Bold,
-    'Poppins-Regular': Poppins_400Regular,
-    'Poppins-Medium': Poppins_500Medium,
-    'Poppins-SemiBold': Poppins_600SemiBold,
-    'Poppins-Bold': Poppins_700Bold,
+  const [fontsLoaded, fontError] = useFonts({
+    'Inter-Regular': require('@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf'),
+    'Inter-Medium': require('@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf'),
+    'Inter-SemiBold': require('@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf'),
+    'Inter-Bold': require('@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf'),
+    'Poppins-Regular': require('@expo-google-fonts/poppins/400Regular/Poppins_400Regular.ttf'),
+    'Poppins-Medium': require('@expo-google-fonts/poppins/500Medium/Poppins_500Medium.ttf'),
+    'Poppins-SemiBold': require('@expo-google-fonts/poppins/600SemiBold/Poppins_600SemiBold.ttf'),
+    'Poppins-Bold': require('@expo-google-fonts/poppins/700Bold/Poppins_700Bold.ttf'),
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 
   return (
-    <>
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="tip-detail" />
-        <Stack.Screen name="post-detail" />
-        <Stack.Screen name="course-detail" />
-        <Stack.Screen name="+not-found" />
+    <AuthProvider>
+      <Stack>
+        <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
+        <Stack.Screen name='login' options={{ headerShown: false }} />
+        <Stack.Screen name='register' options={{ headerShown: false }} />
+        <Stack.Screen name='onboarding' options={{ headerShown: false }} />
+        <Stack.Screen name='course-detail' options={{ headerShown: false }} />
+        <Stack.Screen name='post-detail' options={{ headerShown: false }} />
+        <Stack.Screen name='tip-detail' options={{ headerShown: false }} />
+        <Stack.Screen name='profile' options={{ headerShown: false }} />
+        <Stack.Screen name='+not-found' options={{ title: 'Oops!' }} />
       </Stack>
-      <StatusBar style="auto" />
-    </>
+      <StatusBar style='auto' />
+    </AuthProvider>
   );
 }

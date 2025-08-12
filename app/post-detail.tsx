@@ -11,21 +11,27 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, User, Clock, MessageSquare, Send } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  User,
+  Clock,
+  MessageSquare,
+  Send,
+} from 'lucide-react-native';
 import { forumPosts } from '@/data/forumPosts';
 
 const categoryColors = {
-  'Academic': '#667eea',
-  'Social': '#f093fb',
-  'General': '#4facfe',
-  'Technical': '#43e97b',
+  Academic: '#667eea',
+  Social: '#f093fb',
+  General: '#4facfe',
+  Technical: '#43e97b',
 };
 
 export default function PostDetailScreen() {
   const router = useRouter();
   const { postId } = useLocalSearchParams();
   const [newComment, setNewComment] = React.useState('');
-  
+
   const post = forumPosts.find(p => p.id === postId);
 
   if (!post) {
@@ -44,24 +50,21 @@ export default function PostDetailScreen() {
 
     // Mock adding comment - in real app this would be an API call
     Alert.alert('Success', 'Comment added successfully!', [
-      { text: 'OK', onPress: () => setNewComment('') }
+      { text: 'OK', onPress: () => setNewComment('') },
     ]);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={24} color="#ffffff" strokeWidth={2} />
+          <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
         </TouchableOpacity>
-        
+
         <Text style={styles.headerTitle}>Forum Post</Text>
       </LinearGradient>
 
@@ -71,26 +74,26 @@ export default function PostDetailScreen() {
           <View style={styles.postHeader}>
             <View style={styles.authorInfo}>
               <View style={styles.avatarContainer}>
-                <User size={20} color="#667eea" strokeWidth={2} />
+                <User size={20} color='#667eea' strokeWidth={2} />
               </View>
               <View>
                 <Text style={styles.authorName}>{post.author}</Text>
                 <View style={styles.postMeta}>
-                  <Clock size={12} color="#9ca3af" strokeWidth={2} />
+                  <Clock size={12} color='#9ca3af' strokeWidth={2} />
                   <Text style={styles.postTime}>{post.createdAt}</Text>
                 </View>
               </View>
             </View>
-            <View 
+            <View
               style={[
-                styles.categoryBadge, 
-                { backgroundColor: categoryColors[post.category] + '20' }
+                styles.categoryBadge,
+                { backgroundColor: categoryColors[post.category] + '20' },
               ]}
             >
-              <Text 
+              <Text
                 style={[
-                  styles.categoryBadgeText, 
-                  { color: categoryColors[post.category] }
+                  styles.categoryBadgeText,
+                  { color: categoryColors[post.category] },
                 ]}
               >
                 {post.category}
@@ -105,18 +108,19 @@ export default function PostDetailScreen() {
         {/* Comments Section */}
         <View style={styles.commentsSection}>
           <View style={styles.commentsHeader}>
-            <MessageSquare size={20} color="#667eea" strokeWidth={2} />
+            <MessageSquare size={20} color='#667eea' strokeWidth={2} />
             <Text style={styles.commentsTitle}>
-              {post.comments.length} {post.comments.length === 1 ? 'Comment' : 'Comments'}
+              {post.comments.length}{' '}
+              {post.comments.length === 1 ? 'Comment' : 'Comments'}
             </Text>
           </View>
 
-          {post.comments.map((comment) => (
+          {post.comments.map(comment => (
             <View key={comment.id} style={styles.commentCard}>
               <View style={styles.commentHeader}>
                 <View style={styles.commentAuthorInfo}>
                   <View style={styles.commentAvatarContainer}>
-                    <User size={16} color="#667eea" strokeWidth={2} />
+                    <User size={16} color='#667eea' strokeWidth={2} />
                   </View>
                   <Text style={styles.commentAuthorName}>{comment.author}</Text>
                 </View>
@@ -133,18 +137,21 @@ export default function PostDetailScreen() {
           <View style={styles.commentInputContainer}>
             <TextInput
               style={styles.commentInput}
-              placeholder="Share your thoughts or ask a follow-up question..."
+              placeholder='Share your thoughts or ask a follow-up question...'
               value={newComment}
               onChangeText={setNewComment}
               multiline
               maxLength={500}
             />
             <TouchableOpacity
-              style={[styles.commentSendButton, !newComment.trim() && styles.commentSendButtonDisabled]}
+              style={[
+                styles.commentSendButton,
+                !newComment.trim() && styles.commentSendButtonDisabled,
+              ]}
               onPress={handleAddComment}
               disabled={!newComment.trim()}
             >
-              <Send size={20} color="#ffffff" strokeWidth={2} />
+              <Send size={20} color='#ffffff' strokeWidth={2} />
             </TouchableOpacity>
           </View>
         </View>

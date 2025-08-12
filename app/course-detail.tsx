@@ -11,13 +11,21 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, BookOpen, User, Mail, Phone, Clock, ChartBar as BarChart3, CircleCheck as CheckCircle } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  BookOpen,
+  User,
+  Mail,
+  Phone,
+  ChartBar as BarChart3,
+  CircleCheck as CheckCircle,
+} from 'lucide-react-native';
 import { courses } from '@/data/courses';
 
 export default function CourseDetailScreen() {
   const router = useRouter();
   const { courseId } = useLocalSearchParams();
-  
+
   const course = courses.find(c => c.id === courseId);
 
   if (!course) {
@@ -38,7 +46,7 @@ export default function CourseDetailScreen() {
         Alert.alert('Error', 'Cannot open email client');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to open email client');
+      Alert.alert('Error', `Failed to open email client:`);
     }
   };
 
@@ -52,31 +60,30 @@ export default function CourseDetailScreen() {
         Alert.alert('Error', 'Cannot make phone call');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to make phone call');
+      Alert.alert('Error', 'Failed to make phone call:');
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={24} color="#ffffff" strokeWidth={2} />
+          <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
         </TouchableOpacity>
-        
+
         <View style={styles.headerContent}>
           <View style={styles.iconContainer}>
-            <BookOpen size={32} color="#ffffff" strokeWidth={2} />
+            <BookOpen size={32} color='#ffffff' strokeWidth={2} />
           </View>
           <Text style={styles.courseCode}>{course.courseCode}</Text>
           <Text style={styles.courseName}>{course.courseName}</Text>
-          <Text style={styles.unitLoad}>{course.unitLoad} Units • Semester {course.semester}</Text>
+          <Text style={styles.unitLoad}>
+            {course.unitLoad} Units • Semester {course.semester}
+          </Text>
         </View>
       </LinearGradient>
 
@@ -93,28 +100,32 @@ export default function CourseDetailScreen() {
           <View style={styles.coordinatorCard}>
             <View style={styles.coordinatorHeader}>
               <View style={styles.coordinatorAvatar}>
-                <User size={24} color="#667eea" strokeWidth={2} />
+                <User size={24} color='#667eea' strokeWidth={2} />
               </View>
               <Text style={styles.coordinatorName}>{course.coordinator}</Text>
             </View>
-            
+
             <View style={styles.contactInfo}>
               <TouchableOpacity
                 style={styles.contactButton}
                 onPress={handleEmailPress}
                 activeOpacity={0.7}
               >
-                <Mail size={16} color="#667eea" strokeWidth={2} />
-                <Text style={styles.contactText}>{course.coordinatorEmail}</Text>
+                <Mail size={16} color='#667eea' strokeWidth={2} />
+                <Text style={styles.contactText}>
+                  {course.coordinatorEmail}
+                </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.contactButton}
                 onPress={handlePhonePress}
                 activeOpacity={0.7}
               >
-                <Phone size={16} color="#667eea" strokeWidth={2} />
-                <Text style={styles.contactText}>{course.coordinatorPhone}</Text>
+                <Phone size={16} color='#667eea' strokeWidth={2} />
+                <Text style={styles.contactText}>
+                  {course.coordinatorPhone}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -126,7 +137,7 @@ export default function CourseDetailScreen() {
           <View style={styles.outlineContainer}>
             {course.outline.map((topic, index) => (
               <View key={index} style={styles.outlineItem}>
-                <CheckCircle size={16} color="#43e97b" strokeWidth={2} />
+                <CheckCircle size={16} color='#43e97b' strokeWidth={2} />
                 <Text style={styles.outlineText}>{topic}</Text>
               </View>
             ))}
@@ -140,10 +151,12 @@ export default function CourseDetailScreen() {
             {course.assessment.map((assessment, index) => (
               <View key={index} style={styles.assessmentItem}>
                 <View style={styles.assessmentInfo}>
-                  <BarChart3 size={16} color="#667eea" strokeWidth={2} />
+                  <BarChart3 size={16} color='#667eea' strokeWidth={2} />
                   <Text style={styles.assessmentType}>{assessment.type}</Text>
                 </View>
-                <Text style={styles.assessmentPercentage}>{assessment.percentage}%</Text>
+                <Text style={styles.assessmentPercentage}>
+                  {assessment.percentage}%
+                </Text>
               </View>
             ))}
           </View>

@@ -25,7 +25,8 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 803 123 4567',
     unitLoad: 3,
     semester: 1,
-    description: 'An introduction to the fundamental concepts of computer science, including problem-solving, algorithms, and programming basics.',
+    description:
+      'An introduction to the fundamental concepts of computer science, including problem-solving, algorithms, and programming basics.',
     outline: [
       'Introduction to Computing',
       'Problem Solving and Algorithms',
@@ -53,7 +54,8 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 805 987 6543',
     unitLoad: 4,
     semester: 1,
-    description: 'Hands-on programming course focusing on Python programming language and fundamental programming concepts.',
+    description:
+      'Hands-on programming course focusing on Python programming language and fundamental programming concepts.',
     outline: [
       'Python Syntax and Semantics',
       'Variables and Data Types',
@@ -81,7 +83,8 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 807 456 7890',
     unitLoad: 3,
     semester: 1,
-    description: 'Introduction to differential and integral calculus with applications to computer science.',
+    description:
+      'Introduction to differential and integral calculus with applications to computer science.',
     outline: [
       'Functions and Limits',
       'Continuity',
@@ -109,12 +112,13 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 809 234 5678',
     unitLoad: 3,
     semester: 1,
-    description: 'Fundamental principles of mechanics, waves, and thermodynamics with laboratory component.',
+    description:
+      'Fundamental principles of mechanics, waves, and thermodynamics with laboratory component.',
     outline: [
       'Measurement and Units',
       'Motion in One Dimension',
       'Motion in Two Dimensions',
-      'Newton\'s Laws of Motion',
+      "Newton's Laws of Motion",
       'Work, Energy, and Power',
       'Momentum and Collisions',
       'Rotational Motion',
@@ -137,7 +141,8 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 806 345 6789',
     unitLoad: 2,
     semester: 1,
-    description: 'Development of writing skills, critical thinking, and effective communication in English.',
+    description:
+      'Development of writing skills, critical thinking, and effective communication in English.',
     outline: [
       'Grammar and Sentence Structure',
       'Paragraph Development',
@@ -165,7 +170,8 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 808 567 8901',
     unitLoad: 4,
     semester: 2,
-    description: 'Advanced study of data structures, algorithms, and their implementation in programming.',
+    description:
+      'Advanced study of data structures, algorithms, and their implementation in programming.',
     outline: [
       'Abstract Data Types',
       'Arrays and Linked Lists',
@@ -193,7 +199,8 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 804 678 9012',
     unitLoad: 3,
     semester: 2,
-    description: 'Continuation of Calculus I with focus on advanced integration techniques and series.',
+    description:
+      'Continuation of Calculus I with focus on advanced integration techniques and series.',
     outline: [
       'Integration by Parts',
       'Trigonometric Integrals',
@@ -221,7 +228,8 @@ export const courses: Course[] = [
     coordinatorPhone: '+234 802 789 0123',
     unitLoad: 2,
     semester: 2,
-    description: 'Basic statistical concepts and methods with applications to computer science.',
+    description:
+      'Basic statistical concepts and methods with applications to computer science.',
     outline: [
       'Descriptive Statistics',
       'Probability Theory',

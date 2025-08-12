@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,64 +8,144 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  AccessibilityInfo,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MessageCircle, X, Send, Bot } from 'lucide-react-native';
+import { ChatMessage } from '@/types';
+import { validateChatMessage } from '@/utils/validation';
+import { gradients, shadows, animation } from '@/constants/theme';
 
-interface ChatMessage {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: string;
+const MOCK_AI_RESPONSES = [
+  'Great question! For academic success, I recommend creating a study schedule and sticking to it. Break down your coursework into manageable chunks.',
+  "That's a common concern for freshers! Try joining study groups and don't hesitate to ask your lecturers for help during office hours.",
+  'For budgeting, track your expenses weekly and prioritize needs over wants. Look for student discounts wherever possible.',
+  'Campus safety is important! Always walk in groups at night and save the security office number in your phone.',
+  "Social life balance is key! Join clubs that interest you, but don't overcommit. Quality friendships matter more than quantity.",
+] as const;
+
+const INITIAL_MESSAGE: ChatMessage = {
+  id: '1',
+  text: "Hello! I'm your AI assistant. How can I help you with your university life today?",
+  isUser: false,
+  timestamp: new Date().toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+};
+
+interface GlobalChatButtonProps {
+  onMessageSent?: (message: ChatMessage) => void;
+  onError?: (error: string) => void;
+  maxMessages?: number;
 }
 
-const mockAIResponses = [
-  "Great question! For academic success, I recommend creating a study schedule and sticking to it. Break down your coursework into manageable chunks.",
-  "That's a common concern for freshers! Try joining study groups and don't hesitate to ask your lecturers for help during office hours.",
-  "For budgeting, track your expenses weekly and prioritize needs over wants. Look for student discounts wherever possible.",
-  "Campus safety is important! Always walk in groups at night and save the security office number in your phone.",
-  "Social life balance is key! Join clubs that interest you, but don't overcommit. Quality friendships matter more than quantity.",
-];
-
-export default function GlobalChatButton() {
+export default function GlobalChatButton({
+  onMessageSent,
+  onError,
+  maxMessages = 100,
+}: GlobalChatButtonProps): React.JSX.Element {
   const [isVisible, setIsVisible] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      text: 'Hello! I\'m your AI assistant. How can I help you with your university life today?',
-      isUser: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSend = async () => {
-    if (!inputText.trim()) return;
+  const handleSend = useCallback(async (): Promise<void> => {
+    try {
+      if (!inputText.trim()) {
+        return;
+      }
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      isUser: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputText('');
-    setIsLoading(true);
-
-    // Mock AI response
-    setTimeout(() => {
-      const aiResponse: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        text: mockAIResponses[Math.floor(Math.random() * mockAIResponses.length)],
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        text: inputText.trim(),
+        isUser: true,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
       };
-      setMessages(prev => [...prev, aiResponse]);
+
+      // Validate message before sending
+      const validation = validateChatMessage(userMessage);
+      if (!validation.isValid) {
+        const errorMessage = validation.errors.join(', ');
+        onError?.(errorMessage);
+        Alert.alert('Validation Error', errorMessage);
+        return;
+      }
+
+      // Check message limit
+      if (messages.length >= maxMessages) {
+        const errorMessage =
+          'Maximum message limit reached. Please start a new conversation.';
+        onError?.(errorMessage);
+        Alert.alert('Message Limit', errorMessage);
+        return;
+      }
+
+      setMessages(prev => [...prev, userMessage]);
+      setInputText('');
+      setIsLoading(true);
+
+      // Notify parent component
+      onMessageSent?.(userMessage);
+
+      // Simulate AI response
+      setTimeout(() => {
+        const aiResponse: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: MOCK_AI_RESPONSES[
+            Math.floor(Math.random() * MOCK_AI_RESPONSES.length)
+          ],
+          isUser: false,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        };
+        setMessages(prev => [...prev, aiResponse]);
+        setIsLoading(false);
+      }, 1500);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to send message';
+      onError?.(errorMessage || 'Failed to send message');
+      Alert.alert('Error', errorMessage || 'Failed to send message');
       setIsLoading(false);
-    }, 1500);
-  };
+    }
+  }, [inputText, messages.length, maxMessages, onMessageSent, onError]);
+
+  const handleClose = useCallback((): void => {
+    setIsVisible(false);
+    setInputText('');
+  }, []);
+
+  const handleInputChange = useCallback((text: string): void => {
+    if (text.length <= 500) {
+      // Limit input length
+      setInputText(text);
+    }
+  }, []);
+
+  const isInputValid = useMemo((): boolean => {
+    return inputText.trim().length > 0 && !isLoading;
+  }, [inputText, isLoading]);
+
+  const messageCount = useMemo(
+    (): number => messages.length,
+    [messages.length]
+  );
+
+  // Accessibility
+  React.useEffect(() => {
+    if (isVisible) {
+      // Note: announce is not available in all React Native versions
+      // AccessibilityInfo.announce('Chat modal opened');
+    }
+  }, [isVisible]);
 
   return (
     <>
@@ -73,59 +153,84 @@ export default function GlobalChatButton() {
         style={styles.fab}
         onPress={() => setIsVisible(true)}
         activeOpacity={0.8}
+        accessibilityRole='button'
+        accessibilityLabel='Open AI chat assistant'
+        accessibilityHint='Opens a chat interface to get help with university life'
       >
-        <LinearGradient
-          colors={['#667eea', '#764ba2']}
-          style={styles.fabGradient}
-        >
-          <MessageCircle size={24} color="#ffffff" strokeWidth={2} />
+        <LinearGradient colors={gradients.primary} style={styles.fabGradient}>
+          <MessageCircle size={24} color='#ffffff' strokeWidth={2} />
         </LinearGradient>
       </TouchableOpacity>
 
       <Modal
         visible={isVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        animationType='slide'
+        presentationStyle='pageSheet'
+        onRequestClose={handleClose}
+        accessibilityLabel='AI Chat Assistant Modal'
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.chatHeader}>
             <View style={styles.chatHeaderContent}>
-              <Bot size={24} color="#667eea" strokeWidth={2} />
+              <Bot size={24} color={gradients.primary[0]} strokeWidth={2} />
               <Text style={styles.chatHeaderTitle}>AI Assistant</Text>
+              <Text style={styles.messageCount}>({messageCount})</Text>
             </View>
             <TouchableOpacity
-              onPress={() => setIsVisible(false)}
+              onPress={handleClose}
               style={styles.closeButton}
+              accessibilityRole='button'
+              accessibilityLabel='Close chat'
             >
-              <X size={24} color="#9ca3af" strokeWidth={2} />
+              <X size={24} color='#9ca3af' strokeWidth={2} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.chatContent} showsVerticalScrollIndicator={false}>
-            {messages.map((message) => (
+          <ScrollView
+            style={styles.chatContent}
+            showsVerticalScrollIndicator={false}
+            accessibilityLabel='Chat messages'
+          >
+            {messages.map(message => (
               <View
                 key={message.id}
                 style={[
                   styles.messageContainer,
                   message.isUser ? styles.userMessage : styles.aiMessage,
                 ]}
+                accessibilityRole='text'
+                accessibilityLabel={`${message.isUser ? 'You' : 'AI Assistant'}: ${message.text}`}
               >
-                <Text style={[
-                  styles.messageText,
-                  message.isUser ? styles.userMessageText : styles.aiMessageText,
-                ]}>
+                <Text
+                  style={[
+                    styles.messageText,
+                    message.isUser
+                      ? styles.userMessageText
+                      : styles.aiMessageText,
+                  ]}
+                >
                   {message.text}
                 </Text>
-                <Text style={[
-                  styles.messageTime,
-                  message.isUser ? styles.userMessageTime : styles.aiMessageTime,
-                ]}>
+                <Text
+                  style={[
+                    styles.messageTime,
+                    message.isUser
+                      ? styles.userMessageTime
+                      : styles.aiMessageTime,
+                  ]}
+                >
                   {message.timestamp}
                 </Text>
               </View>
             ))}
             {isLoading && (
-              <View style={[styles.messageContainer, styles.aiMessage]}>
+              <View
+                style={[styles.messageContainer, styles.aiMessage]}
+                accessibilityLabel='AI is typing'
+              >
                 <Text style={styles.aiMessageText}>AI is typing...</Text>
               </View>
             )}
@@ -134,21 +239,33 @@ export default function GlobalChatButton() {
           <View style={styles.chatInputContainer}>
             <TextInput
               style={styles.chatInput}
-              placeholder="Ask me anything about university life..."
+              placeholder='Ask me anything about university life...'
+              placeholderTextColor='#9ca3af'
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={handleInputChange}
               multiline
               maxLength={500}
+              editable={!isLoading}
+              accessibilityLabel='Type your message'
+              accessibilityHint='Enter your question about university life'
             />
             <TouchableOpacity
-              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              style={[
+                styles.sendButton,
+                !isInputValid && styles.sendButtonDisabled,
+              ]}
               onPress={handleSend}
-              disabled={!inputText.trim() || isLoading}
+              disabled={!isInputValid}
+              accessibilityRole='button'
+              accessibilityLabel='Send message'
+              accessibilityState={{ disabled: !isInputValid }}
             >
-              <Send size={20} color="#ffffff" strokeWidth={2} />
+              <Send size={20} color='#ffffff' strokeWidth={2} />
             </TouchableOpacity>
           </View>
-        </View>
+
+          <Text style={styles.characterCount}>{inputText.length}/500</Text>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -162,11 +279,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    ...shadows.lg,
     zIndex: 1000,
   },
   fabGradient: {
@@ -199,6 +312,12 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginLeft: 12,
   },
+  messageCount: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6b7280',
+    marginLeft: 8,
+  },
   closeButton: {
     padding: 4,
   },
@@ -212,7 +331,7 @@ const styles = StyleSheet.create({
   },
   userMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#667eea',
+    backgroundColor: gradients.primary[0],
     borderRadius: 18,
     borderBottomRightRadius: 4,
     padding: 12,
@@ -223,11 +342,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderBottomLeftRadius: 4,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadows.sm,
   },
   messageText: {
     fontSize: 16,
@@ -276,11 +391,18 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#667eea',
+    backgroundColor: gradients.primary[0],
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  characterCount: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#9ca3af',
+    paddingBottom: 10,
+    fontFamily: 'Inter-Regular',
   },
 });
