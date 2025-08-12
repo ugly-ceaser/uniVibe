@@ -49,22 +49,20 @@ export default function LoginScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      const success = await login({
+      // For development: allow any email/password combination
+      await login({
         email: formData.email.trim(),
-        password: formData.password,
+        fullName: 'John Adebayo', // Mock user data
+        phone: '+234 803 123 4567',
+        nin: '12345678901',
+        regNumber: 'CS/2024/001',
       });
 
-      if (success) {
-        // Navigate to main app
-        router.replace('/(tabs)');
-      }
+      // Navigate to main app
+      router.replace('/(tabs)');
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert(
@@ -80,7 +78,7 @@ export default function LoginScreen() {
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
 
-    // Clear error when user starts typing
+    // Clear error when user starts typing (keeping for UI consistency)
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
