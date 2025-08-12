@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // ✅ Dependency array now safe — no warning
   useEffect(() => {
     checkAuth();
-  }, [checkAuth]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>
