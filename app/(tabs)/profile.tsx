@@ -1,12 +1,6 @@
-import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+// app/(tabs)/profile.tsx
+import ProfileScreen from '../profile'; // adjust path based on your structure
 
 export default function ProfileTab() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace('/profile');
-  }, [router]);
-
-  return null;
+  return <ProfileScreen />;
 }

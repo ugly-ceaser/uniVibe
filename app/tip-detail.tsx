@@ -18,6 +18,7 @@ import {
   Shield,
 } from 'lucide-react-native';
 import { survivalTips, SurvivalTip } from '@/data/survivalTips';
+import { AntDesign } from '@expo/vector-icons';
 
 const categoryIcons = {
   Academics: BookOpen,
@@ -34,6 +35,8 @@ const categoryColors = {
 };
 
 export default function TipDetailScreen() {
+  const likeCount = survivalTips.reduce((acc, tip) => acc + (tip.likes || 0), 0);
+ 
   const router = useRouter();
   const { tipId } = useLocalSearchParams();
 
@@ -70,7 +73,12 @@ export default function TipDetailScreen() {
           <View style={styles.readTimeContainer}>
             <Clock size={16} color='rgba(255, 255, 255, 0.8)' strokeWidth={2} />
             <Text style={styles.readTime}>{tip.readTime}</Text>
+           
           </View>
+           <View style={styles.likesRow}>
+          <AntDesign name="hearto" size={20} color="red" />
+          <Text style={styles.likesText}>{likeCount}</Text>
+        </View>
         </View>
       </LinearGradient>
 
@@ -164,5 +172,15 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     textAlign: 'center',
     marginTop: 50,
+  },
+   likesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  likesText: {
+    marginLeft: 5,
+    fontSize: 14,
+    color: '#333',
   },
 });
