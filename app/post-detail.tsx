@@ -17,8 +17,10 @@ import {
   Clock,
   MessageSquare,
   Send,
+  Heart,
+  MessageCircle,
 } from 'lucide-react-native';
-import { forumPosts } from '@/data/forumPosts';
+import { forumPosts, Comment, Reply } from '@/data/forumPosts';
 
 const categoryColors = {
   Academic: '#667eea',
@@ -31,6 +33,8 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const { postId } = useLocalSearchParams();
   const [newComment, setNewComment] = React.useState('');
+  const [replyingTo, setReplyingTo] = React.useState<string | null>(null);
+  const [newReply, setNewReply] = React.useState('');
 
   const post = forumPosts.find(p => p.id === postId);
 
@@ -51,6 +55,39 @@ export default function PostDetailScreen() {
     // Mock adding comment - in real app this would be an API call
     Alert.alert('Success', 'Comment added successfully!', [
       { text: 'OK', onPress: () => setNewComment('') },
+    ]);
+  };
+
+  const handleLikePost = () => {
+    Alert.alert('Success', 'Post liked!');
+  };
+
+  const handleLikeComment = (commentId: string) => {
+    Alert.alert('Success', `Comment ${commentId} liked!`);
+  };
+
+  const handleLikeReply = (replyId: string) => {
+    Alert.alert('Success', `Reply ${replyId} liked!`);
+  };
+
+  const handleReplyToComment = (commentId: string) => {
+    setReplyingTo(commentId);
+  };
+
+  const handleAddReply = () => {
+    if (!newReply.trim()) {
+      Alert.alert('Error', 'Please enter a reply');
+      return;
+    }
+
+    Alert.alert('Success', 'Reply added successfully!', [
+      { 
+        text: 'OK', 
+        onPress: () => {
+          setNewReply('');
+          setReplyingTo(null);
+        }
+      },
     ]);
   };
 
@@ -103,6 +140,16 @@ export default function PostDetailScreen() {
 
           <Text style={styles.postTitle}>{post.title}</Text>
           <Text style={styles.postContent}>{post.content}</Text>
+
+          <View style={styles.postActions}>
+            <TouchableOpacity
+              style={styles.likeButton}
+              onPress={handleLikePost}
+            >
+              <Heart size={20} color='#ef4444' strokeWidth={2} />
+              <Text style={styles.likesText}>{post.likes} likes</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Comments Section */}
@@ -127,6 +174,85 @@ export default function PostDetailScreen() {
                 <Text style={styles.commentTime}>{comment.createdAt}</Text>
               </View>
               <Text style={styles.commentContent}>{comment.content}</Text>
+
+              <View style={styles.commentActions}>
+                <TouchableOpacity
+                  style={styles.commentLikeButton}
+                  onPress={() => handleLikeComment(comment.id)}
+                >
+                  <Heart size={14} color='#ef4444' strokeWidth={2} />
+                  <Text style={styles.commentLikesText}>{comment.likes}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.replyButton}
+                  onPress={() => handleReplyToComment(comment.id)}
+                >
+                  <MessageCircle size={14} color='#667eea' strokeWidth={2} />
+                  <Text style={styles.replyButtonText}>Reply</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Replies */}
+              {comment.replies && comment.replies.length > 0 && (
+                <View style={styles.repliesContainer}>
+                  {comment.replies.map(reply => (
+                    <View key={reply.id} style={styles.replyCard}>
+                      <View style={styles.replyHeader}>
+                        <View style={styles.replyAuthorInfo}>
+                          <View style={styles.replyAvatarContainer}>
+                            <User size={12} color='#667eea' strokeWidth={2} />
+                          </View>
+                          <Text style={styles.replyAuthorName}>{reply.author}</Text>
+                        </View>
+                        <Text style={styles.replyTime}>{reply.createdAt}</Text>
+                      </View>
+                      <Text style={styles.replyContent}>{reply.content}</Text>
+                      <TouchableOpacity
+                        style={styles.replyLikeButton}
+                        onPress={() => handleLikeReply(reply.id)}
+                      >
+                        <Heart size={12} color='#ef4444' strokeWidth={2} />
+                        <Text style={styles.replyLikesText}>{reply.likes}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Reply Input */}
+              {replyingTo === comment.id && (
+                <View style={styles.replyInputContainer}>
+                  <TextInput
+                    style={styles.replyInput}
+                    placeholder={`Reply to ${comment.author}...`}
+                    value={newReply}
+                    onChangeText={setNewReply}
+                    multiline
+                    maxLength={300}
+                  />
+                  <View style={styles.replyInputActions}>
+                    <TouchableOpacity
+                      style={styles.cancelReplyButton}
+                      onPress={() => {
+                        setReplyingTo(null);
+                        setNewReply('');
+                      }}
+                    >
+                      <Text style={styles.cancelReplyText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.sendReplyButton,
+                        !newReply.trim() && styles.sendReplyButtonDisabled,
+                      ]}
+                      onPress={handleAddReply}
+                      disabled={!newReply.trim()}
+                    >
+                      <Send size={16} color='#ffffff' strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           ))}
         </View>
@@ -258,6 +384,28 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 24,
   },
+  postActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fef2f2',
+    borderRadius: 20,
+  },
+  likesText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#ef4444',
+    marginLeft: 6,
+  },
   commentsSection: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -318,6 +466,139 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#374151',
     lineHeight: 20,
+  },
+  commentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 16,
+  },
+  commentLikeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  commentLikesText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#ef4444',
+    marginLeft: 4,
+  },
+  replyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  replyButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#667eea',
+    marginLeft: 4,
+  },
+  repliesContainer: {
+    marginTop: 12,
+    marginLeft: 16,
+    paddingLeft: 16,
+    borderLeftWidth: 2,
+    borderLeftColor: '#f3f4f6',
+  },
+  replyCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  replyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  replyAuthorInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyAvatarContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  replyAuthorName: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1f2937',
+  },
+  replyTime: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#9ca3af',
+  },
+  replyContent: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 16,
+    marginBottom: 6,
+  },
+  replyLikeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  replyLikesText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#ef4444',
+    marginLeft: 3,
+  },
+  replyInputContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+  },
+  replyInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    backgroundColor: '#ffffff',
+    maxHeight: 80,
+    marginBottom: 8,
+  },
+  replyInputActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cancelReplyButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  cancelReplyText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6b7280',
+  },
+  sendReplyButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#667eea',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendReplyButtonDisabled: {
+    opacity: 0.5,
   },
   errorText: {
     fontSize: 18,

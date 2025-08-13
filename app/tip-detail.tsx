@@ -16,9 +16,10 @@ import {
   Users,
   DollarSign,
   Shield,
+  Heart,
 } from 'lucide-react-native';
 import { survivalTips, SurvivalTip } from '@/data/survivalTips';
-import { AntDesign } from '@expo/vector-icons';
+import { Alert } from 'react-native';
 
 const categoryIcons = {
   Academics: BookOpen,
@@ -35,12 +36,14 @@ const categoryColors = {
 };
 
 export default function TipDetailScreen() {
-  const likeCount = survivalTips.reduce((acc, tip) => acc + (tip.likes || 0), 0);
- 
   const router = useRouter();
   const { tipId } = useLocalSearchParams();
 
   const tip = survivalTips.find(t => t.id === tipId);
+
+  const handleLikeTip = () => {
+    Alert.alert('Success', 'Tip liked!');
+  };
 
   if (!tip) {
     return (
@@ -73,12 +76,7 @@ export default function TipDetailScreen() {
           <View style={styles.readTimeContainer}>
             <Clock size={16} color='rgba(255, 255, 255, 0.8)' strokeWidth={2} />
             <Text style={styles.readTime}>{tip.readTime}</Text>
-           
           </View>
-           <View style={styles.likesRow}>
-          <AntDesign name="hearto" size={20} color="red" />
-          <Text style={styles.likesText}>{likeCount}</Text>
-        </View>
         </View>
       </LinearGradient>
 
@@ -86,6 +84,16 @@ export default function TipDetailScreen() {
         <View style={styles.contentContainer}>
           <Text style={styles.description}>{tip.description}</Text>
           <Text style={styles.contentText}>{tip.content}</Text>
+
+          <View style={styles.tipActions}>
+            <TouchableOpacity
+              style={styles.likeButton}
+              onPress={handleLikeTip}
+            >
+              <Heart size={20} color='#ef4444' strokeWidth={2} />
+              <Text style={styles.likesText}>{tip.likes || 0} likes</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -166,21 +174,33 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 24,
   },
+  tipActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fef2f2',
+    borderRadius: 20,
+  },
+  likesText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#ef4444',
+    marginLeft: 6,
+  },
   errorText: {
     fontSize: 18,
     fontFamily: 'Inter-Regular',
     color: '#ef4444',
     textAlign: 'center',
     marginTop: 50,
-  },
-   likesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  likesText: {
-    marginLeft: 5,
-    fontSize: 14,
-    color: '#333',
   },
 });

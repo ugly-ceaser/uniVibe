@@ -15,6 +15,7 @@ import {
   Clock,
   Plus,
   ChevronRight,
+  Heart,
 } from 'lucide-react-native';
 import { forumPosts, ForumPost } from '@/data/forumPosts';
 
@@ -54,6 +55,11 @@ export default function ForumScreen() {
   const handleNewPost = () => {
     // For now, just show an alert - in a real app this would open a new post form
     alert('New post feature coming soon!');
+  };
+
+  const handleLikePost = (postId: string) => {
+    // Mock like functionality - in real app this would be an API call
+    alert(`Liked post ${postId}!`);
   };
 
   return (
@@ -145,6 +151,15 @@ export default function ForumScreen() {
                     {post.comments.length}{' '}
                     {post.comments.length === 1 ? 'comment' : 'comments'}
                   </Text>
+                </View>
+                <View style={styles.likesInfo}>
+                  <TouchableOpacity
+                    onPress={() => handleLikePost(post.id)}
+                    style={styles.likeButton}
+                  >
+                    <Heart size={16} color='#ef4444' strokeWidth={2} />
+                    <Text style={styles.likesCount}>{post.likes}</Text>
+                  </TouchableOpacity>
                 </View>
                 <ChevronRight size={16} color='#9ca3af' strokeWidth={2} />
               </View>
@@ -309,6 +324,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#9ca3af',
     marginLeft: 6,
+  },
+  likesInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  likeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  likesCount: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#ef4444',
+    marginLeft: 4,
   },
   fab: {
     position: 'absolute',

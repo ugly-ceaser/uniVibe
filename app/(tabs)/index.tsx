@@ -15,6 +15,7 @@ import {
   DollarSign,
   Shield,
   ChevronRight,
+  Heart,
 } from 'lucide-react-native';
 import { survivalTips, SurvivalTip } from '@/data/survivalTips';
 
@@ -56,6 +57,11 @@ export default function HomeScreen() {
       pathname: '/tip-detail',
       params: { tipId: tip.id },
     });
+  };
+
+  const handleLikeTip = (tipId: string) => {
+    // Mock like functionality - in real app this would be an API call
+    Alert.alert('Success', 'Tip liked!');
   };
 
   return (
@@ -127,6 +133,16 @@ export default function HomeScreen() {
                   <Text style={styles.tipDescription} numberOfLines={2}>
                     {tip.description}
                   </Text>
+
+                  <View style={styles.tipFooter}>
+                    <TouchableOpacity
+                      style={styles.tipLikeButton}
+                      onPress={() => handleLikeTip(tip.id)}
+                    >
+                      <Heart size={16} color='#ef4444' strokeWidth={2} />
+                      <Text style={styles.tipLikesText}>{tip.likes || 0}</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
@@ -246,5 +262,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6b7280',
     lineHeight: 20,
+  },
+  tipFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  tipLikeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+  },
+  tipLikesText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#ef4444',
+    marginLeft: 4,
   },
 });
