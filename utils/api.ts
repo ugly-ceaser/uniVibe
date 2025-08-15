@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 // API Base URL
-const API_BASE_URL = process.env['EXPO_PUBLIC_API_URL'] || 'http://localhost:3000/api/v1';
+const API_BASE_URL = process.env['EXPO_PUBLIC_API_URL'] || 'https://univibesbackend.onrender.com/api/v1';
 
 // API Response Types
 export interface ApiResponse<T = any> {
