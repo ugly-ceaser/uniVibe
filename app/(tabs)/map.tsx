@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Linking,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -22,7 +23,7 @@ import {
   Settings,
   Gamepad2,
 } from 'lucide-react-native';
-import { campusLocations, CampusLocation } from '@/data/campusLocations';
+import { mapApi } from '@/utils/api';
 
 const categoryIcons = {
   'Lecture Hall': Building,
@@ -47,11 +48,13 @@ const categoryColors = {
 };
 
 export default function MapScreen() {
+  const [locations, setLocations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<
-    CampusLocation['category'] | 'All'
+    string | 'All'
   >('All');
 
-  const categories: (CampusLocation['category'] | 'All')[] = [
+  const categories = [
     'All',
     'Lecture Hall',
     'Hostel',
@@ -63,18 +66,34 @@ export default function MapScreen() {
     'Recreation',
   ];
 
+  React.useEffect(() => {
+    const fetchLocations = async () => {
+      try {
+        setLoading(true);
+        const response = await mapApi.getAll();
+        setLocations(response.data || []);
+      } catch (error) {
+        console.error('Error fetching locations:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLocations();
+  }, []);
   const filteredLocations =
     selectedCategory === 'All'
-      ? campusLocations
-      : campusLocations.filter(
+      ? locations
+      : locations.filter(
           location => location.category === selectedCategory
         );
 
-  const handleOpenMaps = async (location: CampusLocation) => {
+  const handleOpenMaps = async (location: any) => {
     try {
-      const supported = await Linking.canOpenURL(location.googleMapsUrl);
+      const mapsUrl = `https://maps.google.com/?q=${location.coordinates.latitude},${location.coordinates.longitude}`;
+      const supported = await Linking.canOpenURL(mapsUrl);
       if (supported) {
-        await Linking.openURL(location.googleMapsUrl);
+        await Linking.openURL(mapsUrl);
       } else {
         Alert.alert('Error', 'Cannot open Google Maps');
       }
@@ -83,6 +102,20 @@ export default function MapScreen() {
     }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+          <Text style={styles.headerTitle}>Campus Map</Text>
+          <Text style={styles.headerSubtitle}>Find your way around campus</Text>
+        </LinearGradient>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading locations...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
@@ -285,5 +318,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#667eea',
     marginLeft: 6,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
   },
 });

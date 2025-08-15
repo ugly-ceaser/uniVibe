@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -17,7 +18,7 @@ import {
   ChevronRight,
   Heart,
 } from 'lucide-react-native';
-import { forumPosts, ForumPost } from '@/data/forumPosts';
+import { forumApi } from '@/utils/api';
 
 const categoryColors = {
   Academic: '#667eea',
@@ -28,11 +29,13 @@ const categoryColors = {
 
 export default function ForumScreen() {
   const router = useRouter();
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<
-    ForumPost['category'] | 'All'
+    string | 'All'
   >('All');
 
-  const categories: (ForumPost['category'] | 'All')[] = [
+  const categories = [
     'All',
     'Academic',
     'Social',
@@ -40,15 +43,30 @@ export default function ForumScreen() {
     'Technical',
   ];
 
-  const filteredPosts =
-    selectedCategory === 'All'
-      ? forumPosts
-      : forumPosts.filter(post => post.category === selectedCategory);
+  React.useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        setLoading(true);
+        const response = await forumApi.getQuestions();
+        setQuestions(response.data || []);
+      } catch (error) {
+        console.error('Error fetching questions:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handlePostPress = (post: ForumPost) => {
+    fetchQuestions();
+  }, []);
+  const filteredQuestions =
+    selectedCategory === 'All'
+      ? questions
+      : questions.filter(question => question.category === selectedCategory);
+
+  const handleQuestionPress = (question: any) => {
     router.push({
       pathname: '/post-detail',
-      params: { postId: post.id },
+      params: { postId: question.id },
     });
   };
 
@@ -57,11 +75,40 @@ export default function ForumScreen() {
     alert('New post feature coming soon!');
   };
 
-  const handleLikePost = (postId: string) => {
-    // Mock like functionality - in real app this would be an API call
-    alert(`Liked post ${postId}!`);
+  const handleLikeQuestion = async (questionId: string) => {
+    try {
+      // Update local state optimistically
+      setQuestions(prev => 
+        prev.map(q => 
+          q.id === questionId 
+            ? { ...q, likes: (q.likes || 0) + 1 }
+            : q
+        )
+      );
+      
+      // In real implementation, make API call here
+      // await forumApi.likeQuestion(questionId);
+    } catch (error) {
+      console.error('Error liking question:', error);
+    }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+          <Text style={styles.headerTitle}>Student Forum</Text>
+          <Text style={styles.headerSubtitle}>
+            Ask questions and share knowledge
+          </Text>
+        </LinearGradient>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading forum...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
@@ -102,11 +149,11 @@ export default function ForumScreen() {
 
         {/* Posts List */}
         <View style={styles.postsContainer}>
-          {filteredPosts.map(post => (
+          {filteredQuestions.map(question => (
             <TouchableOpacity
-              key={post.id}
+              key={question.id}
               style={styles.postCard}
-              onPress={() => handlePostPress(post)}
+              onPress={() => handleQuestionPress(question)}
               activeOpacity={0.7}
             >
               <View style={styles.postHeader}>
@@ -115,50 +162,50 @@ export default function ForumScreen() {
                     <User size={16} color='#667eea' strokeWidth={2} />
                   </View>
                   <View>
-                    <Text style={styles.authorName}>{post.author}</Text>
+                    <Text style={styles.authorName}>{question.author}</Text>
                     <View style={styles.postMeta}>
                       <Clock size={12} color='#9ca3af' strokeWidth={2} />
-                      <Text style={styles.postTime}>{post.createdAt}</Text>
+                      <Text style={styles.postTime}>{question.createdAt}</Text>
                     </View>
                   </View>
                 </View>
                 <View
                   style={[
                     styles.categoryBadge,
-                    { backgroundColor: categoryColors[post.category] + '20' },
+                    { backgroundColor: categoryColors[question.category] + '20' },
                   ]}
                 >
                   <Text
                     style={[
                       styles.categoryBadgeText,
-                      { color: categoryColors[post.category] },
+                      { color: categoryColors[question.category] },
                     ]}
                   >
-                    {post.category}
+                    {question.category}
                   </Text>
                 </View>
               </View>
 
-              <Text style={styles.postTitle}>{post.title}</Text>
+              <Text style={styles.postTitle}>{question.title}</Text>
               <Text style={styles.postDescription} numberOfLines={2}>
-                {post.description}
+                {question.body}
               </Text>
 
               <View style={styles.postFooter}>
                 <View style={styles.commentsInfo}>
                   <MessageSquare size={16} color='#9ca3af' strokeWidth={2} />
                   <Text style={styles.commentsCount}>
-                    {post.comments.length}{' '}
-                    {post.comments.length === 1 ? 'comment' : 'comments'}
+                    {question.answers?.length || 0}{' '}
+                    {(question.answers?.length || 0) === 1 ? 'answer' : 'answers'}
                   </Text>
                 </View>
                 <View style={styles.likesInfo}>
                   <TouchableOpacity
-                    onPress={() => handleLikePost(post.id)}
+                    onPress={() => handleLikeQuestion(question.id)}
                     style={styles.likeButton}
                   >
                     <Heart size={16} color='#ef4444' strokeWidth={2} />
-                    <Text style={styles.likesCount}>{post.likes}</Text>
+                    <Text style={styles.likesCount}>{question.likes || 0}</Text>
                   </TouchableOpacity>
                 </View>
                 <ChevronRight size={16} color='#9ca3af' strokeWidth={2} />
@@ -360,5 +407,16 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
   },
 });

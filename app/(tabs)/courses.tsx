@@ -6,17 +6,36 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { BookOpen, User, ChevronRight } from 'lucide-react-native';
-import { getCoursesBySemester } from '@/data/courses';
+import { coursesApi } from '@/utils/api';
 
 export default function CoursesScreen() {
   const router = useRouter();
   const [selectedSemester, setSelectedSemester] = useState<1 | 2>(1);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const semesterCourses = getCoursesBySemester(selectedSemester);
+  React.useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoading(true);
+        const response = await coursesApi.getAll();
+        setCourses(response.data || []);
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
+
+  const semesterCourses = courses.filter(course => course.semester === selectedSemester);
 
   const handleCoursePress = (courseId: string) => {
     router.push({
@@ -25,6 +44,22 @@ export default function CoursesScreen() {
     });
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+          <Text style={styles.headerTitle}>CS Year 1 Courses</Text>
+          <Text style={styles.headerSubtitle}>
+            Computer Science curriculum overview
+          </Text>
+        </LinearGradient>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading courses...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
@@ -86,10 +121,10 @@ export default function CoursesScreen() {
 
               <View style={styles.courseContent}>
                 <View style={styles.courseHeader}>
-                  <Text style={styles.courseCode}>{course.courseCode}</Text>
-                  <Text style={styles.unitLoad}>{course.unitLoad} Units</Text>
+                  <Text style={styles.courseCode}>{course.code}</Text>
+                  <Text style={styles.unitLoad}>{course.credits} Units</Text>
                 </View>
-                <Text style={styles.courseName}>{course.courseName}</Text>
+                <Text style={styles.courseName}>{course.name}</Text>
                 <Text style={styles.courseDescription} numberOfLines={2}>
                   {course.description}
                 </Text>
@@ -97,7 +132,7 @@ export default function CoursesScreen() {
                 <View style={styles.coordinatorInfo}>
                   <User size={14} color='#9ca3af' strokeWidth={2} />
                   <Text style={styles.coordinatorName}>
-                    {course.coordinator}
+                    {course.instructor}
                   </Text>
                 </View>
               </View>
@@ -123,7 +158,7 @@ export default function CoursesScreen() {
               <View style={styles.statItem}>
                 <Text style={styles.statNumber}>
                   {semesterCourses.reduce(
-                    (total, course) => total + course.unitLoad,
+                    (total, course) => total + course.credits,
                     0
                   )}
                 </Text>
@@ -298,5 +333,16 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: '#e5e7eb',
     marginHorizontal: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
   },
 });

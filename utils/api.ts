@@ -3,8 +3,7 @@ import { Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 // API Base URL
-const API_BASE_URL =
-  process.env['EXPO_PUBLIC_API_URL'] || 'http://localhost:3000/api/v1';
+const API_BASE_URL = process.env['EXPO_PUBLIC_API_URL'] || 'http://localhost:3000/api/v1';
 
 // API Response Types
 export interface ApiResponse<T = any> {
@@ -28,7 +27,7 @@ export class ApiError extends Error {
   public status: number;
   public requestId: string | undefined;
 
-  constructor(message: string, status: number, requestId: string | undefined) {
+  constructor(message: string, status: number, requestId?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -69,8 +68,7 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
   const contentType = response.headers.get('content-type');
 
   if (!response.ok) {
-    let errorMessage =
-      STATUS_MESSAGES[response.status] || 'An unexpected error occurred';
+    let errorMessage = STATUS_MESSAGES[response.status] || 'An unexpected error occurred';
     let requestId: string | undefined;
 
     try {
@@ -279,32 +277,67 @@ export const useApi = () => {
 // Export the API client for direct use
 export { apiClient as api };
 
-// Utility function to check if user has required role
-export const hasRole = (userRole: string, requiredRole: string): boolean => {
-  const roleHierarchy = {
-    GUEST: 0,
-    STUDENT: 1,
-    ADMIN: 2,
-  };
+// Auth API functions
+export const authApi = {
+  register: async (userData: { name: string; email: string; password: string }) => {
+    return apiClient.post('/auth/register', userData);
+  },
 
-  return (
-    roleHierarchy[userRole as keyof typeof roleHierarchy] >=
-    roleHierarchy[requiredRole as keyof typeof roleHierarchy]
-  );
+  login: async (credentials: { email: string; password: string }) => {
+    return apiClient.post('/auth/login', credentials);
+  },
 };
 
-// Utility function to check if user can perform action
-export const canPerformAction = (
-  userRole: string,
-  action: 'view' | 'create' | 'edit' | 'delete' | 'moderate'
-): boolean => {
-  const permissions = {
-    GUEST: ['view'],
-    STUDENT: ['view', 'create', 'edit'],
-    ADMIN: ['view', 'create', 'edit', 'delete', 'moderate'],
-  };
+// Courses API functions
+export const coursesApi = {
+  getAll: () => apiClient.get('/courses'),
+  getById: (id: string) => apiClient.get(`/courses/${id}`),
+  create: (courseData: any) => apiClient.post('/courses', courseData),
+};
 
-  return (
-    permissions[userRole as keyof typeof permissions]?.includes(action) || false
-  );
+// Forum API functions
+export const forumApi = {
+  getQuestions: () => apiClient.get('/forum/questions'),
+  createQuestion: (questionData: { title: string; body: string; tags?: string[] }) =>
+    apiClient.post('/forum/questions', questionData),
+  addAnswer: (questionId: string, answerData: { body: string }) =>
+    apiClient.post(`/forum/questions/${questionId}/answers`, answerData),
+  getComments: (answerId: string) => apiClient.get(`/forum/answers/${answerId}/comments`),
+  addComment: (commentData: { answerId: string; text: string }) =>
+    apiClient.post('/forum/comments', commentData),
+  createForum: (forumData: { name: string; description: string }) =>
+    apiClient.post('/forum/forums', forumData),
+};
+
+// Guide API functions
+export const guideApi = {
+  getAll: () => apiClient.get('/guide'),
+  getById: (id: string) => apiClient.get(`/guide/${id}`),
+  getLikesCount: (id: string) => apiClient.get(`/guide/${id}/likes/count`),
+  create: (guideData: { title: string; content: string }) =>
+    apiClient.post('/guide', guideData),
+  update: (id: string, guideData: { title?: string; content?: string }) =>
+    apiClient.put(`/guide/${id}`, guideData),
+  delete: (id: string) => apiClient.delete(`/guide/${id}`),
+  like: (id: string) => apiClient.post(`/guide/${id}/like`),
+  unlike: (id: string) => apiClient.delete(`/guide/${id}/like`),
+};
+
+// Map API functions
+export const mapApi = {
+  getAll: () => apiClient.get('/map'),
+  getById: (id: string) => apiClient.get(`/map/${id}`),
+  create: (locationData: { name: string; coordinates: any }) =>
+    apiClient.post('/map', locationData),
+  createAsAdmin: (locationData: { name: string; coordinates: any; status: string }) =>
+    apiClient.post('/map/admin', locationData),
+  update: (id: string, locationData: { name?: string; coordinates?: any }) =>
+    apiClient.put(`/map/${id}`, locationData),
+  delete: (id: string) => apiClient.delete(`/map/${id}`),
+  getAllAsAdmin: () => apiClient.get('/map/admin/all'),
+  getByIdAsAdmin: (id: string) => apiClient.get(`/map/admin/${id}`),
+  getPending: () => apiClient.get('/map/admin/pending'),
+  approve: (id: string) => apiClient.patch(`/map/${id}/approve`),
+  reject: (id: string) => apiClient.patch(`/map/${id}/reject`),
+  investigate: (id: string) => apiClient.patch(`/map/${id}/investigate`),
 };

@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Linking,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -20,13 +21,42 @@ import {
   ChartBar as BarChart3,
   CircleCheck as CheckCircle,
 } from 'lucide-react-native';
-import { courses } from '@/data/courses';
+import { coursesApi } from '@/utils/api';
 
 export default function CourseDetailScreen() {
   const router = useRouter();
   const { courseId } = useLocalSearchParams();
+  const [course, setCourse] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const course = courses.find(c => c.id === courseId);
+  React.useEffect(() => {
+    const fetchCourseDetails = async () => {
+      try {
+        setLoading(true);
+        const response = await coursesApi.getById(courseId as string);
+        setCourse(response.data);
+      } catch (error) {
+        console.error('Error fetching course details:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (courseId) {
+      fetchCourseDetails();
+    }
+  }, [courseId]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading course details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!course) {
     return (
@@ -37,7 +67,7 @@ export default function CourseDetailScreen() {
   }
 
   const handleEmailPress = async () => {
-    const emailUrl = `mailto:${course.coordinatorEmail}`;
+    const emailUrl = `mailto:${course.instructorEmail || course.instructor}`;
     try {
       const supported = await Linking.canOpenURL(emailUrl);
       if (supported) {
@@ -51,7 +81,7 @@ export default function CourseDetailScreen() {
   };
 
   const handlePhonePress = async () => {
-    const phoneUrl = `tel:${course.coordinatorPhone}`;
+    const phoneUrl = `tel:${course.instructorPhone || '+234 803 123 4567'}`;
     try {
       const supported = await Linking.canOpenURL(phoneUrl);
       if (supported) {
@@ -79,10 +109,10 @@ export default function CourseDetailScreen() {
           <View style={styles.iconContainer}>
             <BookOpen size={32} color='#ffffff' strokeWidth={2} />
           </View>
-          <Text style={styles.courseCode}>{course.courseCode}</Text>
-          <Text style={styles.courseName}>{course.courseName}</Text>
+          <Text style={styles.courseCode}>{course.code}</Text>
+          <Text style={styles.courseName}>{course.name}</Text>
           <Text style={styles.unitLoad}>
-            {course.unitLoad} Units • Semester {course.semester}
+            {course.credits} Units • Semester {course.semester}
           </Text>
         </View>
       </LinearGradient>
@@ -102,7 +132,7 @@ export default function CourseDetailScreen() {
               <View style={styles.coordinatorAvatar}>
                 <User size={24} color='#667eea' strokeWidth={2} />
               </View>
-              <Text style={styles.coordinatorName}>{course.coordinator}</Text>
+              <Text style={styles.coordinatorName}>{course.instructor}</Text>
             </View>
 
             <View style={styles.contactInfo}>
@@ -113,7 +143,7 @@ export default function CourseDetailScreen() {
               >
                 <Mail size={16} color='#667eea' strokeWidth={2} />
                 <Text style={styles.contactText}>
-                  {course.coordinatorEmail}
+                  {course.instructorEmail || course.instructor}
                 </Text>
               </TouchableOpacity>
 
@@ -124,7 +154,7 @@ export default function CourseDetailScreen() {
               >
                 <Phone size={16} color='#667eea' strokeWidth={2} />
                 <Text style={styles.contactText}>
-                  {course.coordinatorPhone}
+                  {course.instructorPhone || '+234 803 123 4567'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -135,7 +165,7 @@ export default function CourseDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Course Outline</Text>
           <View style={styles.outlineContainer}>
-            {course.outline.map((topic, index) => (
+            {(course.outline || []).map((topic: string, index: number) => (
               <View key={index} style={styles.outlineItem}>
                 <CheckCircle size={16} color='#43e97b' strokeWidth={2} />
                 <Text style={styles.outlineText}>{topic}</Text>
@@ -148,7 +178,7 @@ export default function CourseDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Assessment Breakdown</Text>
           <View style={styles.assessmentContainer}>
-            {course.assessment.map((assessment, index) => (
+            {(course.assessment || []).map((assessment: any, index: number) => (
               <View key={index} style={styles.assessmentItem}>
                 <View style={styles.assessmentInfo}>
                   <BarChart3 size={16} color='#667eea' strokeWidth={2} />
@@ -341,6 +371,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#667eea',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
   },
   errorText: {
     fontSize: 18,

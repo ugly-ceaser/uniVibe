@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   ArrowLeft,
   User,
@@ -27,51 +28,29 @@ import {
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { register, isLoading } = useAuth();
+  
   const [formData, setFormData] = useState({
-    fullName: '',
+    name: '',
     email: '',
-    phone: '',
-    nin: '',
-    regNumber: '',
     password: '',
     confirmPassword: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleRegister = async () => {
-    const {
-      fullName,
-      email,
-      phone,
-      nin,
-      regNumber,
-      password,
-      confirmPassword,
-    } = formData;
+    const { name, email, password, confirmPassword } = formData;
 
-    if (
-      !fullName ||
-      !email ||
-      !phone ||
-      !nin ||
-      !regNumber ||
-      !password ||
-      !confirmPassword
-    ) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    if (nin.length !== 11) {
-      Alert.alert('Error', 'NIN must be 11 digits');
-      return;
-    }
 
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
@@ -83,15 +62,21 @@ export default function RegisterScreen() {
       return;
     }
 
-    setIsLoading(true);
 
-    // Mock registration - replace with actual API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await register({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+      });
+      
       Alert.alert('Success', 'Account created successfully!', [
-        { text: 'OK', onPress: () => router.replace('/login') },
+        { text: 'OK', onPress: () => router.replace('/(tabs)') },
       ]);
-    }, 1500);
+    } catch (error) {
+      console.error('Registration error:', error);
+      // Error handling is done in the auth context
+    }
   };
 
   return (
@@ -125,8 +110,8 @@ export default function RegisterScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder='Full Name'
-                  value={formData.fullName}
-                  onChangeText={value => handleInputChange('fullName', value)}
+                  value={formData.name}
+                  onChangeText={value => handleInputChange('name', value)}
                   autoCapitalize='words'
                 />
               </View>
@@ -141,40 +126,6 @@ export default function RegisterScreen() {
                   keyboardType='email-address'
                   autoCapitalize='none'
                   autoCorrect={false}
-                />
-              </View>
-
-              <View style={styles.inputWrapper}>
-                <Phone size={20} color='#9ca3af' strokeWidth={2} />
-                <TextInput
-                  style={styles.input}
-                  placeholder='Phone number'
-                  value={formData.phone}
-                  onChangeText={value => handleInputChange('phone', value)}
-                  keyboardType='phone-pad'
-                />
-              </View>
-
-              <View style={styles.inputWrapper}>
-                <Shield size={20} color='#9ca3af' strokeWidth={2} />
-                <TextInput
-                  style={styles.input}
-                  placeholder='National ID Number (NIN)'
-                  value={formData.nin}
-                  onChangeText={value => handleInputChange('nin', value)}
-                  keyboardType='numeric'
-                  maxLength={11}
-                />
-              </View>
-
-              <View style={styles.inputWrapper}>
-                <BookOpen size={20} color='#9ca3af' strokeWidth={2} />
-                <TextInput
-                  style={styles.input}
-                  placeholder='Registration Number (e.g., CS/2024/001)'
-                  value={formData.regNumber}
-                  onChangeText={value => handleInputChange('regNumber', value)}
-                  autoCapitalize='characters'
                 />
               </View>
 

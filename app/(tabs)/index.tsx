@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -17,7 +19,7 @@ import {
   ChevronRight,
   Heart,
 } from 'lucide-react-native';
-import { survivalTips, SurvivalTip } from '@/data/survivalTips';
+import { guideApi } from '@/utils/api';
 
 const categoryIcons = {
   Academics: BookOpen,
@@ -35,11 +37,13 @@ const categoryColors = {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [guides, setGuides] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<
-    SurvivalTip['category'] | 'All'
+    string | 'All'
   >('All');
 
-  const categories: (SurvivalTip['category'] | 'All')[] = [
+  const categories = [
     'All',
     'Academics',
     'Social Life',
@@ -47,23 +51,75 @@ export default function HomeScreen() {
     'Safety',
   ];
 
-  const filteredTips =
-    selectedCategory === 'All'
-      ? survivalTips
-      : survivalTips.filter(tip => tip.category === selectedCategory);
+  React.useEffect(() => {
+    const fetchGuides = async () => {
+      try {
+        setLoading(true);
+        const response = await guideApi.getAll();
+        setGuides(response.data || []);
+      } catch (error) {
+        console.error('Error fetching guides:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleTipPress = (tip: SurvivalTip) => {
+    fetchGuides();
+  }, []);
+  const filteredGuides =
+    selectedCategory === 'All'
+      ? guides
+      : guides.filter(guide => guide.category === selectedCategory);
+
+  const handleGuidePress = (guide: any) => {
     router.push({
       pathname: '/tip-detail',
-      params: { tipId: tip.id },
+      params: { tipId: guide.id },
     });
   };
 
-  const handleLikeTip = (tipId: string) => {
-    // Mock like functionality - in real app this would be an API call
-    Alert.alert('Success', 'Tip liked!');
+  const handleLikeGuide = async (guideId: string) => {
+    try {
+      // Update local state optimistically
+      setGuides(prev => 
+        prev.map(g => 
+          g.id === guideId 
+            ? { ...g, likes: (g.likes || 0) + 1 }
+            : g
+        )
+      );
+      
+      await guideApi.like(guideId);
+      Alert.alert('Success', 'Guide liked!');
+    } catch (error) {
+      console.error('Error liking guide:', error);
+      // Revert optimistic update on error
+      setGuides(prev => 
+        prev.map(g => 
+          g.id === guideId 
+            ? { ...g, likes: Math.max((g.likes || 1) - 1, 0) }
+            : g
+        )
+      );
+    }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+          <Text style={styles.headerTitle}>Survival Guide</Text>
+          <Text style={styles.headerSubtitle}>
+            Tips for your first year success
+          </Text>
+        </LinearGradient>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading survival tips...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
@@ -104,15 +160,15 @@ export default function HomeScreen() {
 
         {/* Tips List */}
         <View style={styles.tipsContainer}>
-          {filteredTips.map(tip => {
-            const IconComponent = categoryIcons[tip.category];
-            const colors = categoryColors[tip.category];
+          {filteredGuides.map(guide => {
+            const IconComponent = categoryIcons[guide.category];
+            const colors = categoryColors[guide.category];
 
             return (
               <TouchableOpacity
-                key={tip.id}
+                key={guide.id}
                 style={styles.tipCard}
-                onPress={() => handleTipPress(tip)}
+                onPress={() => handleGuidePress(guide)}
                 activeOpacity={0.7}
               >
                 <LinearGradient
@@ -126,21 +182,21 @@ export default function HomeScreen() {
 
                 <View style={styles.tipContent}>
                   <View style={styles.tipHeader}>
-                    <Text style={styles.tipCategory}>{tip.category}</Text>
-                    <Text style={styles.readTime}>{tip.readTime}</Text>
+                    <Text style={styles.tipCategory}>{guide.category}</Text>
+                    <Text style={styles.readTime}>{guide.readTime || '3 min read'}</Text>
                   </View>
-                  <Text style={styles.tipTitle}>{tip.title}</Text>
+                  <Text style={styles.tipTitle}>{guide.title}</Text>
                   <Text style={styles.tipDescription} numberOfLines={2}>
-                    {tip.description}
+                    {guide.description}
                   </Text>
 
                   <View style={styles.tipFooter}>
                     <TouchableOpacity
                       style={styles.tipLikeButton}
-                      onPress={() => handleLikeTip(tip.id)}
+                      onPress={() => handleLikeGuide(guide.id)}
                     >
                       <Heart size={16} color='#ef4444' strokeWidth={2} />
-                      <Text style={styles.tipLikesText}>{tip.likes || 0}</Text>
+                      <Text style={styles.tipLikesText}>{guide.likes || 0}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -281,5 +337,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#ef4444',
     marginLeft: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
   },
 });

@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -18,8 +20,7 @@ import {
   Shield,
   Heart,
 } from 'lucide-react-native';
-import { survivalTips, SurvivalTip } from '@/data/survivalTips';
-import { Alert } from 'react-native';
+import { guideApi } from '@/utils/api';
 
 const categoryIcons = {
   Academics: BookOpen,
@@ -38,23 +39,60 @@ const categoryColors = {
 export default function TipDetailScreen() {
   const router = useRouter();
   const { tipId } = useLocalSearchParams();
+  const [guide, setGuide] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const tip = survivalTips.find(t => t.id === tipId);
+  React.useEffect(() => {
+    const fetchGuideDetails = async () => {
+      try {
+        setLoading(true);
+        const response = await guideApi.getById(tipId as string);
+        setGuide(response.data);
+      } catch (error) {
+        console.error('Error fetching guide details:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleLikeTip = () => {
-    Alert.alert('Success', 'Tip liked!');
+    if (tipId) {
+      fetchGuideDetails();
+    }
+  }, [tipId]);
+
+  const handleLikeGuide = async () => {
+    try {
+      setGuide((prev: any) => ({ ...prev, likes: (prev.likes || 0) + 1 }));
+      await guideApi.like(tipId as string);
+      Alert.alert('Success', 'Guide liked!');
+    } catch (error) {
+      console.error('Error liking guide:', error);
+      // Revert optimistic update on error
+      setGuide((prev: any) => ({ ...prev, likes: Math.max((prev.likes || 1) - 1, 0) }));
+    }
   };
 
-  if (!tip) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.errorText}>Tip not found</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading guide...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
-  const IconComponent = categoryIcons[tip.category];
-  const colors = categoryColors[tip.category];
+  if (!guide) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.errorText}>Guide not found</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const IconComponent = categoryIcons[guide.category];
+  const colors = categoryColors[guide.category];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -71,27 +109,27 @@ export default function TipDetailScreen() {
           <View style={styles.iconContainer}>
             <IconComponent size={32} color='#ffffff' strokeWidth={2} />
           </View>
-          <Text style={styles.category}>{tip.category}</Text>
-          <Text style={styles.title}>{tip.title}</Text>
+          <Text style={styles.category}>{guide.category}</Text>
+          <Text style={styles.title}>{guide.title}</Text>
           <View style={styles.readTimeContainer}>
             <Clock size={16} color='rgba(255, 255, 255, 0.8)' strokeWidth={2} />
-            <Text style={styles.readTime}>{tip.readTime}</Text>
+            <Text style={styles.readTime}>{guide.readTime || '3 min read'}</Text>
           </View>
         </View>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.contentContainer}>
-          <Text style={styles.description}>{tip.description}</Text>
-          <Text style={styles.contentText}>{tip.content}</Text>
+          <Text style={styles.description}>{guide.description}</Text>
+          <Text style={styles.contentText}>{guide.content}</Text>
 
           <View style={styles.tipActions}>
             <TouchableOpacity
               style={styles.likeButton}
-              onPress={handleLikeTip}
+              onPress={handleLikeGuide}
             >
               <Heart size={20} color='#ef4444' strokeWidth={2} />
-              <Text style={styles.likesText}>{tip.likes || 0} likes</Text>
+              <Text style={styles.likesText}>{guide.likes || 0} likes</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -195,6 +233,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#ef4444',
     marginLeft: 6,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
   },
   errorText: {
     fontSize: 18,

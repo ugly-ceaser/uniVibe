@@ -13,7 +13,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { isValidEmail, isValidPassword } from '@/utils/validation';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,52 +23,23 @@ export default function LoginScreen() {
     password: '',
   });
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    // Validate email
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!isValidEmail(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-
-    // Validate password
-    if (!formData.password.trim()) {
-      newErrors.password = 'Password is required';
-    } else if (!isValidPassword(formData.password)) {
-      newErrors.password = 'Password must be at least 8 characters long';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
 
     try {
-      // For development: allow any email/password combination
       await login({
         email: formData.email.trim(),
-        fullName: 'John Adebayo', // Mock user data
-        phone: '+234 803 123 4567',
-        nin: '12345678901',
-        regNumber: 'CS/2024/001',
+        password: formData.password,
       });
 
       // Navigate to main app
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert(
-        'Login Failed',
-        'An unexpected error occurred. Please try again.',
-        [{ text: 'OK' }]
-      );
+      // Error handling is done in the auth context
     } finally {
       setIsSubmitting(false);
     }
@@ -77,11 +47,6 @@ export default function LoginScreen() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-
-    // Clear error when user starts typing (keeping for UI consistency)
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
   };
 
   const handleRegisterPress = () => {
@@ -120,7 +85,7 @@ export default function LoginScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <TextInput
-                style={[styles.input, errors.email && styles.inputError]}
+                style={styles.input}
                 placeholder='Enter your email'
                 placeholderTextColor='#9ca3af'
                 value={formData.email}
@@ -130,15 +95,12 @@ export default function LoginScreen() {
                 autoCorrect={false}
                 editable={!isSubmitting}
               />
-              {errors.email && (
-                <Text style={styles.errorText}>{errors.email}</Text>
-              )}
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
               <TextInput
-                style={[styles.input, errors.password && styles.inputError]}
+                style={styles.input}
                 placeholder='Enter your password'
                 placeholderTextColor='#9ca3af'
                 value={formData.password}
@@ -146,9 +108,6 @@ export default function LoginScreen() {
                 secureTextEntry
                 editable={!isSubmitting}
               />
-              {errors.password && (
-                <Text style={styles.errorText}>{errors.password}</Text>
-              )}
             </View>
 
             {/* Forgot Password */}
