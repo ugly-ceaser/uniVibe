@@ -66,6 +66,15 @@ const getDefaultHeaders = (token?: string) => {
 // Handle API response
 const handleResponse = async <T>(response: Response): Promise<T> => {
   const contentType = response.headers.get('content-type');
+  
+  // Log API response for development
+  console.log('🌐 API Response:', {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+    timestamp: new Date().toISOString(),
+  });
 
   if (!response.ok) {
     let errorMessage = STATUS_MESSAGES[response.status] || 'An unexpected error occurred';
@@ -74,21 +83,27 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
     try {
       if (contentType && contentType.includes('application/json')) {
         const errorData = await response.json();
+        console.log('❌ API Error Data:', errorData);
         errorMessage = errorData.message || errorMessage;
         requestId = errorData.requestId;
       }
     } catch {
       // If we can't parse the error response, use the default message
+      console.log('⚠️ Could not parse error response');
     }
 
     throw new ApiError(errorMessage, response.status, requestId);
   }
 
   if (contentType && contentType.includes('application/json')) {
-    return response.json();
+    const jsonData = await response.json();
+    console.log('✅ API Success Data:', jsonData);
+    return jsonData;
   }
 
-  return response.text() as T;
+  const textData = await response.text();
+  console.log('✅ API Text Response:', textData);
+  return textData as T;
 };
 
 // Base API client
@@ -123,10 +138,25 @@ class ApiClient {
       },
     };
 
+    // Log API request for development
+    console.log('🚀 API Request:', {
+      method: config.method || 'GET',
+      url,
+      headers: config.headers,
+      body: config.body,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
       const response = await fetch(url, config);
       return await handleResponse<T>(response);
     } catch (error) {
+      console.log('💥 API Request Failed:', {
+        url,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      });
+      
       if (error instanceof ApiError) {
         throw error;
       }
