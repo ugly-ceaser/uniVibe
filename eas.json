@@ -1,13 +1,16 @@
 {
-  "cli": {
-    "version": ">= 5.4.0",
-    "appVersionSource": "remote",
-    "packageManager": "npm"
-  },
   "build": {
+    "development": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://univibesbackend.onrender.com/api/v1"
+      }
+    },
     "production": {
       "node": "18.19.0",
-      "npm": "9.8.1",
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
@@ -18,6 +21,3 @@
     }
   }
 }
-
-
-

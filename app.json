@@ -14,7 +14,7 @@
     "android": {
       "package": "com.uglyceaser.univibes",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       }
     },
@@ -25,8 +25,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font",
-      "expo-web-browser"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
