@@ -8,13 +8,11 @@
       "node": "18.19.0",
       "android": {
         "gradleCommand": ":app:assembleRelease",
-        "buildType": "apk",
-        "env": {
-          "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx2048m"
-        }
+        "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://univibesbackend.onrender.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://univibesbackend.onrender.com/api/v1",
+        "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx2048m"
       }
     },
     "dev": {
