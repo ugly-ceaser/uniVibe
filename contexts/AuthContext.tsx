@@ -75,7 +75,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const login = useCallback(async (userData: any) => {
     setIsLoading(true);
     try {
-      const response = await authApi.login(credentials);
+      const response = await authApi.login(userData);
       const { user: userData, token: authToken } = response.data;
       
       await AsyncStorage.setItem('user', JSON.stringify(userData));
