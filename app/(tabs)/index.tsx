@@ -18,17 +18,20 @@ import {
   Shield,
   ChevronRight,
   Heart,
+  LucideIcon,
 } from 'lucide-react-native';
-import { guideApi } from '@/utils/api';
+import { useApi, guideApi } from '@/utils/api'; // Add this import
+import { Category, Guide } from '@/types/guide';
+import { ApiResponse } from '@/types/api';
 
-const categoryIcons = {
+const categoryIcons: Record<Category, LucideIcon> = {
   Academics: BookOpen,
   'Social Life': Users,
   Budgeting: DollarSign,
   Safety: Shield,
 };
 
-const categoryColors = {
+const categoryColors: Record<Category, [string, string]> = {
   Academics: ['#667eea', '#764ba2'],
   'Social Life': ['#f093fb', '#f5576c'],
   Budgeting: ['#4facfe', '#00f2fe'],
@@ -37,6 +40,7 @@ const categoryColors = {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const api = useApi(); // Add this hook
   const [guides, setGuides] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<
@@ -51,11 +55,13 @@ export default function HomeScreen() {
     'Safety',
   ];
 
+  const apiClient = React.useMemo(() => guideApi(api), [api]); // Create API client instance
+
   React.useEffect(() => {
     const fetchGuides = async () => {
       try {
         setLoading(true);
-        const response = await guideApi.getAll();
+        const response = await apiClient.getAll() as { data: Guide[] };
         setGuides(response.data || []);
       } catch (error) {
         console.error('Error fetching guides:', error);
@@ -65,7 +71,8 @@ export default function HomeScreen() {
     };
 
     fetchGuides();
-  }, []);
+  }, [apiClient]);
+
   const filteredGuides =
     selectedCategory === 'All'
       ? guides
@@ -89,7 +96,7 @@ export default function HomeScreen() {
         )
       );
       
-      await guideApi.like(guideId);
+      await apiClient.like(guideId);
       Alert.alert('Success', 'Guide liked!');
     } catch (error) {
       console.error('Error liking guide:', error);
@@ -102,6 +109,52 @@ export default function HomeScreen() {
         )
       );
     }
+  };
+
+  const renderGuide = (guide: Guide) => {
+    const IconComponent = categoryIcons[guide.category];
+    const colors = categoryColors[guide.category];
+    
+    return (
+      <TouchableOpacity
+        key={guide.id}
+        style={styles.tipCard}
+        onPress={() => handleGuidePress(guide)}
+        activeOpacity={0.7}
+      >
+        <LinearGradient
+          colors={colors}
+          style={styles.tipIconContainer}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <IconComponent size={24} color='#ffffff' strokeWidth={2} />
+        </LinearGradient>
+
+        <View style={styles.tipContent}>
+          <View style={styles.tipHeader}>
+            <Text style={styles.tipCategory}>{guide.category}</Text>
+            <Text style={styles.readTime}>{guide.readTime || '3 min read'}</Text>
+          </View>
+          <Text style={styles.tipTitle}>{guide.title}</Text>
+          <Text style={styles.tipDescription} numberOfLines={2}>
+            {guide.description}
+          </Text>
+
+          <View style={styles.tipFooter}>
+            <TouchableOpacity
+              style={styles.tipLikeButton}
+              onPress={() => handleLikeGuide(guide.id)}
+            >
+              <Heart size={16} color='#ef4444' strokeWidth={2} />
+              <Text style={styles.tipLikesText}>{guide.likes || 0}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
+      </TouchableOpacity>
+    );
   };
 
   if (loading) {
@@ -160,51 +213,7 @@ export default function HomeScreen() {
 
         {/* Tips List */}
         <View style={styles.tipsContainer}>
-          {filteredGuides.map(guide => {
-            const IconComponent = categoryIcons[guide.category];
-            const colors = categoryColors[guide.category];
-
-            return (
-              <TouchableOpacity
-                key={guide.id}
-                style={styles.tipCard}
-                onPress={() => handleGuidePress(guide)}
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={colors}
-                  style={styles.tipIconContainer}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <IconComponent size={24} color='#ffffff' strokeWidth={2} />
-                </LinearGradient>
-
-                <View style={styles.tipContent}>
-                  <View style={styles.tipHeader}>
-                    <Text style={styles.tipCategory}>{guide.category}</Text>
-                    <Text style={styles.readTime}>{guide.readTime || '3 min read'}</Text>
-                  </View>
-                  <Text style={styles.tipTitle}>{guide.title}</Text>
-                  <Text style={styles.tipDescription} numberOfLines={2}>
-                    {guide.description}
-                  </Text>
-
-                  <View style={styles.tipFooter}>
-                    <TouchableOpacity
-                      style={styles.tipLikeButton}
-                      onPress={() => handleLikeGuide(guide.id)}
-                    >
-                      <Heart size={16} color='#ef4444' strokeWidth={2} />
-                      <Text style={styles.tipLikesText}>{guide.likes || 0}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
-              </TouchableOpacity>
-            );
-          })}
+          {filteredGuides.map(guide => renderGuide(guide))}
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -20,7 +20,7 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 
 export class ApiError extends Error {
   public status: number;
-  public requestId?: string;
+  public requestId: string | undefined;
   constructor(message: string, status: number, requestId?: string) {
     super(message);
     this.name = 'ApiError';
@@ -74,7 +74,7 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
 // ------------------------
 class ApiClient {
   private baseURL: string;
-  private token?: string;
+  private token: string | undefined;
 
   constructor(baseURL: string) { this.baseURL = baseURL; }
 
@@ -181,15 +181,12 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
 // ------------------------
 // Guide API
 // ------------------------
-export const guideApi = (api: ReturnType<typeof useApi>) => ({
-  getAll: () => api.get('/guide'),
-  getById: (id: string) => api.get(`/guide/${id}`),
-  getLikesCount: (id: string) => api.get(`/guide/${id}/likes/count`),
-  create: (data: { title: string; content: string }) => api.authPost('/guide', data),
-  update: (id: string, data: { title?: string; content?: string }) => api.authPut(`/guide/${id}`, data),
-  delete: (id: string) => api.authDelete(`/guide/${id}`),
-  like: (id: string) => api.authPost(`/guide/${id}/like`),
-  unlike: (id: string) => api.authDelete(`/guide/${id}/like`),
+import { Guide, GuidesResponse, LikeResponse } from '@/types/guide';
+
+export const guideApi = (api: ApiInstance) => ({
+  getAll: () => api.get<ApiResponse<GuidesResponse>>('/guides'),
+  getById: (id: string) => api.get<ApiResponse<Guide>>(`/guides/${id}`),
+  like: (id: string) => api.authPost<ApiResponse<LikeResponse>>(`/guides/${id}/like`),
 });
 
 // ------------------------
@@ -213,11 +210,36 @@ export const mapApi = (api: ReturnType<typeof useApi>) => ({
 // ------------------------
 // Profile API
 // ------------------------
-export const profileApi = (api: ReturnType<typeof useApi>) => ({
+export const profileApi = (api: ApiInstance) => ({
   getProfile: () => api.authGet('/profile'),
-  updateProfile: (data: { fullname?: string; phone?: string; department?: string; faculty?: string; level?: number; semester?: string }) => api.authPut('/profile', data),
-  verifyField: (data: { email?: boolean; phone?: boolean; nin?: boolean; regNumber?: boolean }) => api.authPatch('/profile/verify', data),
+  updateProfile: (data: { 
+    fullname?: string; 
+    phone?: string; 
+    department?: string; 
+    faculty?: string; 
+    level?: number; 
+    semester?: string 
+  }) => api.authPut('/profile', data),
+  verifyField: (data: { 
+    email?: boolean; 
+    phone?: boolean; 
+    nin?: boolean; 
+    regNumber?: boolean 
+  }) => api.authPatch('/profile/verify', data),
 });
 
 // ------------------------
 export { apiClient as api };
+
+export interface ApiInstance {
+  get: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
+  post: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
+  put: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
+  patch: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
+  delete: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
+  authGet: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
+  authPost: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
+  authPut: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
+  authPatch: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
+  authDelete: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
+}

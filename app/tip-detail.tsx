@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, router } from 'expo-router';
 import {
   ArrowLeft,
   Clock,
@@ -19,10 +19,14 @@ import {
   DollarSign,
   Shield,
   Heart,
+  LucideIcon,
 } from 'lucide-react-native';
-import { guideApi } from '@/utils/api';
+import { guideApi, useApi } from '@/utils/api';
+import { Guide } from '@/types/guide';
 
-const categoryIcons = {
+type CategoryType = 'Academics' | 'Social Life' | 'Budgeting' | 'Safety';
+
+const categoryIcons: Record<CategoryType, LucideIcon> = {
   Academics: BookOpen,
   'Social Life': Users,
   Budgeting: DollarSign,
@@ -37,19 +41,23 @@ const categoryColors = {
 };
 
 export default function TipDetailScreen() {
-  const router = useRouter();
+  const [guide, setGuide] = useState<Guide | null>(null);
   const { tipId } = useLocalSearchParams();
-  const [guide, setGuide] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const api = useApi();
+  const apiClient = React.useMemo(() => guideApi(api), [api]);
 
   React.useEffect(() => {
     const fetchGuideDetails = async () => {
       try {
         setLoading(true);
-        const response = await guideApi.getById(tipId as string);
+        const response = await apiClient.getById(tipId as string);
         setGuide(response.data);
       } catch (error) {
         console.error('Error fetching guide details:', error);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -58,17 +66,21 @@ export default function TipDetailScreen() {
     if (tipId) {
       fetchGuideDetails();
     }
-  }, [tipId]);
+  }, [tipId, apiClient]);
 
-  const handleLikeGuide = async () => {
+  const handleLike = async () => {
+    if (!guide) return;
     try {
-      setGuide((prev: any) => ({ ...prev, likes: (prev.likes || 0) + 1 }));
-      await guideApi.like(tipId as string);
-      Alert.alert('Success', 'Guide liked!');
+      const response = await apiClient.like(guide.id);
+      if (response.data.success) {
+        setGuide(prev => ({
+          ...prev!,
+          likes: response.data.likes
+        }));
+      }
     } catch (error) {
       console.error('Error liking guide:', error);
-      // Revert optimistic update on error
-      setGuide((prev: any) => ({ ...prev, likes: Math.max((prev.likes || 1) - 1, 0) }));
+      // Show error toast or alert
     }
   };
 
@@ -126,7 +138,7 @@ export default function TipDetailScreen() {
           <View style={styles.tipActions}>
             <TouchableOpacity
               style={styles.likeButton}
-              onPress={handleLikeGuide}
+              onPress={handleLike}
             >
               <Heart size={20} color='#ef4444' strokeWidth={2} />
               <Text style={styles.likesText}>{guide.likes || 0} likes</Text>
@@ -253,3 +265,4 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
 });
+

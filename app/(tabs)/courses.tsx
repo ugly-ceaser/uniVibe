@@ -368,4 +368,21 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontFamily: 'Inter-Regular',
   },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    padding: 20,
+  },
 });
