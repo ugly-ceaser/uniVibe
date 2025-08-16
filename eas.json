@@ -1,11 +1,13 @@
 {
   "cli": {
     "version": ">= 5.4.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "remote",
+    "packageManager": "npm"
   },
   "build": {
     "production": {
       "node": "18.19.0",
+      "npm": "9.8.1",
       "android": {
         "gradleCommand": ":app:assembleRelease",
         "buildType": "apk"
@@ -17,6 +19,7 @@
     },
     "dev": {
       "node": "18.19.0",
+      "npm": "9.8.1",
       "android": {
         "buildType": "apk"
       },
