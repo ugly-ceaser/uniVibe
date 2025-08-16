@@ -96,13 +96,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setIsLoading(true);
     try {
       const response = await authApi.register(userData);
-      const { user: newUser, token: authToken } = response.data;
       
-      await AsyncStorage.setItem('user', JSON.stringify(newUser));
-      await AsyncStorage.setItem('token', authToken);
-      
-      setUser(newUser);
-      setToken(authToken);
+      // Handle different response structures
+      if (response.data && response.data.user && response.data.token) {
+        // Response has nested user and token
+        const { user: newUser, token: authToken } = response.data;
+        await AsyncStorage.setItem('user', JSON.stringify(newUser));
+        await AsyncStorage.setItem('token', authToken);
+        setUser(newUser);
+        setToken(authToken);
+      } else if (response.data) {
+        // Response data is the user object directly
+        const newUser = response.data;
+        await AsyncStorage.setItem('user', JSON.stringify(newUser));
+        setUser(newUser);
+        // No token in response, user needs to login
+      } else {
+        // Registration successful but no user data returned
+        console.log('Registration successful, user needs to login');
+      }
     } catch (err) {
       console.error('Register error:', err);
       Alert.alert('Error', 'Failed to register');

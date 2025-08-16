@@ -70,9 +70,17 @@ export default function RegisterScreen() {
         password,
       });
       
-      Alert.alert('Success', 'Account created successfully!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') },
-      ]);
+      // Show success message and redirect to login
+      Alert.alert(
+        'Registration Successful!', 
+        'Your account has been created successfully. Please log in to continue.', 
+        [
+          { 
+            text: 'Go to Login', 
+            onPress: () => router.replace('/login') 
+          }
+        ]
+      );
     } catch (error) {
       console.error('Registration error:', error);
       // Error handling is done in the auth context
