@@ -4,7 +4,8 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "preview": {
+    "production": {
+      "node": "18.19.0",
       "android": {
         "buildType": "apk",
         "withoutCredentials": true
@@ -12,12 +13,6 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://univibesbackend.onrender.com/api/v1"
       }
-    },
-    "production": {
-      "android": {
-        "buildType": "app-bundle"
-      },
-      "autoIncrement": true
     }
   }
-}  
+}
