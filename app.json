@@ -1,15 +1,22 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "uniVibe",
+    "slug": "univibe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "univibe",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
+    },
+    "android": {
+      "package": "com.uglyceaser.univibe",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -24,17 +31,15 @@
     "experiments": {
       "typedRoutes": true
     },
-    "android": {
-      "package": "com.anonymous.boltexponativewind"
-    },
     "extra": {
       "router": {
         "origin": false
       },
       "eas": {
-        "projectId": "06031d02-430f-4d70-8433-0037acdf3c64"
+        "projectId": "6e317600-3750-4ad0-ba45-f0a6d30b4ddd"
       }
     },
-    "owner": "uglyceaser"
+    "owner": "uglyceaser",
+    "description": "A comprehensive university survival guide app for freshers with AI assistance, course management, and community features"
   }
 }
