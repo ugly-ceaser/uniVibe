@@ -76,13 +76,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setIsLoading(true);
     try {
       const response = await authApi.login(userData);
-      const { user: userData, token: authToken } = response.data;
-      
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
-      await AsyncStorage.setItem('token', authToken);
-      
-      setUser(userData);
-      setToken(authToken);
+     const { user, token } = response;  // ✅ not response.data
+    await AsyncStorage.setItem("user", JSON.stringify(user));
+    await AsyncStorage.setItem("token", token);
+
+    setUser(user);
+    setToken(token);
     } catch (err) {
       console.error('Login error:', err);
       Alert.alert('Error', 'Failed to log in');

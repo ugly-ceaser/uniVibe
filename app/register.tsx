@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -21,17 +20,15 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Phone,
-  Shield,
-  BookOpen,
 } from 'lucide-react-native';
+import AwesomeAlert from 'react-native-awesome-alerts';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { register, isLoading } = useAuth();
-  
+
   const [formData, setFormData] = useState({
-    name: '',
+    fullname: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -39,51 +36,56 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // alert state
+  const [alert, setAlert] = useState({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleRegister = async () => {
-    const { name, email, password, confirmPassword } = formData;
+  const showCustomAlert = (title: string, message: string, onConfirm?: () => void) => {
+    setAlert({ show: true, title, message, onConfirm });
+  };
 
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+  const handleRegister = async () => {
+    const { fullname, email, password, confirmPassword } = formData;
+
+    if (!fullname || !email || !password || !confirmPassword) {
+      showCustomAlert('⚠️ Missing Info', 'Please fill in all fields');
       return;
     }
 
-
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showCustomAlert('❌ Password Mismatch', 'Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+      showCustomAlert('🔒 Weak Password', 'Password must be at least 6 characters long');
       return;
     }
 
-
     try {
       await register({
-        name: name.trim(),
+        fullname: fullname.trim(),
         email: email.trim(),
         password,
       });
-      
-      // Show success message and redirect to login
-      Alert.alert(
-        'Registration Successful!', 
-        'Your account has been created successfully. Please log in to continue.', 
-        [
-          { 
-            text: 'Go to Login', 
-            onPress: () => router.replace('/login') 
-          }
-        ]
+
+      // Success alert
+      showCustomAlert(
+        '🎉 Registration Successful!',
+        'Your account has been created successfully. Please log in to continue.',
+        () => router.replace('/login')
       );
     } catch (error) {
       console.error('Registration error:', error);
-      // Error handling is done in the auth context
+      showCustomAlert('⚠️ Error', 'Something went wrong. Please try again.');
     }
   };
 
@@ -113,17 +115,19 @@ export default function RegisterScreen() {
 
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
+              {/* Full Name */}
               <View style={styles.inputWrapper}>
                 <User size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
                   style={styles.input}
                   placeholder='Full Name'
-                  value={formData.name}
-                  onChangeText={value => handleInputChange('name', value)}
+                  value={formData.fullname}
+                  onChangeText={value => handleInputChange('fullname', value)}
                   autoCapitalize='words'
                 />
               </View>
 
+              {/* Email */}
               <View style={styles.inputWrapper}>
                 <Mail size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
@@ -137,6 +141,7 @@ export default function RegisterScreen() {
                 />
               </View>
 
+              {/* Password */}
               <View style={styles.inputWrapper}>
                 <Lock size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
@@ -159,6 +164,7 @@ export default function RegisterScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Confirm Password */}
               <View style={styles.inputWrapper}>
                 <Lock size={20} color='#9ca3af' strokeWidth={2} />
                 <TextInput
@@ -184,6 +190,7 @@ export default function RegisterScreen() {
               </View>
             </View>
 
+            {/* Register Button */}
             <TouchableOpacity
               style={[
                 styles.registerButton,
@@ -203,6 +210,7 @@ export default function RegisterScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
+            {/* Login link */}
             <View style={styles.loginContainer}>
               <Text style={styles.loginText}>Already have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/login')}>
@@ -212,9 +220,29 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Custom Alert */}
+      <AwesomeAlert
+        show={alert.show}
+        showProgress={false}
+        title={alert.title}
+        message={alert.message}
+        closeOnTouchOutside={true}
+        closeOnHardwareBackPress={false}
+        showConfirmButton={true}
+        confirmText="Okay"
+        confirmButtonColor="#667eea"
+        onConfirmPressed={() => {
+          setAlert({ ...alert, show: false });
+          if (alert.onConfirm) alert.onConfirm();
+        }}
+      />
     </SafeAreaView>
   );
 }
+
+
+
 
 const styles = StyleSheet.create({
   container: {

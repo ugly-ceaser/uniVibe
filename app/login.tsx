@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { showMessage } from 'react-native-flash-message';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -25,21 +25,46 @@ export default function LoginScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-
   const handleSubmit = async () => {
+    const { email, password } = formData;
+
+    if (!email || !password) {
+      showMessage({
+        message: 'Missing Information',
+        description: 'Please enter both email and password.',
+        type: 'danger',
+        icon: 'danger',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       await login({
-        email: formData.email.trim(),
-        password: formData.password,
+        email: email.trim(),
+        password,
+      });
+
+      // Success feedback
+      showMessage({
+        message: 'Login Successful',
+        description: 'Welcome back!',
+        type: 'success',
+        icon: 'success',
       });
 
       // Navigate to main app
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Login error:', error);
-      // Error handling is done in the auth context
+
+      showMessage({
+        message: 'Login Failed',
+        description: 'Invalid email or password. Please try again.',
+        type: 'danger',
+        icon: 'danger',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -54,11 +79,12 @@ export default function LoginScreen() {
   };
 
   const handleForgotPassword = () => {
-    Alert.alert(
-      'Forgot Password',
-      'Please contact your administrator to reset your password.',
-      [{ text: 'OK' }]
-    );
+    showMessage({
+      message: 'Forgot Password',
+      description: 'Please contact your administrator to reset your password.',
+      type: 'info',
+      icon: 'info',
+    });
   };
 
   return (
@@ -70,7 +96,7 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps='handled'
+          keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
           <View style={styles.header}>
@@ -86,12 +112,12 @@ export default function LoginScreen() {
               <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
-                placeholder='Enter your email'
-                placeholderTextColor='#9ca3af'
+                placeholder="Enter your email"
+                placeholderTextColor="#9ca3af"
                 value={formData.email}
                 onChangeText={value => handleInputChange('email', value)}
-                keyboardType='email-address'
-                autoCapitalize='none'
+                keyboardType="email-address"
+                autoCapitalize="none"
                 autoCorrect={false}
                 editable={!isSubmitting}
               />
@@ -101,8 +127,8 @@ export default function LoginScreen() {
               <Text style={styles.label}>Password</Text>
               <TextInput
                 style={styles.input}
-                placeholder='Enter your password'
-                placeholderTextColor='#9ca3af'
+                placeholder="Enter your password"
+                placeholderTextColor="#9ca3af"
                 value={formData.password}
                 onChangeText={value => handleInputChange('password', value)}
                 secureTextEntry
@@ -185,10 +211,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
@@ -213,16 +236,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     fontFamily: 'Inter_400Regular',
   },
-  inputError: {
-    borderColor: '#ef4444',
-    backgroundColor: '#fef2f2',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 14,
-    marginTop: 6,
-    fontFamily: 'Inter_400Regular',
-  },
   forgotPassword: {
     alignSelf: 'flex-end',
     marginBottom: 24,
@@ -239,10 +252,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 4,

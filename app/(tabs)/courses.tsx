@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,31 +11,49 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { BookOpen, User, ChevronRight } from 'lucide-react-native';
-import { coursesApi } from '@/utils/api';
+import { useApi } from '@/utils/api';
+
+interface Course {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  credits: number;
+  semester: 1 | 2;
+  instructor: string;
+}
 
 export default function CoursesScreen() {
   const router = useRouter();
+  const { get } = useApi(); // useApi hook
   const [selectedSemester, setSelectedSemester] = useState<1 | 2>(1);
-  const [courses, setCourses] = useState<any[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const fetchCourses = async () => {
       try {
         setLoading(true);
-        const response = await coursesApi.getAll();
+        setError(null);
+
+        // Use the unified API hook
+        const response = await get<{ data: Course[] }>('/courses');
         setCourses(response.data || []);
-      } catch (error) {
-        console.error('Error fetching courses:', error);
+      } catch (err) {
+        console.error('Error fetching courses:', err);
+        setError('Failed to load courses. Please try again later.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchCourses();
-  }, []);
+  }, [get]);
 
-  const semesterCourses = courses.filter(course => course.semester === selectedSemester);
+  const semesterCourses = courses.filter(
+    course => course.semester === selectedSemester
+  );
 
   const handleCoursePress = (courseId: string) => {
     router.push({
@@ -60,6 +78,7 @@ export default function CoursesScreen() {
       </SafeAreaView>
     );
   }
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
@@ -72,42 +91,41 @@ export default function CoursesScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Semester Toggle */}
         <View style={styles.semesterToggle}>
-          <TouchableOpacity
-            style={[
-              styles.semesterButton,
-              selectedSemester === 1 && styles.activeSemesterButton,
-            ]}
-            onPress={() => setSelectedSemester(1)}
-          >
-            <Text
+          {([1, 2] as const).map(sem => (
+            <TouchableOpacity
+              key={sem}
               style={[
-                styles.semesterText,
-                selectedSemester === 1 && styles.activeSemesterText,
+                styles.semesterButton,
+                selectedSemester === sem && styles.activeSemesterButton,
               ]}
+              onPress={() => setSelectedSemester(sem)}
             >
-              First Semester
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.semesterButton,
-              selectedSemester === 2 && styles.activeSemesterButton,
-            ]}
-            onPress={() => setSelectedSemester(2)}
-          >
-            <Text
-              style={[
-                styles.semesterText,
-                selectedSemester === 2 && styles.activeSemesterText,
-              ]}
-            >
-              Second Semester
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.semesterText,
+                  selectedSemester === sem && styles.activeSemesterText,
+                ]}
+              >
+                {sem === 1 ? 'First Semester' : 'Second Semester'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
+
+        {/* Error State */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
         {/* Courses List */}
         <View style={styles.coursesContainer}>
+          {!error && semesterCourses.length === 0 && (
+            <Text style={styles.emptyText}>
+              No courses found for this semester.
+            </Text>
+          )}
           {semesterCourses.map(course => (
             <TouchableOpacity
               key={course.id}
@@ -116,7 +134,7 @@ export default function CoursesScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.courseIconContainer}>
-                <BookOpen size={24} color='#667eea' strokeWidth={2} />
+                <BookOpen size={24} color="#667eea" strokeWidth={2} />
               </View>
 
               <View style={styles.courseContent}>
@@ -130,47 +148,52 @@ export default function CoursesScreen() {
                 </Text>
 
                 <View style={styles.coordinatorInfo}>
-                  <User size={14} color='#9ca3af' strokeWidth={2} />
+                  <User size={14} color="#9ca3af" strokeWidth={2} />
                   <Text style={styles.coordinatorName}>
                     {course.instructor}
                   </Text>
                 </View>
               </View>
 
-              <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
+              <ChevronRight size={20} color="#9ca3af" strokeWidth={2} />
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Summary Stats */}
-        <View style={styles.summaryContainer}>
-          <LinearGradient
-            colors={['#f0f4ff', '#ffffff']}
-            style={styles.summaryCard}
-          >
-            <Text style={styles.summaryTitle}>Semester Summary</Text>
-            <View style={styles.summaryStats}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{semesterCourses.length}</Text>
-                <Text style={styles.statLabel}>Courses</Text>
+        {semesterCourses.length > 0 && (
+          <View style={styles.summaryContainer}>
+            <LinearGradient
+              colors={['#f0f4ff', '#ffffff']}
+              style={styles.summaryCard}
+            >
+              <Text style={styles.summaryTitle}>Semester Summary</Text>
+              <View style={styles.summaryStats}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>
+                    {semesterCourses.length}
+                  </Text>
+                  <Text style={styles.statLabel}>Courses</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>
+                    {semesterCourses.reduce(
+                      (total, course) => total + course.credits,
+                      0
+                    )}
+                  </Text>
+                  <Text style={styles.statLabel}>Total Units</Text>
+                </View>
               </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>
-                  {semesterCourses.reduce(
-                    (total, course) => total + course.credits,
-                    0
-                  )}
-                </Text>
-                <Text style={styles.statLabel}>Total Units</Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
+            </LinearGradient>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {

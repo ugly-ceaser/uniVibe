@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,12 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import {
-  MessageSquare,
-  User,
-  Clock,
-  Plus,
-  ChevronRight,
-  Heart,
-} from 'lucide-react-native';
-import { forumApi } from '@/utils/api';
+import { MessageSquare, User, Clock, Plus, ChevronRight, Heart } from 'lucide-react-native';
+import { forumApi, useApi } from '@/utils/api';
 
 const categoryColors = {
   Academic: '#667eea',
@@ -29,28 +23,34 @@ const categoryColors = {
 
 export default function ForumScreen() {
   const router = useRouter();
+  const { authPost } = useApi();
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<
-    string | 'All'
-  >('All');
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | 'All'>('All');
 
-  const categories = [
-    'All',
-    'Academic',
-    'Social',
-    'General',
-    'Technical',
-  ];
+  const categories = ['All', 'Academic', 'Social', 'General', 'Technical'];
 
-  React.useEffect(() => {
-    const fetchQuestions = async () => {
+  // Fetch forum questions
+  useEffect(() => {
+    const fetchQuestions = async (retries = 3, delay = 1000) => {
       try {
         setLoading(true);
         const response = await forumApi.getQuestions();
         setQuestions(response.data || []);
-      } catch (error) {
-        console.error('Error fetching questions:', error);
+        setError(null);
+      } catch (err: any) {
+        if (err.status === 429 && retries > 0) {
+          console.warn(`Rate limit hit, retrying in ${delay}ms...`);
+          setTimeout(() => fetchQuestions(retries - 1, delay * 2), delay);
+        } else if (err.status === 429) {
+          setError('Too many requests. Please wait and try again.');
+          setQuestions([]);
+        } else {
+          console.error('Error fetching questions:', err);
+          setError('Failed to load forum. Please try again later.');
+          setQuestions([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -58,10 +58,11 @@ export default function ForumScreen() {
 
     fetchQuestions();
   }, []);
+
   const filteredQuestions =
     selectedCategory === 'All'
       ? questions
-      : questions.filter(question => question.category === selectedCategory);
+      : questions.filter(q => q.category === selectedCategory);
 
   const handleQuestionPress = (question: any) => {
     router.push({
@@ -71,25 +72,18 @@ export default function ForumScreen() {
   };
 
   const handleNewPost = () => {
-    // For now, just show an alert - in a real app this would open a new post form
-    alert('New post feature coming soon!');
+    Alert.alert('Coming Soon', 'New post feature is coming soon!');
   };
 
   const handleLikeQuestion = async (questionId: string) => {
     try {
-      // Update local state optimistically
-      setQuestions(prev => 
-        prev.map(q => 
-          q.id === questionId 
-            ? { ...q, likes: (q.likes || 0) + 1 }
-            : q
-        )
-      );
-      
-      // In real implementation, make API call here
-      // await forumApi.likeQuestion(questionId);
+      const response = await forumApi.addComment({ answerId: questionId, text: 'like' }); 
+      // Replace above line with actual API endpoint for liking if available
+      // Example: const response = await forumApi.likeQuestion(questionId);
+      setQuestions(response.data || []);
     } catch (error) {
       console.error('Error liking question:', error);
+      Alert.alert('Error', 'Failed to like this question. Please try again.');
     }
   };
 
@@ -98,9 +92,7 @@ export default function ForumScreen() {
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
           <Text style={styles.headerTitle}>Student Forum</Text>
-          <Text style={styles.headerSubtitle}>
-            Ask questions and share knowledge
-          </Text>
+          <Text style={styles.headerSubtitle}>Ask questions and share knowledge</Text>
         </LinearGradient>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#667eea" />
@@ -109,13 +101,12 @@ export default function ForumScreen() {
       </SafeAreaView>
     );
   }
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <Text style={styles.headerTitle}>Student Forum</Text>
-        <Text style={styles.headerSubtitle}>
-          Ask questions and share knowledge
-        </Text>
+        <Text style={styles.headerSubtitle}>Ask questions and share knowledge</Text>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -147,6 +138,13 @@ export default function ForumScreen() {
           ))}
         </ScrollView>
 
+        {/* Error Message */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
         {/* Posts List */}
         <View style={styles.postsContainer}>
           {filteredQuestions.map(question => (
@@ -159,12 +157,12 @@ export default function ForumScreen() {
               <View style={styles.postHeader}>
                 <View style={styles.authorInfo}>
                   <View style={styles.avatarContainer}>
-                    <User size={16} color='#667eea' strokeWidth={2} />
+                    <User size={16} color="#667eea" strokeWidth={2} />
                   </View>
                   <View>
                     <Text style={styles.authorName}>{question.author}</Text>
                     <View style={styles.postMeta}>
-                      <Clock size={12} color='#9ca3af' strokeWidth={2} />
+                      <Clock size={12} color="#9ca3af" strokeWidth={2} />
                       <Text style={styles.postTime}>{question.createdAt}</Text>
                     </View>
                   </View>
@@ -193,7 +191,7 @@ export default function ForumScreen() {
 
               <View style={styles.postFooter}>
                 <View style={styles.commentsInfo}>
-                  <MessageSquare size={16} color='#9ca3af' strokeWidth={2} />
+                  <MessageSquare size={16} color="#9ca3af" strokeWidth={2} />
                   <Text style={styles.commentsCount}>
                     {question.answers?.length || 0}{' '}
                     {(question.answers?.length || 0) === 1 ? 'answer' : 'answers'}
@@ -204,11 +202,11 @@ export default function ForumScreen() {
                     onPress={() => handleLikeQuestion(question.id)}
                     style={styles.likeButton}
                   >
-                    <Heart size={16} color='#ef4444' strokeWidth={2} />
+                    <Heart size={16} color="#ef4444" strokeWidth={2} />
                     <Text style={styles.likesCount}>{question.likes || 0}</Text>
                   </TouchableOpacity>
                 </View>
-                <ChevronRight size={16} color='#9ca3af' strokeWidth={2} />
+                <ChevronRight size={16} color="#9ca3af" strokeWidth={2} />
               </View>
             </TouchableOpacity>
           ))}
@@ -225,12 +223,13 @@ export default function ForumScreen() {
           colors={['#667eea', '#764ba2']}
           style={styles.fabGradient}
         >
-          <Plus size={24} color='#ffffff' strokeWidth={2} />
+          <Plus size={24} color="#ffffff" strokeWidth={2} />
         </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -24,40 +25,69 @@ import {
   CreditCard as Edit3,
   ChevronRight,
 } from 'lucide-react-native';
-
-// Mock user data - replace with actual user data from context/state
-const mockUser = {
-  fullName: 'John Adebayo',
-  email: 'john.adebayo@student.university.edu.ng',
-  phone: '+234 803 123 4567',
-  nin: '12345678901',
-  regNumber: 'CS/2024/001',
-  studentId: 'CS/2024/001',
-  level: '100 Level',
-  department: 'Computer Science',
-  semester: 'First Semester',
-  verificationStatus: {
-    email: true,
-    phone: false,
-    nin: false,
-    regNumber: true,
-  },
-};
+import { profileApi } from '@/utils/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const [user] = useState(mockUser);
+  const { logout } = useAuth();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
 
-  const handleEditProfile = () => {
-    Alert.alert('Edit Profile', 'Profile editing feature coming soon!');
+  // Fetch profile from API
+  const fetchProfile = async () => {
+    setLoading(true);
+    try {
+    const data = await profileApi.getProfile();
+    console.log('Profile API response:', data); // <-- Log API response here
+    setUser(data.data);
+  } catch (error) {
+    console.log('Profile fetch error:', error); // <-- Log any fetch errors
+    Alert.alert('Error', 'Unable to fetch profile');
+  } finally {
+    setLoading(false);
+  }
   };
 
-  const handleVerifyField = (field: string) => {
-    Alert.alert(
-      `Verify ${field}`,
-      `Verification process for ${field} will be implemented soon!`,
-      [{ text: 'OK' }]
-    );
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const handleEditProfile = async () => {
+    if (!user) return;
+    setUpdating(true);
+    try {
+      await profileApi.updateProfile({
+        fullname: user.fullname,
+        phone: user.phone,
+        department: user.department,
+        faculty: user.faculty,
+        level: user.level,
+        semester: user.semester,
+      });
+      Alert.alert('Success', 'Profile updated successfully');
+      fetchProfile();
+    } catch (error) {
+      Alert.alert('Error', 'Unable to update profile');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleVerifyField = async (field: 'email' | 'phone' | 'nin' | 'regNumber') => {
+    if (!user) return;
+    setVerifying(field);
+    try {
+      await profileApi.verifyField({ [field]: true });
+      Alert.alert('Success', `${field} verification request sent!`);
+      fetchProfile();
+    } catch (error) {
+      Alert.alert('Error', `Unable to verify ${field}`);
+    } finally {
+      setVerifying(null);
+    }
   };
 
   const handleLogout = () => {
@@ -82,8 +112,7 @@ export default function ProfileScreen() {
       icon: Bell,
       title: 'Notifications',
       subtitle: 'Configure notification preferences',
-      onPress: () =>
-        Alert.alert('Notifications', 'Notification settings coming soon!'),
+      onPress: () => Alert.alert('Notifications', 'Notification settings coming soon!'),
     },
     {
       icon: Shield,
@@ -99,6 +128,14 @@ export default function ProfileScreen() {
     },
   ];
 
+  if (loading || !user ) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#667eea" />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
@@ -107,7 +144,7 @@ export default function ProfileScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
+          <ArrowLeft size={24} color="#ffffff" strokeWidth={2} />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Profile</Text>
@@ -116,8 +153,9 @@ export default function ProfileScreen() {
           style={styles.editButton}
           onPress={handleEditProfile}
           activeOpacity={0.7}
+          disabled={updating}
         >
-          <Edit3 size={20} color='#ffffff' strokeWidth={2} />
+          <Edit3 size={20} color="#ffffff" strokeWidth={2} />
         </TouchableOpacity>
       </LinearGradient>
 
@@ -125,15 +163,15 @@ export default function ProfileScreen() {
         {/* User Info Card */}
         <View style={styles.userCard}>
           <View style={styles.avatarContainer}>
-            <User size={40} color='#667eea' strokeWidth={2} />
+            <User size={40} color="#667eea" strokeWidth={2} />
           </View>
 
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{user.fullName}</Text>
+            <Text style={styles.userName}>{user.fullname}</Text>
             <Text style={styles.userLevel}>
               {user.level} • {user.department}
             </Text>
-            <Text style={styles.studentId}>ID: {user.studentId}</Text>
+            <Text style={styles.studentId}>ID: {user.studentId || user.regNumber}</Text>
           </View>
         </View>
 
@@ -142,7 +180,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Contact Information</Text>
 
           <View style={styles.verificationItem}>
-            <Mail size={20} color='#667eea' strokeWidth={2} />
+            <Mail size={20} color="#667eea" strokeWidth={2} />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Email</Text>
               <Text style={styles.infoValue}>{user.email}</Text>
@@ -150,27 +188,32 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={[
                 styles.verificationBadge,
-                user.verificationStatus.email
+                user.verificationStatus?.email
                   ? styles.verifiedBadge
                   : styles.unverifiedBadge,
               ]}
-              onPress={() => handleVerifyField('Email')}
+              onPress={() => handleVerifyField('email')}
+              disabled={verifying === 'email'}
             >
               <Text
                 style={[
                   styles.verificationText,
-                  user.verificationStatus.email
+                  user.verificationStatus?.email
                     ? styles.verifiedText
                     : styles.unverifiedText,
                 ]}
               >
-                {user.verificationStatus.email ? 'Verified' : 'Verify'}
+                {verifying === 'email'
+                  ? 'Verifying...'
+                  : user.verificationStatus?.email
+                  ? 'Verified'
+                  : 'Verify'}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.verificationItem}>
-            <Phone size={20} color='#667eea' strokeWidth={2} />
+            <Phone size={20} color="#667eea" strokeWidth={2} />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Phone</Text>
               <Text style={styles.infoValue}>{user.phone}</Text>
@@ -178,21 +221,26 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={[
                 styles.verificationBadge,
-                user.verificationStatus.phone
+                user.verificationStatus?.phone
                   ? styles.verifiedBadge
                   : styles.unverifiedBadge,
               ]}
-              onPress={() => handleVerifyField('Phone')}
+              onPress={() => handleVerifyField('phone')}
+              disabled={verifying === 'phone'}
             >
               <Text
                 style={[
                   styles.verificationText,
-                  user.verificationStatus.phone
+                  user.verificationStatus?.phone
                     ? styles.verifiedText
                     : styles.unverifiedText,
                 ]}
               >
-                {user.verificationStatus.phone ? 'Verified' : 'Verify'}
+                {verifying === 'phone'
+                  ? 'Verifying...'
+                  : user.verificationStatus?.phone
+                  ? 'Verified'
+                  : 'Verify'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -203,7 +251,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Identity Verification</Text>
 
           <View style={styles.verificationItem}>
-            <Shield size={20} color='#667eea' strokeWidth={2} />
+            <Shield size={20} color="#667eea" strokeWidth={2} />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>National ID Number (NIN)</Text>
               <Text style={styles.infoValue}>{user.nin}</Text>
@@ -211,27 +259,32 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={[
                 styles.verificationBadge,
-                user.verificationStatus.nin
+                user.verificationStatus?.nin
                   ? styles.verifiedBadge
                   : styles.unverifiedBadge,
               ]}
-              onPress={() => handleVerifyField('NIN')}
+              onPress={() => handleVerifyField('nin')}
+              disabled={verifying === 'nin'}
             >
               <Text
                 style={[
                   styles.verificationText,
-                  user.verificationStatus.nin
+                  user.verificationStatus?.nin
                     ? styles.verifiedText
                     : styles.unverifiedText,
                 ]}
               >
-                {user.verificationStatus.nin ? 'Verified' : 'Verify'}
+                {verifying === 'nin'
+                  ? 'Verifying...'
+                  : user.verificationStatus?.nin
+                  ? 'Verified'
+                  : 'Verify'}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.verificationItem}>
-            <BookOpen size={20} color='#667eea' strokeWidth={2} />
+            <BookOpen size={20} color="#667eea" strokeWidth={2} />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Registration Number</Text>
               <Text style={styles.infoValue}>{user.regNumber}</Text>
@@ -239,21 +292,26 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={[
                 styles.verificationBadge,
-                user.verificationStatus.regNumber
+                user.verificationStatus?.regNumber
                   ? styles.verifiedBadge
                   : styles.unverifiedBadge,
               ]}
-              onPress={() => handleVerifyField('Registration Number')}
+              onPress={() => handleVerifyField('regNumber')}
+              disabled={verifying === 'regNumber'}
             >
               <Text
                 style={[
                   styles.verificationText,
-                  user.verificationStatus.regNumber
+                  user.verificationStatus?.regNumber
                     ? styles.verifiedText
                     : styles.unverifiedText,
                 ]}
               >
-                {user.verificationStatus.regNumber ? 'Verified' : 'Verify'}
+                {verifying === 'regNumber'
+                  ? 'Verifying...'
+                  : user.verificationStatus?.regNumber
+                  ? 'Verified'
+                  : 'Verify'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -264,7 +322,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Academic Information</Text>
 
           <View style={styles.infoItem}>
-            <BookOpen size={20} color='#667eea' strokeWidth={2} />
+            <BookOpen size={20} color="#667eea" strokeWidth={2} />
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Current Semester</Text>
               <Text style={styles.infoValue}>{user.semester}</Text>
@@ -284,7 +342,7 @@ export default function ProfileScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.menuIconContainer}>
-                <item.icon size={20} color='#667eea' strokeWidth={2} />
+                <item.icon size={20} color="#667eea" strokeWidth={2} />
               </View>
 
               <View style={styles.menuContent}>
@@ -292,7 +350,7 @@ export default function ProfileScreen() {
                 <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
               </View>
 
-              <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
+              <ChevronRight size={20} color="#9ca3af" strokeWidth={2} />
             </TouchableOpacity>
           ))}
         </View>
@@ -303,7 +361,7 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           activeOpacity={0.7}
         >
-          <LogOut size={20} color='#ef4444' strokeWidth={2} />
+          <LogOut size={20} color="#ef4444" strokeWidth={2} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -311,216 +369,38 @@ export default function ProfileScreen() {
   );
 }
 
+// Keep your existing styles
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Poppins-SemiBold',
-    color: '#ffffff',
-  },
-  editButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-  },
-  userCard: {
-    backgroundColor: '#ffffff',
-    margin: 20,
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 20,
-    fontFamily: 'Poppins-Bold',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  userLevel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#667eea',
-    marginBottom: 2,
-  },
-  studentId: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9ca3af',
-  },
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  infoContent: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#9ca3af',
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#1f2937',
-  },
-  verificationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  verificationBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  verifiedBadge: {
-    backgroundColor: '#dcfce7',
-  },
-  unverifiedBadge: {
-    backgroundColor: '#fef3c7',
-  },
-  verificationText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-  },
-  verifiedText: {
-    color: '#16a34a',
-  },
-  unverifiedText: {
-    color: '#d97706',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  menuIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  menuContent: {
-    flex: 1,
-  },
-  menuTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1f2937',
-    marginBottom: 2,
-  },
-  menuSubtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9ca3af',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    marginBottom: 40,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  logoutText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ef4444',
-    marginLeft: 8,
-  },
+  container: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, justifyContent: 'space-between' },
+  backButton: { padding: 8 },
+  editButton: { padding: 8 },
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  content: { flex: 1, padding: 16 },
+  userCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
+  avatarContainer: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#e0e7ff', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  userInfo: {},
+  userName: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  userLevel: { fontSize: 14, color: '#6b7280', marginBottom: 2 },
+  studentId: { fontSize: 12, color: '#9ca3af' },
+  section: { marginBottom: 24 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  verificationItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  infoContent: { flex: 1, marginLeft: 12 },
+  infoLabel: { fontSize: 14, color: '#374151' },
+  infoValue: { fontSize: 14, color: '#6b7280' },
+  verificationBadge: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12 },
+  verifiedBadge: { backgroundColor: '#d1fae5' },
+  unverifiedBadge: { backgroundColor: '#fee2e2' },
+  verificationText: { fontSize: 12, fontWeight: '500' },
+  verifiedText: { color: '#059669' },
+  unverifiedText: { color: '#b91c1c' },
+  infoItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  menuIconContainer: { width: 36, alignItems: 'center' },
+  menuContent: { flex: 1, marginLeft: 12 },
+  menuTitle: { fontSize: 14, fontWeight: '600' },
+  menuSubtitle: { fontSize: 12, color: '#6b7280' },
+  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 24 },
+  logoutText: { marginLeft: 8, fontSize: 14, color: '#ef4444', fontWeight: '600' },
 });
