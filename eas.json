@@ -3,9 +3,19 @@
     "version": ">= 5.4.0"
   },
   "build": {
-    "development": {
+    "dev": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "ios": {
+        "buildConfiguration": "Debug"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://univibesbackend.onrender.com/api/v1"
+      }
     },
     "preview": {
       "distribution": "internal",
