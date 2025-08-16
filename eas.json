@@ -7,8 +7,11 @@
     "production": {
       "node": "18.19.0",
       "android": {
+        "gradleCommand": ":app:assembleRelease",
         "buildType": "apk",
-        "withoutCredentials": true
+        "gradleEnvironment": {
+          "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx2048m"
+        }
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://univibesbackend.onrender.com/api/v1"
