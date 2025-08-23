@@ -1,99 +1,359 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  TouchableOpacity,
+  FlatList,
   SafeAreaView,
+  TouchableOpacity,
+  RefreshControl,
   ActivityIndicator,
-  Alert,
+  Dimensions,
 } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { 
+  Plus, 
+  Search, 
+  Heart, 
+  MessageCircle, 
+  Calendar, 
+  User, 
+  BookOpen,
+  Code,
+  Briefcase,
+  Users,
+  HelpCircle,
+  Lightbulb
+} from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { MessageSquare, User, Clock, Plus, ChevronRight, Heart } from 'lucide-react-native';
-import { forumApi, useApi } from '@/utils/api';
+import { useApi, forumApi } from '../../utils/api';
+import { ForumPost, Forum } from '../../utils/types';
 
-const categoryColors = {
-  Academic: '#667eea',
-  Social: '#f093fb',
-  General: '#4facfe',
-  Technical: '#43e97b',
-};
+const { width } = Dimensions.get('window');
+
+// Forum categories with icons (similar to guide categories)
+const forumCategories = [
+  { id: 'all', name: 'All Posts', icon: Users, color: '#667eea' },
+  { id: 'academic', name: 'Academic Help', icon: BookOpen, color: '#10b981' },
+  { id: 'technology', name: 'Tech Support', icon: Code, color: '#3b82f6' },
+  { id: 'career', name: 'Career & Jobs', icon: Briefcase, color: '#f59e0b' },
+  { id: 'general', name: 'General Chat', icon: MessageCircle, color: '#8b5cf6' },
+  { id: 'resources', name: 'Resources', icon: Lightbulb, color: '#06b6d4' },
+];
 
 export default function ForumScreen() {
   const router = useRouter();
-  const { authPost } = useApi();
-  const [questions, setQuestions] = useState<any[]>([]);
+  const api = useApi();
+  const forumClient = forumApi(api);
+  
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [forums, setForums] = useState<Forum[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | 'All'>('All');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [lastFetch, setLastFetch] = useState(0);
 
-  const categories = ['All', 'Academic', 'Social', 'General', 'Technical'];
+  const PAGE_SIZE = 20;
+  const MIN_FETCH_INTERVAL = 5000;
 
-  // Fetch forum questions
-  useEffect(() => {
-    const fetchQuestions = async (retries = 3, delay = 1000) => {
-      try {
+  const fetchPosts = useCallback(async (
+    pageNum: number = 1, 
+    isRefresh: boolean = false,
+    isLoadMore: boolean = false,
+    categoryFilter?: string
+  ) => {
+    const now = Date.now();
+    
+    if (!isRefresh && !isLoadMore && (now - lastFetch < MIN_FETCH_INTERVAL)) {
+      console.log('⏭️ Skipping fetch - too soon since last request');
+      return;
+    }
+
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else if (isLoadMore) {
+        setLoadingMore(true);
+      } else {
         setLoading(true);
-        const response = await forumApi.getQuestions();
-        setQuestions(response.data || []);
-        setError(null);
-      } catch (err: any) {
-        if (err.status === 429 && retries > 0) {
-          console.warn(`Rate limit hit, retrying in ${delay}ms...`);
-          setTimeout(() => fetchQuestions(retries - 1, delay * 2), delay);
-        } else if (err.status === 429) {
-          setError('Too many requests. Please wait and try again.');
-          setQuestions([]);
-        } else {
-          console.error('Error fetching questions:', err);
-          setError('Failed to load forum. Please try again later.');
-          setQuestions([]);
-        }
-      } finally {
-        setLoading(false);
       }
-    };
+      
+      setError(null);
+      
+      console.log(`📋 Fetching posts - Page: ${pageNum}, Category: ${categoryFilter || 'all'}`);
+      
+      const response = await forumClient.getQuestions({
+        page: pageNum,
+        pageSize: PAGE_SIZE,
+        refresh: isRefresh
+      });
+      
+      if (response?.data?.questions) {
+        const newPosts = response.data.questions;
+        
+        if (isRefresh || pageNum === 1) {
+          setPosts(newPosts);
+          setPage(2);
+        } else {
+          setPosts(prev => [...prev, ...newPosts]);
+          setPage(pageNum + 1);
+        }
+        
+        setHasMore(pageNum < (response.data.totalPages || 1));
+        setLastFetch(now);
+      } else {
+        if (pageNum === 1) {
+          setPosts([]);
+        }
+        setHasMore(false);
+      }
+    } catch (err: any) {
+      console.error('💥 Error fetching posts:', err);
+      setError('Failed to load posts. Please try again.');
+      if (pageNum === 1) {
+        setPosts([]);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+    }
+  }, [forumClient, lastFetch]);
 
-    fetchQuestions();
+  const fetchForums = useCallback(async () => {
+    try {
+      const response = await forumClient.getForums();
+      if (response?.data) {
+        setForums(Array.isArray(response.data) ? response.data : []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch forums:', err);
+    }
+  }, [forumClient]);
+
+  useEffect(() => {
+    fetchPosts(1);
+    fetchForums();
   }, []);
 
-  const filteredQuestions =
-    selectedCategory === 'All'
-      ? questions
-      : questions.filter(q => q.category === selectedCategory);
+  // Refresh when screen comes into focus (but not too frequently)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      if (now - lastFetch > MIN_FETCH_INTERVAL * 2) { // 10 seconds for focus refresh
+        console.log('🔄 Screen focused - refreshing posts');
+        fetchPosts(1, false, false);
+      }
+    }, [fetchPosts, lastFetch])
+  );
 
-  const handleQuestionPress = (question: any) => {
-    router.push({
-      pathname: '/post-detail',
-      params: { postId: question.id },
-    });
-  };
+  const onRefresh = useCallback(() => {
+    console.log('🔃 Manual refresh triggered');
+    fetchPosts(1, true, false, selectedCategory);
+  }, [fetchPosts, selectedCategory]);
 
-  const handleNewPost = () => {
-    Alert.alert('Coming Soon', 'New post feature is coming soon!');
-  };
+  const onLoadMore = useCallback(() => {
+    if (!loadingMore && !loading && hasMore && posts.length > 0) {
+      console.log('⬇️ Loading more posts');
+      fetchPosts(page, false, true, selectedCategory);
+    }
+  }, [fetchPosts, page, loadingMore, loading, hasMore, posts.length, selectedCategory]);
 
-  const handleLikeQuestion = async (questionId: string) => {
+  const handleCategorySelect = useCallback((categoryId: string) => {
+    if (categoryId !== selectedCategory) {
+      setSelectedCategory(categoryId);
+      setPage(1);
+      fetchPosts(1, true, false, categoryId);
+    }
+  }, [selectedCategory, fetchPosts]);
+
+  const handleLike = useCallback((postId: string) => {
+    setPosts(prevPosts => 
+      prevPosts.map(post => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            isLiked: !post.isLiked,
+            likes: post.isLiked ? (post.likes || 0) - 1 : (post.likes || 0) + 1
+          };
+        }
+        return post;
+      })
+    );
+  }, []);
+
+  const navigateToPost = useCallback((post: ForumPost) => {
+    router.push(`/post/${post.id}?title=${encodeURIComponent(post.title || 'Untitled')}`);
+  }, [router]);
+
+  const formatDate = (dateString: string) => {
     try {
-      const response = await forumApi.addComment({ answerId: questionId, text: 'like' }); 
-      // Replace above line with actual API endpoint for liking if available
-      // Example: const response = await forumApi.likeQuestion(questionId);
-      setQuestions(response.data || []);
-    } catch (error) {
-      console.error('Error liking question:', error);
-      Alert.alert('Error', 'Failed to like this question. Please try again.');
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - date.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 1) return 'Today';
+      if (diffDays === 2) return 'Yesterday';
+      if (diffDays <= 7) return `${diffDays - 1} days ago`;
+      
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return 'Unknown date';
     }
   };
 
-  if (loading) {
+  const renderCategoryItem = ({ item }: { item: typeof forumCategories[0] }) => {
+    const Icon = item.icon;
+    const isSelected = selectedCategory === item.id;
+
+    return (
+      <TouchableOpacity
+        style={[styles.categoryCard, isSelected && styles.selectedCategory]}
+        onPress={() => handleCategorySelect(item.id)}
+        activeOpacity={0.7}
+      >
+        <LinearGradient
+          colors={isSelected ? [item.color, item.color + '80'] : ['#ffffff', '#f8fafc']}
+          style={styles.categoryGradient}
+        >
+          <Icon 
+            size={24} 
+            color={isSelected ? '#ffffff' : item.color} 
+          />
+          <Text style={[
+            styles.categoryText,
+            isSelected && styles.selectedCategoryText
+          ]}>
+            {item.name}
+          </Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderPost = useCallback(({ item: post }: { item: ForumPost }) => {
+    if (!post?.id) return null;
+
+    return (
+      <TouchableOpacity 
+        style={styles.postCard}
+        onPress={() => navigateToPost(post)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.postContent}>
+          <View style={styles.postHeader}>
+            <View style={styles.userInfo}>
+              <View style={styles.avatar}>
+                <User size={16} color="#6b7280" />
+              </View>
+              <View style={styles.userDetails}>
+                <Text style={styles.username}>
+                  {post.author?.fullname || 'Unknown User'}
+                </Text>
+                <View style={styles.postMeta}>
+                  <Calendar size={12} color="#9ca3af" />
+                  <Text style={styles.postDate}>
+                    {formatDate(post.createdAt)}
+                  </Text>
+                  <View style={[styles.statusBadge, styles[`status${post.status}`]]}>
+                    <Text style={styles.statusText}>{post.status}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <Text style={styles.postTitle} numberOfLines={2}>
+            {post.title}
+          </Text>
+          
+          <Text style={styles.postPreview} numberOfLines={3}>
+            {post.body}
+          </Text>
+
+          <View style={styles.postActions}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleLike(post.id);
+              }}
+            >
+              <Heart 
+                size={16} 
+                color={post.isLiked ? "#ef4444" : "#9ca3af"} 
+                fill={post.isLiked ? "#ef4444" : "none"}
+              />
+              <Text style={[styles.actionText, post.isLiked && styles.likedText]}>
+                {post.likes || 0}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <MessageCircle size={16} color="#9ca3af" />
+              <Text style={styles.actionText}>
+                {post._count?.answers || 0} answers
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButton}>
+              <HelpCircle size={16} color="#9ca3af" />
+              <Text style={styles.actionText}>Help</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [handleLike, navigateToPost]);
+
+  const renderFooter = useCallback(() => {
+    if (!loadingMore) return null;
+    
+    return (
+      <View style={styles.loadingMore}>
+        <ActivityIndicator size="small" color="#667eea" />
+        <Text style={styles.loadingMoreText}>Loading more posts...</Text>
+      </View>
+    );
+  }, [loadingMore]);
+
+  const renderEmpty = useCallback(() => {
+    if (loading) return null;
+    
+    return (
+      <View style={styles.emptyState}>
+        <MessageCircle size={64} color="#d1d5db" />
+        <Text style={styles.emptyTitle}>No Posts Yet</Text>
+        <Text style={styles.emptyDescription}>
+          Be the first to start a discussion in this category!
+        </Text>
+      </View>
+    );
+  }, [loading]);
+
+  if (loading && posts.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-          <Text style={styles.headerTitle}>Student Forum</Text>
-          <Text style={styles.headerSubtitle}>Ask questions and share knowledge</Text>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Forum</Text>
+            <TouchableOpacity style={styles.searchButton}>
+              <Search size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
         </LinearGradient>
+        
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#667eea" />
           <Text style={styles.loadingText}>Loading forum...</Text>
@@ -105,131 +365,73 @@ export default function ForumScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <Text style={styles.headerTitle}>Student Forum</Text>
-        <Text style={styles.headerSubtitle}>Ask questions and share knowledge</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Forum</Text>
+          <TouchableOpacity style={styles.searchButton}>
+            <Search size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Category Filter */}
-        <ScrollView
+      {/* Categories Section - Similar to Guide Categories */}
+      <View style={styles.categoriesSection}>
+        <FlatList
+          data={forumCategories}
+          keyExtractor={(item) => item.id}
+          renderItem={renderCategoryItem}
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.categoryContainer}
-          contentContainerStyle={styles.categoryContent}
-        >
-          {categories.map(category => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category && styles.activeCategoryButton,
-              ]}
-              onPress={() => setSelectedCategory(category)}
-            >
-              <Text
-                style={[
-                  styles.categoryText,
-                  selectedCategory === category && styles.activeCategoryText,
-                ]}
-              >
-                {category}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+          contentContainerStyle={styles.categoriesContainer}
+        />
+      </View>
 
-        {/* Error Message */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
+      {/* Posts List */}
+      <FlatList
+        data={posts}
+        keyExtractor={(item) => item.id}
+        renderItem={renderPost}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#667eea']}
+            tintColor="#667eea"
+          />
+        }
+        onEndReached={onLoadMore}
+        onEndReachedThreshold={0.1}
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={styles.postsContainer}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={10}
+      />
 
-        {/* Posts List */}
-        <View style={styles.postsContainer}>
-          {filteredQuestions.map(question => (
-            <TouchableOpacity
-              key={question.id}
-              style={styles.postCard}
-              onPress={() => handleQuestionPress(question)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.postHeader}>
-                <View style={styles.authorInfo}>
-                  <View style={styles.avatarContainer}>
-                    <User size={16} color="#667eea" strokeWidth={2} />
-                  </View>
-                  <View>
-                    <Text style={styles.authorName}>{question.author}</Text>
-                    <View style={styles.postMeta}>
-                      <Clock size={12} color="#9ca3af" strokeWidth={2} />
-                      <Text style={styles.postTime}>{question.createdAt}</Text>
-                    </View>
-                  </View>
-                </View>
-                <View
-                  style={[
-                    styles.categoryBadge,
-                    { backgroundColor: categoryColors[question.category] + '20' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.categoryBadgeText,
-                      { color: categoryColors[question.category] },
-                    ]}
-                  >
-                    {question.category}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.postTitle}>{question.title}</Text>
-              <Text style={styles.postDescription} numberOfLines={2}>
-                {question.body}
-              </Text>
-
-              <View style={styles.postFooter}>
-                <View style={styles.commentsInfo}>
-                  <MessageSquare size={16} color="#9ca3af" strokeWidth={2} />
-                  <Text style={styles.commentsCount}>
-                    {question.answers?.length || 0}{' '}
-                    {(question.answers?.length || 0) === 1 ? 'answer' : 'answers'}
-                  </Text>
-                </View>
-                <View style={styles.likesInfo}>
-                  <TouchableOpacity
-                    onPress={() => handleLikeQuestion(question.id)}
-                    style={styles.likeButton}
-                  >
-                    <Heart size={16} color="#ef4444" strokeWidth={2} />
-                    <Text style={styles.likesCount}>{question.likes || 0}</Text>
-                  </TouchableOpacity>
-                </View>
-                <ChevronRight size={16} color="#9ca3af" strokeWidth={2} />
-              </View>
-            </TouchableOpacity>
-          ))}
+      {/* Error Banner */}
+      {error && !refreshing && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={() => fetchPosts(1)} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      )}
 
       {/* Floating Action Button */}
-      <TouchableOpacity
+      <TouchableOpacity 
         style={styles.fab}
-        onPress={handleNewPost}
-        activeOpacity={0.8}
+        onPress={() => router.push('/create-post')}
       >
-        <LinearGradient
-          colors={['#667eea', '#764ba2']}
-          style={styles.fabGradient}
-        >
-          <Plus size={24} color="#ffffff" strokeWidth={2} />
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.fabGradient}>
+          <Plus size={24} color="#ffffff" />
         </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -238,161 +440,249 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 20,
-    paddingBottom: 30,
+    paddingBottom: 20,
     paddingHorizontal: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 28,
-    fontFamily: 'Poppins-Bold',
+    fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 4,
   },
-  headerSubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  content: {
-    flex: 1,
-  },
-  categoryContainer: {
-    marginVertical: 20,
-  },
-  categoryContent: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  searchButton: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  activeCategoryButton: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  
+  // Categories Section (Similar to Guide)
+  categoriesSection: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  categoriesContainer: {
+    paddingHorizontal: 16,
+  },
+  categoryCard: {
+    marginRight: 12,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  selectedCategory: {
+    transform: [{ scale: 1.05 }],
+  },
+  categoryGradient: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+    minWidth: 100,
   },
   categoryText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6b7280',
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 4,
+    textAlign: 'center',
   },
-  activeCategoryText: {
+  selectedCategoryText: {
     color: '#ffffff',
   },
+  
+  // Posts Section
   postsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
+    padding: 16,
+    flexGrow: 1,
   },
   postCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     elevation: 3,
   },
+  postContent: {
+    padding: 16,
+  },
   postHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 12,
   },
-  authorInfo: {
+  userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
   },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0f4ff',
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  authorName: {
+  userDetails: {
+    flex: 1,
+  },
+  username: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontWeight: '600',
     color: '#1f2937',
+    marginBottom: 4,
   },
   postMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    gap: 8,
   },
-  postTime: {
+  postDate: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
     color: '#9ca3af',
-    marginLeft: 4,
   },
-  categoryBadge: {
+  statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  categoryBadgeText: {
+  statusCleared: {
+    backgroundColor: '#dcfce7',
+  },
+  statusPending: {
+    backgroundColor: '#fef3c7',
+  },
+  statusClosed: {
+    backgroundColor: '#fee2e2',
+  },
+  statusText: {
     fontSize: 10,
-    fontFamily: 'Inter-Medium',
-    textTransform: 'uppercase',
+    fontWeight: '600',
+    color: '#374151',
   },
   postTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#1f2937',
-    marginBottom: 6,
+    lineHeight: 24,
+    marginBottom: 8,
   },
-  postDescription: {
+  postPreview: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
     color: '#6b7280',
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  postFooter: {
+  postActions: {
+    flexDirection: 'row',
+    gap: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontWeight: '500',
+  },
+  likedText: {
+    color: '#ef4444',
+  },
+  
+  // Loading & Empty States
+  loadingMore: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadingMoreText: {
+    marginLeft: 8,
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#374151',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyDescription: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  
+  // Error & FAB
+  errorBanner: {
+    position: 'absolute',
+    top: 120,
+    left: 16,
+    right: 16,
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  commentsInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  errorText: {
+    flex: 1,
+    color: '#dc2626',
+    fontSize: 14,
   },
-  commentsCount: {
+  retryButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#dc2626',
+    borderRadius: 4,
+  },
+  retryText: {
+    color: '#ffffff',
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9ca3af',
-    marginLeft: 6,
-  },
-  likesInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  likeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  likesCount: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#ef4444',
-    marginLeft: 4,
+    fontWeight: '600',
   },
   fab: {
     position: 'absolute',
     bottom: 20,
     right: 20,
-    width: 56,
-    height: 56,
     borderRadius: 28,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -406,16 +696,5 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
-    fontFamily: 'Inter-Regular',
   },
 });

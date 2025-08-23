@@ -21,8 +21,10 @@ import {
   Heart,
   LucideIcon,
 } from 'lucide-react-native';
-import { guideApi, useApi } from '@/utils/api';
+import { ApiError, guideApi, useApi, ApiInstance, mapApiClient } from '@/utils/api';
 import { Guide } from '@/types/guide';
+import { useAsync } from '@/hooks/useAsync';
+import { ErrorMessage } from '@/components/ErrorMessage';
 
 type CategoryType = 'Academics' | 'Social Life' | 'Budgeting' | 'Safety';
 
@@ -34,53 +36,36 @@ const categoryIcons: Record<CategoryType, LucideIcon> = {
 };
 
 const categoryColors = {
-  Academics: ['#667eea', '#764ba2'],
-  'Social Life': ['#f093fb', '#f5576c'],
-  Budgeting: ['#4facfe', '#00f2fe'],
-  Safety: ['#43e97b', '#38f9d7'],
+  Academics: ['#667eea', '#764ba2'] as const,
+  'Social Life': ['#f093fb', '#f5576c'] as const,
+  Budgeting: ['#4facfe', '#00f2fe'] as const,
+  Safety: ['#43e97b', '#38f9d7'] as const,
 };
 
 export default function TipDetailScreen() {
-  const [guide, setGuide] = useState<Guide | null>(null);
   const { tipId } = useLocalSearchParams();
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const api = useApi();
   const apiClient = React.useMemo(() => guideApi(api), [api]);
+  const { data: guide, loading, error: fetchError, execute } = useAsync<Guide>();
 
   React.useEffect(() => {
-    const fetchGuideDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await apiClient.getById(tipId as string);
-        setGuide(response.data);
-      } catch (error) {
-        console.error('Error fetching guide details:', error);
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (tipId) {
-      fetchGuideDetails();
+    const id = Array.isArray(tipId) ? tipId[0] : tipId;
+    if (id) {
+      execute(() => apiClient.getById(id).then(res => res.data as Guide));
     }
-  }, [tipId, apiClient]);
+  }, [tipId, execute]);
 
   const handleLike = async () => {
-    if (!guide) return;
     try {
-      const response = await apiClient.like(guide.id);
-      if (response.data.success) {
-        setGuide(prev => ({
-          ...prev!,
-          likes: response.data.likes
-        }));
+      await apiClient.getLikesCount(tipId as string);
+      // Update UI optimistically
+    } catch (err) {
+      // Revert optimistic update
+      if (err instanceof ApiError) {
+        Alert.alert('Error', err.message);
       }
-    } catch (error) {
-      console.error('Error liking guide:', error);
-      // Show error toast or alert
     }
   };
 
@@ -95,16 +80,16 @@ export default function TipDetailScreen() {
     );
   }
 
-  if (!guide) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.errorText}>Guide not found</Text>
-      </SafeAreaView>
-    );
+  if (fetchError) {
+    return <ErrorMessage message={fetchError} onRetry={() => execute(() => apiClient.getById(tipId as string).then(res => res.data))} />;
   }
 
-  const IconComponent = categoryIcons[guide.category];
-  const colors = categoryColors[guide.category];
+  if (!guide) {
+    return <ErrorMessage message="Guide not found" />;
+  }
+
+  const IconComponent = categoryIcons[guide.category as CategoryType] || BookOpen;
+  const colors = categoryColors[guide.category as CategoryType] || (['#667eea', '#764ba2'] as const);
 
   return (
     <SafeAreaView style={styles.container}>

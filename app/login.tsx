@@ -8,11 +8,13 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { showMessage } from 'react-native-flash-message';
+import { testConnection } from '@/utils/api';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -25,6 +27,17 @@ export default function LoginScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  React.useEffect(() => {
+    // Test connection on component mount
+    const checkConnection = async () => {
+      console.log('Testing API connection...');
+      const isConnected = await testConnection();
+      console.log('API connection status:', isConnected);
+    };
+
+    checkConnection();
+  }, []);
+
   const handleSubmit = async () => {
     const { email, password } = formData;
 
@@ -35,6 +48,16 @@ export default function LoginScreen() {
         type: 'danger',
         icon: 'danger',
       });
+      return;
+    }
+
+    // Test connection first
+    const isConnected = await testConnection();
+    if (!isConnected) {
+      Alert.alert(
+        'Connection Error',
+        'Cannot connect to the server. Please check your internet connection and try again.'
+      );
       return;
     }
 
@@ -56,15 +79,25 @@ export default function LoginScreen() {
 
       // Navigate to main app
       router.replace('/(tabs)');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
 
-      showMessage({
-        message: 'Login Failed',
-        description: 'Invalid email or password. Please try again.',
-        type: 'danger',
-        icon: 'danger',
-      });
+      if (error?.status === 429) {
+        Alert.alert(
+          'Too Many Attempts',
+          'Please wait a moment before trying again.'
+        );
+      } else if (error?.status === 0 || error?.message?.includes('Failed to connect')) {
+        Alert.alert(
+          'Connection Error',
+          'Cannot connect to the server. Please check your internet connection.'
+        );
+      } else {
+        Alert.alert(
+          'Login Failed',
+          error?.message || 'Please check your credentials and try again.'
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }

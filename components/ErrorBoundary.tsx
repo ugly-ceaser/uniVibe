@@ -108,63 +108,16 @@ export class ErrorBoundary extends Component<Props, State> {
       // Default error UI
       return (
         <View style={styles.container}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.errorContainer}>
-              <AlertTriangle size={64} color='#ef4444' strokeWidth={2} />
-
-              <Text style={styles.title}>Oops! Something went wrong</Text>
-
-              <Text style={styles.message}>
-                We're sorry, but something unexpected happened. Our team has
-                been notified and is working to fix this issue.
-              </Text>
-
-              {config.development.debug && this.state.error && (
-                <View style={styles.debugContainer}>
-                  <Text style={styles.debugTitle}>Debug Information:</Text>
-                  <Text style={styles.debugText}>
-                    Error: {this.state.error.message}
-                  </Text>
-                  {this.state.errorInfo?.componentStack && (
-                    <Text style={styles.debugText}>
-                      Component Stack: {this.state.errorInfo.componentStack}
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  style={[styles.button, styles.primaryButton]}
-                  onPress={this.handleRetry}
-                  accessibilityRole='button'
-                  accessibilityLabel='Retry'
-                >
-                  <RefreshCw size={20} color='#ffffff' strokeWidth={2} />
-                  <Text style={styles.primaryButtonText}>Retry</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.button, styles.secondaryButton]}
-                  onPress={this.handleGoHome}
-                  accessibilityRole='button'
-                  accessibilityLabel='Go to home'
-                >
-                  <Home size={20} color='#667eea' strokeWidth={2} />
-                  <Text style={styles.secondaryButtonText}>Go Home</Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={styles.reportButton}
-                onPress={this.handleReportError}
-                accessibilityRole='button'
-                accessibilityLabel='Report error'
-              >
-                <Text style={styles.reportButtonText}>Report This Error</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
+          <Text style={styles.title}>Something went wrong</Text>
+          <Text style={styles.message}>
+            {this.state.error?.message || 'An unexpected error occurred'}
+          </Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <Text style={styles.buttonText}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -191,100 +144,33 @@ export const withErrorBoundary = <P extends object>(
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  scrollContent: {
-    flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
-  },
-  errorContainer: {
     alignItems: 'center',
-    padding: 32,
+    padding: 20,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Poppins-Bold',
-    color: '#1f2937',
-    marginTop: 24,
-    marginBottom: 16,
-    textAlign: 'center',
+    fontFamily: 'Inter-Bold',
+    color: '#ef4444',
+    marginBottom: 12,
   },
   message: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6b7280',
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  debugContainer: {
-    width: '100%',
-    backgroundColor: '#f3f4f6',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 24,
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6b7280',
-    lineHeight: 18,
-    marginBottom: 4,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 16,
     marginBottom: 24,
   },
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#667eea',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
-    minWidth: 120,
-    gap: 8,
   },
-  primaryButton: {
-    backgroundColor: '#667eea',
-  },
-  primaryButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+  buttonText: {
     color: '#ffffff',
-  },
-  secondaryButton: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#667eea',
-  },
-  secondaryButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#667eea',
-  },
-  reportButton: {
-    paddingVertical: 8,
-  },
-  reportButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6b7280',
-    textDecorationLine: 'underline',
   },
 });

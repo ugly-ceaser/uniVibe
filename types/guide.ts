@@ -2,12 +2,15 @@ export type Category = 'Academics' | 'Social Life' | 'Budgeting' | 'Safety';
 
 export interface Guide {
   id: string;
-  category: Category;
   title: string;
-  description: string;
-  content?: string;
-  readTime?: string;
-  likes?: number;
+  content: string;
+  description?: string;
+  category: Category;
+  readTime: string;
+  likes: number;
+  author?: string;
+  createdAt: string;
+  status: 'Draft' | 'Cleared' | 'Published';
 }
 
 export interface GuidesResponse {
@@ -20,4 +23,5 @@ export interface GuidesResponse {
 export interface LikeResponse {
   success: boolean;
   likes: number;
+  isLiked: boolean;
 }
