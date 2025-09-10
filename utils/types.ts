@@ -66,6 +66,8 @@ export interface UpdateProfileRequest {
   faculty?: string;
   level?: number;
   semester?: 'First' | 'Second';
+  regNumber?: string; // added
+  nin?: string;       // added
 }
 
 export interface VerifyFieldsRequest {
@@ -78,6 +80,30 @@ export interface VerifyFieldsRequest {
 export interface ProfileApiResponse {
   data: UserProfile;
   message?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug?: string;
+  createdAt?: string;
+}
+
+export interface QuestionSummary {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  forum: { id: string; name: string };
+  author: { fullname: string };
+  _count: { answers: number };
+}
+
+export interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  pageCount: number;
 }
 
 // ... existing code below stays the same ...

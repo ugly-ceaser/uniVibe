@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { Stack, Slot } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -32,18 +32,8 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <Stack>
-        <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
-        <Stack.Screen name='login' options={{ headerShown: false }} />
-        <Stack.Screen name='register' options={{ headerShown: false }} />
-        <Stack.Screen name='onboarding' options={{ headerShown: false }} />
-        <Stack.Screen name='course-detail' options={{ headerShown: false }} />
-        <Stack.Screen name='post-detail' options={{ headerShown: false }} />
-        <Stack.Screen name='tip-detail' options={{ headerShown: false }} />
-        <Stack.Screen name='profile' options={{ headerShown: false }} />
-        <Stack.Screen name='+not-found' options={{ title: 'Oops!' }} />
-      </Stack>
-      <StatusBar style='auto' />
+      <Stack screenOptions={{ headerShown: false }} />
+      <StatusBar style="auto" />
     </AuthProvider>
   );
 }

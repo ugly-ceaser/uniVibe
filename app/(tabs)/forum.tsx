@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,24 +22,37 @@ import {
   Code,
   Briefcase,
   Users,
-  HelpCircle,
-  Lightbulb
+  HelpCircle
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApi, forumApi } from '../../utils/api';
-import { ForumPost, Forum } from '../../utils/types';
+import { ForumPost } from '../../utils/types';
 
 const { width } = Dimensions.get('window');
 
-// Forum categories with icons (similar to guide categories)
-const forumCategories = [
-  { id: 'all', name: 'All Posts', icon: Users, color: '#667eea' },
-  { id: 'academic', name: 'Academic Help', icon: BookOpen, color: '#10b981' },
-  { id: 'technology', name: 'Tech Support', icon: Code, color: '#3b82f6' },
-  { id: 'career', name: 'Career & Jobs', icon: Briefcase, color: '#f59e0b' },
-  { id: 'general', name: 'General Chat', icon: MessageCircle, color: '#8b5cf6' },
-  { id: 'resources', name: 'Resources', icon: Lightbulb, color: '#06b6d4' },
+// Small type for chips
+type CategoryChipItem = { id: string; name: string; icon: any; color: string };
+
+// Fixed categories you requested
+const CATEGORY_DEFS: CategoryChipItem[] = [
+  { id: 'all',                 name: 'All Posts',            icon: Users,         color: '#667eea' },
+  { id: 'general-discussion',  name: 'General Discussion',   icon: MessageCircle, color: '#8b5cf6' },
+  { id: 'academic-help',       name: 'Academic Help',        icon: BookOpen,      color: '#10b981' },
+  { id: 'student-life',        name: 'Student Life',         icon: Users,         color: '#06b6d4' },
+  { id: 'career-internships',  name: 'Career & Internships', icon: Briefcase,     color: '#f59e0b' },
+  { id: 'tech-programming',    name: 'Tech & Programming',   icon: Code,          color: '#3b82f6' },
+  { id: 'campus-services',     name: 'Campus Services',      icon: HelpCircle,    color: '#ef4444' },
 ];
+
+// Map chip id -> API enum
+const CATEGORY_TO_ENUM: Record<string, string> = {
+  'general-discussion':  'GENERAL_DISCUSSION',
+  'academic-help':       'ACADEMIC_HELP',
+  'student-life':        'STUDENT_LIFE',
+  'career-internships':  'CAREER_AND_INTERNSHIPS',
+  'tech-programming':    'TECH_AND_PROGRAMMING',
+  'campus-services':     'CAMPUS_SERVICES'
+};
 
 export default function ForumScreen() {
   const router = useRouter();
@@ -47,130 +60,168 @@ export default function ForumScreen() {
   const forumClient = forumApi(api);
   
   const [posts, setPosts] = useState<ForumPost[]>([]);
-  const [forums, setForums] = useState<Forum[]>([]);
+  const [allPosts, setAllPosts] = useState<ForumPost[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState('all');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [lastFetch, setLastFetch] = useState(0);
+  const lastFetchRef = useRef(0);
 
   const PAGE_SIZE = 20;
   const MIN_FETCH_INTERVAL = 5000;
 
+  // Show a spinner on the categories row while fetching page 1 or refreshing
+  const isCategoryLoading = refreshing || (loading && page === 1);
+
+  // Page-level loading banner (not shown during load-more)
+  const isPageLoadingBanner = (loading || refreshing) && !loadingMore;
+
+  // Helper to get enum for current selection
+  const getSelectedEnum = useCallback(() => {
+    return selectedCategory === 'all' ? undefined : CATEGORY_TO_ENUM[selectedCategory];
+  }, [selectedCategory]);
+
+  // Stabilize fetchPosts by removing lastFetch from deps and passing category explicitly
   const fetchPosts = useCallback(async (
-    pageNum: number = 1, 
+    pageNum: number = 1,
     isRefresh: boolean = false,
     isLoadMore: boolean = false,
-    categoryFilter?: string
+    categoryEnum?: string
   ) => {
     const now = Date.now();
-    
-    if (!isRefresh && !isLoadMore && (now - lastFetch < MIN_FETCH_INTERVAL)) {
+    if (!isRefresh && !isLoadMore && (now - lastFetchRef.current < MIN_FETCH_INTERVAL)) {
       console.log('⏭️ Skipping fetch - too soon since last request');
       return;
     }
 
     try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else if (isLoadMore) {
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
-      }
-      
+      if (isRefresh) setRefreshing(true);
+      else if (isLoadMore) setLoadingMore(true);
+      else setLoading(true);
       setError(null);
-      
-      console.log(`📋 Fetching posts - Page: ${pageNum}, Category: ${categoryFilter || 'all'}`);
-      
+
+      console.log(`📋 Fetching posts - Page: ${pageNum}, CategoryEnum: ${categoryEnum ?? 'ALL'}`);
+
+      const tryProcess = (data: any) => {
+        if (data?.questions) {
+          const newBatch: ForumPost[] = data.questions;
+          console.log('🧮 Questions received:', newBatch.length);
+
+          if (isRefresh || pageNum === 1) {
+            setAllPosts(newBatch);
+            setPosts(newBatch);
+            setPage(2);
+          } else {
+            setAllPosts((prev) => {
+              const combined = [...prev, ...newBatch];
+              setPosts(combined);
+              return combined;
+            });
+            setPage(pageNum + 1);
+          }
+
+          setHasMore(pageNum < (data.totalPages || 1));
+          lastFetchRef.current = now;
+          setLastFetch(now);
+          return true;
+        }
+        return false;
+      };
+
       const response = await forumClient.getQuestions({
         page: pageNum,
         pageSize: PAGE_SIZE,
-        refresh: isRefresh
-      });
-      
-      if (response?.data?.questions) {
-        const newPosts = response.data.questions;
-        
-        if (isRefresh || pageNum === 1) {
-          setPosts(newPosts);
-          setPage(2);
-        } else {
-          setPosts(prev => [...prev, ...newPosts]);
-          setPage(pageNum + 1);
-        }
-        
-        setHasMore(pageNum < (response.data.totalPages || 1));
-        setLastFetch(now);
-      } else {
-        if (pageNum === 1) {
-          setPosts([]);
-        }
-        setHasMore(false);
+        refresh: isRefresh,
+        category: categoryEnum, // pass through to backend
+      } as any);
+      console.log('🧾 forum.getQuestions response.data:', response?.data);
+
+      let processed = tryProcess(response?.data);
+
+      if (!processed) {
+        console.log('♻️ Retrying with refresh to bypass cache...');
+        const fresh = await forumClient.getQuestions({
+          page: pageNum,
+          pageSize: PAGE_SIZE,
+          refresh: true,
+          category: categoryEnum,
+        } as any);
+        console.log('🧾 forum.getQuestions fresh.data:', fresh?.data);
+        processed = tryProcess(fresh?.data);
+      }
+
+      if (!processed) {
+        console.warn('⚠️ No data returned even after refresh; preserving current list');
       }
     } catch (err: any) {
       console.error('💥 Error fetching posts:', err);
       setError('Failed to load posts. Please try again.');
-      if (pageNum === 1) {
-        setPosts([]);
-      }
     } finally {
       setLoading(false);
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [forumClient, lastFetch]);
-
-  const fetchForums = useCallback(async () => {
-    try {
-      const response = await forumClient.getForums();
-      if (response?.data) {
-        setForums(Array.isArray(response.data) ? response.data : []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch forums:', err);
-    }
   }, [forumClient]);
 
   useEffect(() => {
-    fetchPosts(1);
-    fetchForums();
+    // initial load
+    fetchPosts(1, false, false, getSelectedEnum());
   }, []);
+  
+  // Replace client-side filter sync with a simple mirror of server results
+  useEffect(() => {
+    setPosts(allPosts);
+  }, [allPosts]);
+
+  // On category change: reset and fetch from server with that category
+  useEffect(() => {
+    setAllPosts([]);
+    setPosts([]);
+    setPage(1);
+    setHasMore(true);
+    fetchPosts(1, true, false, getSelectedEnum());
+    // NOTE: do NOT include fetchPosts in deps to avoid infinite loop
+  }, [selectedCategory]);
 
   // Refresh when screen comes into focus (but not too frequently)
+  const didFocusOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
-      const now = Date.now();
-      if (now - lastFetch > MIN_FETCH_INTERVAL * 2) { // 10 seconds for focus refresh
-        console.log('🔄 Screen focused - refreshing posts');
-        fetchPosts(1, false, false);
+      if (!didFocusOnce.current) {
+        didFocusOnce.current = true;
+        return;
       }
-    }, [fetchPosts, lastFetch])
+      const now = Date.now();
+      if (now - lastFetchRef.current > MIN_FETCH_INTERVAL * 2) {
+        console.log('🔄 Screen focused - refreshing posts');
+        fetchPosts(1, true, false, getSelectedEnum());
+      }
+    }, [getSelectedEnum, fetchPosts])
   );
-
+ 
   const onRefresh = useCallback(() => {
     console.log('🔃 Manual refresh triggered');
-    fetchPosts(1, true, false, selectedCategory);
-  }, [fetchPosts, selectedCategory]);
+    fetchPosts(1, true, false, getSelectedEnum());
+  }, [getSelectedEnum, fetchPosts]);
 
   const onLoadMore = useCallback(() => {
     if (!loadingMore && !loading && hasMore && posts.length > 0) {
       console.log('⬇️ Loading more posts');
-      fetchPosts(page, false, true, selectedCategory);
+      fetchPosts(page, false, true, getSelectedEnum());
     }
-  }, [fetchPosts, page, loadingMore, loading, hasMore, posts.length, selectedCategory]);
-
+  }, [page, loadingMore, loading, hasMore, posts.length, getSelectedEnum, fetchPosts]);
+ 
+  // When category changes, filter immediately; no network call needed
   const handleCategorySelect = useCallback((categoryId: string) => {
-    if (categoryId !== selectedCategory) {
-      setSelectedCategory(categoryId);
-      setPage(1);
-      fetchPosts(1, true, false, categoryId);
-    }
-  }, [selectedCategory, fetchPosts]);
-
+    if (categoryId === selectedCategory) return;
+    console.log('[Forum] Category selected:', categoryId);
+    setSelectedCategory(categoryId);
+  }, [selectedCategory]);
+ 
   const handleLike = useCallback((postId: string) => {
     setPosts(prevPosts => 
       prevPosts.map(post => {
@@ -210,7 +261,7 @@ export default function ForumScreen() {
     }
   };
 
-  const renderCategoryItem = ({ item }: { item: typeof forumCategories[0] }) => {
+  const renderCategoryItem = ({ item }: { item: CategoryChipItem }) => {
     const Icon = item.icon;
     const isSelected = selectedCategory === item.id;
 
@@ -224,14 +275,8 @@ export default function ForumScreen() {
           colors={isSelected ? [item.color, item.color + '80'] : ['#ffffff', '#f8fafc']}
           style={styles.categoryGradient}
         >
-          <Icon 
-            size={24} 
-            color={isSelected ? '#ffffff' : item.color} 
-          />
-          <Text style={[
-            styles.categoryText,
-            isSelected && styles.selectedCategoryText
-          ]}>
+          <Icon size={24} color={isSelected ? '#ffffff' : item.color} />
+          <Text style={[styles.categoryText, isSelected && styles.selectedCategoryText]}>
             {item.name}
           </Text>
         </LinearGradient>
@@ -373,19 +418,34 @@ export default function ForumScreen() {
         </View>
       </LinearGradient>
 
-      {/* Categories Section - Similar to Guide Categories */}
+      {/* Categories Section - Dynamic chips (same screen) */}
       <View style={styles.categoriesSection}>
         <FlatList
-          data={forumCategories}
+          data={CATEGORY_DEFS}
           keyExtractor={(item) => item.id}
           renderItem={renderCategoryItem}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoriesContainer}
+          extraData={selectedCategory} // ensure chip highlight re-renders
         />
+        {isCategoryLoading && (
+          <View style={styles.categoriesSpinner}>
+            <ActivityIndicator size="small" color="#667eea" />
+            <Text style={styles.categoriesSpinnerText}>Loading…</Text>
+          </View>
+        )}
       </View>
 
-      {/* Posts List */}
+      {/* Page-level loading banner */}
+      {isPageLoadingBanner && (
+        <View style={styles.pageLoadingBanner}>
+          <ActivityIndicator size="small" color="#667eea" />
+          <Text style={styles.pageLoadingText}>Loading posts…</Text>
+        </View>
+      )}
+
+      {/* Posts List (uses filtered posts state) */}
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
@@ -420,13 +480,16 @@ export default function ForumScreen() {
         </View>
       )}
 
-      {/* Floating Action Button */}
-      <TouchableOpacity 
-        style={styles.fab}
+      {/* Post a Question Button (replaces AI chat) */}
+      <TouchableOpacity
+        style={styles.postBtn}
         onPress={() => router.push('/create-post')}
+        accessibilityRole="button"
+        accessibilityLabel="Post a question"
       >
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.fabGradient}>
-          <Plus size={24} color="#ffffff" />
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.postBtnGradient}>
+          <Plus size={20} color="#ffffff" />
+          <Text style={styles.postBtnText}>Post a Question</Text>
         </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
@@ -478,9 +541,29 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    position: 'relative', // enable overlay spinner positioning
   },
   categoriesContainer: {
     paddingHorizontal: 16,
+  },
+  categoriesSpinner: {
+    position: 'absolute',
+    right: 16,
+    top: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  categoriesSpinnerText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
   },
   categoryCard: {
     marginRight: 12,
@@ -679,22 +762,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  fab: {
+
+  // Replaced FAB styles with a labeled button
+  postBtn: {
     position: 'absolute',
     bottom: 20,
     right: 20,
-    borderRadius: 28,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-  },
-  fabGradient: {
-    width: 56,
-    height: 56,
     borderRadius: 28,
-    justifyContent: 'center',
+  },
+  postBtnGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 28,
+  },
+  postBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  pageLoadingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#eef2ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  pageLoadingText: {
+    color: '#4f46e5',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

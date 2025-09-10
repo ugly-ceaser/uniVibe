@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import {
   Chrome as Home,
   Map,
@@ -11,6 +11,14 @@ import { View, StyleSheet } from 'react-native';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export default function TabLayout() {
+  const pathname = usePathname();
+  // Hide FAB on /forum and /(tabs)/forum (and any nested paths)
+  const isForum =
+    pathname === '/forum' ||
+    pathname?.startsWith('/forum') ||
+    pathname?.startsWith('/(tabs)/forum');
+  const showFab = !isForum;
+
   return (
     <ErrorBoundary>
       <View style={styles.container}>
@@ -79,7 +87,7 @@ export default function TabLayout() {
             }}
           />
         </Tabs>
-        <GlobalChatButton />
+        {showFab ? <GlobalChatButton /> : null}
       </View>
     </ErrorBoundary>
   );

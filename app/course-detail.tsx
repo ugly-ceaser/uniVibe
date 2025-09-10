@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,9 +21,10 @@ import {
   ChartBar as BarChart3,
   CircleCheck as CheckCircle,
 } from 'lucide-react-native';
-import { coursesApi } from '@/utils/api';
+import { useApi } from '@/utils/api';
 
 export default function CourseDetailScreen() {
+  const api = useApi();
   const router = useRouter();
   const { courseId } = useLocalSearchParams();
   const [course, setCourse] = useState<any>(null);
@@ -33,7 +34,8 @@ export default function CourseDetailScreen() {
     const fetchCourseDetails = async () => {
       try {
         setLoading(true);
-        const response = await coursesApi.getById(courseId as string);
+        // Use the correct endpoint and api client
+        const response = await api.get(`/courses/${courseId}`);
         setCourse(response.data);
       } catch (error) {
         console.error('Error fetching course details:', error);
@@ -45,7 +47,7 @@ export default function CourseDetailScreen() {
     if (courseId) {
       fetchCourseDetails();
     }
-  }, [courseId]);
+  }, [courseId, api]);
 
   if (loading) {
     return (

@@ -17,10 +17,9 @@ interface Course {
   id: string;
   code: string;
   name: string;
-  description: string;
-  credits: number;
+  unitLoad: number;
   semester: 1 | 2;
-  instructor: string;
+  // ...other fields if needed
 }
 
 export default function CoursesScreen() {
@@ -53,6 +52,11 @@ export default function CoursesScreen() {
 
   const semesterCourses = courses.filter(
     course => course.semester === selectedSemester
+  );
+
+  const totalUnits = semesterCourses.reduce(
+    (total, course) => total + (typeof course.unitLoad === 'number' ? course.unitLoad : 0),
+    0
   );
 
   const handleCoursePress = (courseId: string) => {
@@ -133,28 +137,13 @@ export default function CoursesScreen() {
               onPress={() => handleCoursePress(course.id)}
               activeOpacity={0.7}
             >
-              <View style={styles.courseIconContainer}>
-                <BookOpen size={24} color="#667eea" strokeWidth={2} />
-              </View>
-
               <View style={styles.courseContent}>
                 <View style={styles.courseHeader}>
                   <Text style={styles.courseCode}>{course.code}</Text>
-                  <Text style={styles.unitLoad}>{course.credits} Units</Text>
+                  <Text style={styles.unitLoad}>{course.unitLoad} Units</Text>
                 </View>
                 <Text style={styles.courseName}>{course.name}</Text>
-                <Text style={styles.courseDescription} numberOfLines={2}>
-                  {course.description}
-                </Text>
-
-                <View style={styles.coordinatorInfo}>
-                  <User size={14} color="#9ca3af" strokeWidth={2} />
-                  <Text style={styles.coordinatorName}>
-                    {course.instructor}
-                  </Text>
-                </View>
               </View>
-
               <ChevronRight size={20} color="#9ca3af" strokeWidth={2} />
             </TouchableOpacity>
           ))}
@@ -178,10 +167,7 @@ export default function CoursesScreen() {
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
                   <Text style={styles.statNumber}>
-                    {semesterCourses.reduce(
-                      (total, course) => total + course.credits,
-                      0
-                    )}
+                    {totalUnits}
                   </Text>
                   <Text style={styles.statLabel}>Total Units</Text>
                 </View>

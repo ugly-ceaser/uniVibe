@@ -225,19 +225,26 @@ class ApiClient {
   private async _makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     console.log('🌐 Making API request to:', url);
-    
+
+    // Build headers safely so we don't force JSON for FormData
+    const mergedHeaders: Record<string, string> = {
+      ...(options.headers as Record<string, string> | undefined),
+    };
+    if (!mergedHeaders['Content-Type'] && !(options.body instanceof FormData)) {
+      mergedHeaders['Content-Type'] = 'application/json';
+    }
+    if (this.token) {
+      mergedHeaders['Authorization'] = `Bearer ${this.token}`;
+    }
+
     try {
       const response = await fetch(url, {
         ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.token && { Authorization: `Bearer ${this.token}` }),
-          ...options.headers,
-        },
+        headers: mergedHeaders,
       });
 
       console.log('📊 Response status:', response.status);
-      
+
       if (response.status === 429) {
         console.warn('⚠️ Rate limit hit, backing off...');
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -266,17 +273,40 @@ class ApiClient {
   }
 
   async post<T>(endpoint: string, data?: any): Promise<T> {
-    return this.request<T>(endpoint, {
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    }, false); // Never cache POST requests
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    return this.request<T>(
+      endpoint,
+      {
+        method: 'POST',
+        body: isFormData ? data : data ? JSON.stringify(data) : undefined,
+        // do not set headers here; _makeRequest will set Content-Type correctly
+      },
+      false
+    );
   }
 
   async put<T>(endpoint: string, data?: any): Promise<T> {
-    return this.request<T>(endpoint, {
-      method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
-    }, false);
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    return this.request<T>(
+      endpoint,
+      {
+        method: 'PUT',
+        body: isFormData ? data : data ? JSON.stringify(data) : undefined,
+      },
+      false
+    );
+  }
+
+  async patch<T>(endpoint: string, data?: any): Promise<T> {
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    return this.request<T>(
+      endpoint,
+      {
+        method: 'PATCH',
+        body: isFormData ? data : data ? JSON.stringify(data) : undefined,
+      },
+      false
+    );
   }
 
   async delete<T>(endpoint: string): Promise<T> {
@@ -324,33 +354,43 @@ export const useApi = () => {
     else apiClient.clearToken();
   }, [token]);
 
-  const authenticatedRequest = async <T>(fn: () => Promise<T>): Promise<T> => {
+  const authenticatedRequest = React.useCallback(async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof ApiError) {
-        if (error.status === 401) Alert.alert('Session Expired', 'Please log in again', [{ text: 'OK', onPress: logout }]);
-        else if (error.status === 403) Alert.alert('Access Denied', "You don't have permission", [{ text: 'OK' }]);
-        else Alert.alert('Error', error.message, [{ text: 'OK' }]);
+        if (error.status === 401) {
+          Alert.alert('Session Expired', 'Please log in again', [{ text: 'OK', onPress: logout }]);
+        } else if (error.status === 403) {
+          Alert.alert('Access Denied', "You don't have permission", [{ text: 'OK' }]);
+        } else {
+          Alert.alert('Error', error.message, [{ text: 'OK' }]);
+        }
       } else {
         Alert.alert('Error', 'Unexpected error occurred', [{ text: 'OK' }]);
       }
       throw error;
     }
-  };
+  }, [logout]);
 
-  return {
-    // Public
-    get: <T>(endpoint: string, options?: RequestInit) => apiClient.get<T>(endpoint, options),
-    post: <T>(endpoint: string, data?: any, options?: RequestInit) => apiClient.post<T>(endpoint, data, options),
+  // Return a stable API object to avoid re-creating functions every render
+  const api = React.useMemo(() => ({
+    // public
+    get: <T>(endpoint: string, useCache: boolean = true) => apiClient.get<T>(endpoint, useCache),
+    post: <T>(endpoint: string, data?: any) => apiClient.post<T>(endpoint, data),
+    put: <T>(endpoint: string, data?: any) => apiClient.put<T>(endpoint, data),
+    patch: <T>(endpoint: string, data?: any) => apiClient.patch<T>(endpoint, data),
+    delete: <T>(endpoint: string) => apiClient.delete<T>(endpoint),
 
-    // Auth
-    authGet: <T>(endpoint: string, options?: RequestInit) => authenticatedRequest(() => apiClient.get<T>(endpoint, options)),
-    authPost: <T>(endpoint: string, data?: any, options?: RequestInit) => authenticatedRequest(() => apiClient.post<T>(endpoint, data, options)),
-    authPut: <T>(endpoint: string, data?: any, options?: RequestInit) => authenticatedRequest(() => apiClient.put<T>(endpoint, data, options)),
-    authPatch: <T>(endpoint: string, data?: any, options?: RequestInit) => authenticatedRequest(() => apiClient.patch<T>(endpoint, data, options)),
-    authDelete: <T>(endpoint: string, options?: RequestInit) => authenticatedRequest(() => apiClient.delete<T>(endpoint, options)),
-  };
+    // authenticated (adds JWT + handles 401/403)
+    authGet:    <T>(endpoint: string, useCache: boolean = true) => authenticatedRequest(() => apiClient.get<T>(endpoint, useCache)),
+    authPost:   <T>(endpoint: string, data?: any) => authenticatedRequest(() => apiClient.post<T>(endpoint, data)),
+    authPut:    <T>(endpoint: string, data?: any) => authenticatedRequest(() => apiClient.put<T>(endpoint, data)),
+    authPatch:  <T>(endpoint: string, data?: any) => authenticatedRequest(() => apiClient.patch<T>(endpoint, data)),
+    authDelete: <T>(endpoint: string) => authenticatedRequest(() => apiClient.delete<T>(endpoint)),
+  }), [authenticatedRequest]);
+
+  return api;
 };
 
 // ------------------------
@@ -414,6 +454,30 @@ export interface Answer {
   };
 }
 
+export type ForumComment = {
+  id: string;
+  body: string;
+  createdAt: string;
+  author?: { fullname?: string; id?: string };
+  parentId?: string | null;
+  answerId: string;
+};
+
+export type ForumCommentNode = {
+  id: string;
+  body: string;
+  createdAt?: string;
+  author?: { id?: string; fullname?: string };
+  replies?: ForumCommentNode[];
+};
+
+export type Paginated<T> = {
+  items: T[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+};
+
 export const forumApi = (api: ReturnType<typeof useApi>) => ({
   // ===== QUESTIONS =====
   
@@ -421,27 +485,23 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * GET /api/v1/forum/questions - List All Questions
    * Supports pagination and filtering
    */
-  getQuestions: (params?: { 
-    page?: number; 
-    pageSize?: number; 
+  getQuestions: async (params: {
+    page: number;
+    pageSize: number;
+    refresh?: boolean;     // when true, bypass cache
+    category?: string;     // e.g. TECH_AND_PROGRAMMING (enum)
     forumId?: string;
-    refresh?: boolean;
   }) => {
-    const queryParams = new URLSearchParams();
-    if (params?.page) queryParams.append('page', params.page.toString());
-    if (params?.pageSize) queryParams.append('pageSize', params.pageSize.toString());
-    if (params?.forumId) queryParams.append('forumId', params.forumId);
-    
-    const endpoint = `/forum/questions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-    
-    return api.get<{
-      data: {
-        questions: ForumPost[];
-        totalCount: number;
-        totalPages: number;
-        currentPage: number;
-      }
-    }>(endpoint, !params?.refresh);
+    const qs = new URLSearchParams();
+    qs.set('page', String(params.page));
+    qs.set('pageSize', String(params.pageSize));
+    if (params.category) qs.set('category', params.category);
+    if (params.forumId) qs.set('forumId', params.forumId);
+
+    const endpoint = `/forum/questions${qs.toString() ? `?${qs.toString()}` : ''}`;
+
+    // api.get(url, useCache). Use cache unless refresh is true.
+    return api.get(endpoint, !(params.refresh ?? false));
   },
 
   /**
@@ -456,13 +516,14 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   /**
    * POST /api/v1/forum/questions - Create Question
    */
-  createQuestion: (data: { 
-    title: string; 
-    body: string; 
+  createQuestion: async (payload: {
+    title: string;
+    body: string;
+    category: 'GENERAL_DISCUSSION' | 'ACADEMIC_HELP' | 'STUDENT_LIFE' | 'CAREER_AND_INTERNSHIPS' | 'TECH_AND_PROGRAMMING' | 'CAMPUS_SERVICES';
     forumId?: string;
-    tags?: string[];
   }) => {
-    return api.authPost<ApiResponse<ForumPost>>('/forum/questions', data);
+    const endpoint = `/forum/questions`;
+    return api.post(endpoint, payload);
   },
 
   /**
@@ -633,6 +694,45 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     // This would need to be implemented in the ApiClient
     console.log('🗑️ Clearing forum cache...');
   },
+
+  listCategories: () =>
+    api.get<{ data: Category[] }>('/forum/categories', false),
+
+  listQuestions: (params?: {
+    categoryId?: string;
+    forumId?: string;
+    query?: string;
+    sort?: 'new' | 'top';
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.categoryId) qs.set('categoryId', params.categoryId);
+    if (params?.forumId) qs.set('forumId', params.forumId);
+    if (params?.query) qs.set('q', params.query);
+    if (params?.sort) qs.set('sort', params.sort);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return api.get<{ data: QuestionSummary[]; meta: PaginationMeta }>(
+      `/forum/questions${suffix}`,
+      false
+    );
+  },
+
+  // Reply to an existing answer (backend: POST /api/v1/forum/comments)
+  replyToAnswer: async (params: { answerId: string; body: string; parentId?: string }) => {
+    return api.post('/forum/comments', {
+      body: params.body,
+      answerId: params.answerId,
+      ...(params.parentId ? { parentId: params.parentId } : {}),
+    });
+  },
+
+  // Public: list all replies tree under an answer (top-level + nested)
+  getAnswerComments: async (answerId: string) => {
+    return api.get<ForumCommentNode[]>(`/forum/answers/${answerId}/comments`, true);
+  },
 });
 
 // ------------------------
@@ -723,7 +823,7 @@ export const mapApi = (api: ReturnType<typeof useApi>) => ({
 });
 
 // ------------------------
-// Profile API
+// Profile API (secured with JWT)
 // ------------------------
 export interface Profile {
   id: string;
@@ -736,46 +836,77 @@ export interface Profile {
   semester?: string;
 }
 
-export const profileApi = (api: ReturnType<typeof useApi>) => ({
-  // Get current user's profile
-  getProfile: () => {
-    return api.get<ProfileApiResponse>('/user/profile');
-  },
+export interface UserProfile extends Profile {
+  regNumber?: string;
+  nin?: string;
+  role?: string;
+  avatarUrl?: string;
+  verificationStatus?: boolean;
+  status?: string;
+  createdAt?: string;
+}
 
-  // Update user profile
-  updateProfile: (data: UpdateProfileRequest) => {
-    return api.put<ProfileApiResponse>('/user/profile', data);
-  },
+export interface UpdateProfileRequest {
+  fullName?: string;
+  phone?: string;
+  department?: string;
+  faculty?: string;
+  level?: number;
+  semester?: 'First' | 'Second' | string;
+}
 
-  // Verify profile fields
-  verifyFields: (data: VerifyFieldsRequest) => {
-    return api.patch<ProfileApiResponse>('/user/profile/verify', data);
-  },
+export interface VerifyFieldsRequest {
+  email?: boolean;
+  phone?: boolean;
+  nin?: boolean;
+  regNumber?: boolean;
+}
 
-  // Upload avatar (if needed)
-  uploadAvatar: (formData: FormData) => {
-    return api.post<{ data: { avatarUrl: string } }>('/user/profile/avatar', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+export interface ProfileApiResponse {
+  data: UserProfile;
+  message?: string;
+}
+
+export const profileApi = (api: ReturnType<typeof useApi>) => {
+  const toBackendPayload = (data: UpdateProfileRequest) => {
+    const { fullName, ...rest } = data;
+    const payload: Record<string, any> = {
+      ...rest,                       // includes regNumber, nin if present
+      ...(fullName !== undefined ? { fullname: fullName } : {}),
+    };
+    Object.keys(payload).forEach((k) => {
+      const v = payload[k];
+      if (v === '' || v === undefined || v === null) delete payload[k];
     });
-  },
-});
+    return payload;
+  };
+
+  return {
+    getProfile: () => api.authGet<ProfileApiResponse>('/user/profile', false),
+    updateProfile: (data: UpdateProfileRequest) =>
+      api.authPut<ProfileApiResponse>('/user/profile', toBackendPayload(data)),
+    verifyFields: (data: VerifyFieldsRequest) =>
+      api.authPatch<ProfileApiResponse>('/user/profile/verify', data),
+    uploadAvatar: (formData: FormData) =>
+      api.authPost<{ data: { avatarUrl: string } }>('/user/profile/avatar', formData),
+  };
+};
 
 // ------------------------
 export { apiClient as api };
 
+// Fix ApiInstance typings to match implemented signatures
 export interface ApiInstance {
-  get: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
-  post: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  put: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  patch: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  delete: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
-  authGet: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
-  authPost: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  authPut: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  authPatch: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  authDelete: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
+  get: <T>(endpoint: string, useCache?: boolean) => Promise<T>;
+  post: <T>(endpoint: string, data?: any) => Promise<T>;
+  put: <T>(endpoint: string, data?: any) => Promise<T>;
+  patch: <T>(endpoint: string, data?: any) => Promise<T>;
+  delete: <T>(endpoint: string) => Promise<T>;
+  authGet: <T>(endpoint: string, useCache?: boolean) => Promise<T>;
+  authPost: <T>(endpoint: string, data?: any) => Promise<T>;
+  authPut: <T>(endpoint: string, data?: any) => Promise<T>;
+  authPatch: <T>(endpoint: string, data?: any) => Promise<T>;
+  authDelete: <T>(endpoint: string) => Promise<T>;
 }
 
 const logRequest = async (endpoint: string, options?: any) => {

@@ -42,8 +42,8 @@ const { width } = Dimensions.get('window');
 export default function ProfileScreen() {
   const router = useRouter();
   const api = useApi();
-  const profileClient = profileApi(api);
-  
+  const profileClient = React.useMemo(() => profileApi(api), [api]);
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,26 +60,23 @@ export default function ProfileScreen() {
     faculty: '',
     level: 100,
     semester: 'First',
+    regNumber: '', // added
+    nin: '',       // added
   });
   
   // Verification state
   const [verificationFields, setVerificationFields] = useState<VerifyFieldsRequest>({});
 
-  const fetchProfile = useCallback(async (isRefresh: boolean = false) => {
+  const fetchProfile = React.useCallback(async (isRefresh: boolean = false) => {
     try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
       setError(null);
-      
-      const response = await profileClient.getProfile();
-      
+
+      // Use cache unless it's a manual refresh
+      const response = await profileClient.getProfile(!isRefresh);
       if (response?.data) {
         setProfile(response.data);
-        // Initialize edit form with current data, ensuring no null values
         setEditForm({
           fullName: response.data.fullname || '',
           phone: response.data.phone || '',
@@ -87,11 +84,12 @@ export default function ProfileScreen() {
           faculty: response.data.faculty || '',
           level: response.data.level || 100,
           semester: response.data.semester || 'First',
+          regNumber: response.data.regNumber || '', // added
+          nin: response.data.nin || '',             // added
         });
-        
         console.log('✅ Profile loaded successfully');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('💥 Error fetching profile:', err);
       setError('Failed to load profile. Please try again.');
     } finally {
@@ -100,8 +98,9 @@ export default function ProfileScreen() {
     }
   }, [profileClient]);
 
-  useEffect(() => {
-    fetchProfile();
+  React.useEffect(() => {
+    fetchProfile(false);
+    // Fetch only once on mount
   }, [fetchProfile]);
 
   const onRefresh = useCallback(() => {
@@ -299,6 +298,8 @@ export default function ProfileScreen() {
                       faculty: profile.faculty || '',
                       level: profile.level || 100,
                       semester: profile.semester || 'First',
+                      regNumber: profile.regNumber || '', // added
+                      nin: profile.nin || '',             // added
                     });
                   }}
                 >
@@ -340,38 +341,11 @@ export default function ProfileScreen() {
           />
         }
       >
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              {profile.avatarUrl ? (
-                // TODO: Add Image component when available
-                <User size={40} color="#6b7280" />
-              ) : (
-                <User size={40} color="#6b7280" />
-              )}
-            </View>
-            <TouchableOpacity style={styles.avatarButton}>
-              <Camera size={16} color="#667eea" />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{profile.fullname || 'Unknown User'}</Text>
-            <Text style={styles.profileEmail}>{profile.email || 'No email'}</Text>
-            <View style={styles.statusContainer}>
-              <View style={[styles.statusBadge, { backgroundColor: statusConfig.bgColor }]}>
-                <Text style={[styles.statusText, { color: statusConfig.color }]}>
-                  {statusConfig.text}
-                </Text>
-              </View>
-              {profile.verificationStatus && (
-                <View style={styles.verifiedBadge}>
-                  <Check size={12} color="#10b981" />
-                  <Text style={styles.verifiedText}>Verified</Text>
-                </View>
-              )}
-            </View>
+        {/* Personal Information */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Personal Information</Text>
+          <View style={styles.sectionContent}>
+            {renderProfileField(User, 'Full Name', profile.fullname, true, false, 'fullName')}
           </View>
         </View>
 
@@ -379,7 +353,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Academic Information</Text>
           <View style={styles.sectionContent}>
-            {renderProfileField(CreditCard, 'Registration Number', profile.regNumber, false, true, undefined, 'regNumber')}
+            {renderProfileField(CreditCard, 'Registration Number', profile.regNumber, true, true, 'regNumber', 'regNumber')}
             {renderProfileField(Building, 'Faculty', profile.faculty, true, false, 'faculty')}
             {renderProfileField(GraduationCap, 'Department', profile.department, true, false, 'department')}
             {renderProfileField(Calendar, 'Level', profile.level, true, false, 'level')}
@@ -393,7 +367,7 @@ export default function ProfileScreen() {
           <View style={styles.sectionContent}>
             {renderProfileField(Mail, 'Email', profile.email, false, true, undefined, 'email')}
             {renderProfileField(Phone, 'Phone', profile.phone, true, true, 'phone', 'phone')}
-            {renderProfileField(CreditCard, 'NIN', profile.nin, false, true, undefined, 'nin')}
+            {renderProfileField(CreditCard, 'NIN', profile.nin, true, true, 'nin', 'nin')}
           </View>
         </View>
 
