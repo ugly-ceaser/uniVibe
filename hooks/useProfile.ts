@@ -8,7 +8,7 @@ export function useProfile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const api = useApi();
   const { token } = useAuth();
   const apiClient = React.useMemo(() => profileApi(api), [api]);
@@ -17,7 +17,9 @@ export function useProfile() {
     try {
       setLoading(true);
       setError(null);
+      console.log('response123');
       const response = await apiClient.getProfile();
+      console.log('response', response);
       setProfile(response.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');

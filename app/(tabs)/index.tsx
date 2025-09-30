@@ -1,31 +1,119 @@
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   RefreshControl,
+  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { BookOpen } from 'lucide-react-native';
-import { useGuides } from '@/hooks/useGuides';
 import { ErrorMessage } from '@/components/ErrorMessage';
 import { GuideCard } from '@/components/GuideCard';
 import { EmptyState } from '@/components/EmptyState';
 import { LoadingState } from '@/components/LoadingState';
+import { guideApi, useApi } from '@/utils/api';
+import { useState } from 'react';
+import { Category, Guide } from '@/types';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { guides, loading, error, refreshing, refresh } = useGuides();
+  const api = useApi();
+
+  const [guides, setGuides] = useState<Guide[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const guideClient = React.useMemo(() => guideApi(api), [api]);
+
+  const fetchGuides = useCallback(
+    async (isRefresh = false) => {
+      if (!guideClient?.getAll) {
+        setError('API not available');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        if (isRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+        setError(null);
+
+        console.log('🌐 Fetching guides...');
+        const response: any = await guideClient.getAll();
+        console.log('📊 Guides API Response:', {
+          hasData: !!response?.data,
+          dataLength: response?.data?.length,
+          response: response,
+        });
+
+        if (response && response.data && Array.isArray(response.data)) {
+          const transformedGuides = response.data.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            content: item.content,
+            description:
+              item.content?.substring(0, 120) + '...' ||
+              'No description available',
+            category: 'Academics' as Category,
+            readTime: `${Math.ceil((item.content?.split(' ').length || 0) / 200)} min read`,
+            likes: item.likesCount || 0,
+            author: 'UniVibe Team',
+            createdAt: item.createdAt,
+            status: item.status,
+          }));
+          console.log('✅ Transformed guides:', transformedGuides.length);
+          setGuides(transformedGuides);
+        } else {
+          console.warn('⚠️ No valid data in response:', response);
+          setGuides([]);
+        }
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to load guides';
+        setError(errorMessage);
+        setGuides(null);
+        console.error('Error fetching guides:', err);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [guideClient]
+  );
+
+  useEffect(() => {
+    console.log('HomeScreen mounted, fetching guides...');
+    fetchGuides();
+  }, [fetchGuides]);
+
+  // Add this to see state changes
+  useEffect(() => {
+    console.log('Guides state updated:', {
+      guides,
+      loading,
+      refreshing,
+      error,
+    });
+  }, [guides, loading, refreshing, error]);
+
+  const onRefresh = useCallback(() => {
+    fetchGuides(true);
+  }, [fetchGuides]);
 
   const handleGuidePress = (guideId: string) => {
     router.push(`/guide/${guideId}`);
   };
 
   if (loading && !refreshing) {
-    return <LoadingState title="Loading guides..." />;
+    return <LoadingState title='Loading guides!!!...' />;
   }
 
   if (error) {
@@ -33,7 +121,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container}>
         <Header />
         <View style={styles.errorContainer}>
-          <ErrorMessage message={error} onRetry={refresh} />
+          <ErrorMessage message={error} onRetry={onRefresh} />
         </View>
       </SafeAreaView>
     );
@@ -46,25 +134,30 @@ export default function HomeScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        contentContainerStyle={guides.length === 0 ? styles.emptyContentContainer : undefined}
+        contentContainerStyle={
+          guides && guides.length === 0
+            ? styles.emptyContentContainer
+            : undefined
+        }
       >
-        {guides.length === 0 ? (
+        {guides && guides.length === 0 ? (
           <EmptyState
-            icon={<BookOpen size={64} color="#9ca3af" strokeWidth={1.5} />}
-            title="No Guides Available"
-            subtitle="No guides found. Pull down to refresh."
+            icon={<BookOpen size={64} color='#9ca3af' strokeWidth={1.5} />}
+            title='No Guides Available'
+            subtitle='No guides found. Pull down to refresh.'
           />
         ) : (
           <View style={styles.guidesContainer}>
-            {guides.map((guide) => (
-              <GuideCard
-                key={guide.id}
-                guide={guide}
-                onPress={() => handleGuidePress(guide.id)}
-              />
-            ))}
+            {guides &&
+              guides.map(guide => (
+                <GuideCard
+                  key={guide.id}
+                  guide={guide}
+                  onPress={() => handleGuidePress(guide.id)}
+                />
+              ))}
           </View>
         )}
       </ScrollView>

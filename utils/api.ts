@@ -1,16 +1,21 @@
 import React from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApiResponse } from '@/types/api';
-import { ForumPost } from '@/types';
+import { ApiResponse, Guide } from '@/types/api';
+import { Category, LikeResponse } from '@/types';
+import { PaginationMeta, QuestionSummary } from './types';
 
 // ------------------------
 // Base setup
 // ------------------------
-const API_BASE_URL = process.env['EXPO_PUBLIC_API_URL'] ;
 
 export interface PaginatedResponse<T> extends ApiResponse<T[]> {
-  pagination: { page: number; limit: number; total: number; totalPages: number };
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export class ApiError extends Error {
@@ -37,33 +42,6 @@ const STATUS_MESSAGES: Record<number, string> = {
   503: 'Service Unavailable',
 };
 
-const getDefaultHeaders = (token?: string) => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
-
-const handleResponse = async <T>(response: Response): Promise<T> => {
-  const contentType = response.headers.get('content-type');
-  if (!response.ok) {
-    let errorMessage = STATUS_MESSAGES[response.status] || 'Unexpected error';
-    let requestId: string | undefined;
-    try {
-      if (contentType?.includes('application/json')) {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
-        requestId = errorData.requestId;
-      }
-    } catch {}
-    throw new ApiError(errorMessage, response.status, requestId);
-  }
-  if (contentType?.includes('application/json')) return response.json();
-  return response.text() as unknown as T;
-};
-
 // ------------------------
 // ApiClient
 // ------------------------
@@ -72,13 +50,42 @@ class ApiClient {
   private token?: string;
   private pendingRequests = new Map<string, Promise<any>>();
   private requestTimestamps = new Map<string, number>();
-  private cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
+  private cache = new Map<
+    string,
+    { data: any; timestamp: number; ttl: number }
+  >();
   private readonly MIN_REQUEST_INTERVAL = 100;
   private readonly DEFAULT_CACHE_TTL = 30000; // 30 seconds
 
   constructor() {
-    this.baseURL = process.env.EXPO_PUBLIC_API_URL || '';
-    console.log('API Base URL:', this.baseURL);
+    this.baseURL =
+      process.env.EXPO_PUBLIC_API_URL ||
+      'https://univibesbackend.onrender.com/api/v1';
+    console.log('🌐 API Base URL:', this.baseURL);
+
+    // Test connection on initialization
+    this.testConnection();
+  }
+
+  private async testConnection() {
+    try {
+      const healthURL = this.baseURL.replace('/api/v1', '/health');
+      console.log('🔍 Testing connection to:', healthURL);
+
+      const response = await fetch(healthURL, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      console.log('✅ Connection test result:', {
+        url: healthURL,
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText,
+      });
+    } catch (error) {
+      console.warn('⚠️ Connection test failed:', error);
+    }
   }
 
   setToken(token: string) {
@@ -102,15 +109,15 @@ class ApiClient {
   private isRequestCached(cacheKey: string): boolean {
     const cached = this.cache.get(cacheKey);
     if (!cached) return false;
-    
+
     const now = Date.now();
     const isExpired = now - cached.timestamp > cached.ttl;
-    
+
     if (isExpired) {
       this.cache.delete(cacheKey);
       return false;
     }
-    
+
     return true;
   }
 
@@ -119,18 +126,22 @@ class ApiClient {
     return cached ? cached.data : null;
   }
 
-  private setCacheData(cacheKey: string, data: any, ttl: number = this.DEFAULT_CACHE_TTL) {
+  private setCacheData(
+    cacheKey: string,
+    data: any,
+    ttl: number = this.DEFAULT_CACHE_TTL
+  ) {
     this.cache.set(cacheKey, {
       data,
       timestamp: Date.now(),
-      ttl
+      ttl,
     });
   }
 
   private shouldThrottleRequest(requestKey: string): boolean {
     const lastRequestTime = this.requestTimestamps.get(requestKey);
     if (!lastRequestTime) return false;
-    
+
     const timeSinceLastRequest = Date.now() - lastRequestTime;
     return timeSinceLastRequest < this.MIN_REQUEST_INTERVAL;
   }
@@ -138,10 +149,10 @@ class ApiClient {
   private async waitForThrottle(requestKey: string): Promise<void> {
     const lastRequestTime = this.requestTimestamps.get(requestKey);
     if (!lastRequestTime) return;
-    
+
     const timeSinceLastRequest = Date.now() - lastRequestTime;
     const waitTime = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-    
+
     if (waitTime > 0) {
       console.log(`⏱️ Throttling request ${requestKey} for ${waitTime}ms`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -149,15 +160,15 @@ class ApiClient {
   }
 
   async request<T>(
-    endpoint: string, 
-    options: RequestInit = {}, 
+    endpoint: string,
+    options: RequestInit = {},
     useCache: boolean = true,
     cacheTTL: number = this.DEFAULT_CACHE_TTL
   ): Promise<T> {
     const method = options.method || 'GET';
     const requestKey = `${method}:${endpoint}`;
     const cacheKey = this.getCacheKey(endpoint, method);
-    
+
     // Check cache for GET requests
     if (method === 'GET' && useCache && this.isRequestCached(cacheKey)) {
       console.log('💾 Returning cached data for:', requestKey);
@@ -180,18 +191,19 @@ class ApiClient {
 
     try {
       const result = await requestPromise;
+      console.log('Make Request Result', result);
       this.requestTimestamps.set(requestKey, Date.now());
-      
+
       // Cache GET requests
       if (method === 'GET' && useCache) {
         this.setCacheData(cacheKey, result, cacheTTL);
       }
-      
+
       // Clear cache for mutations that might affect other data
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
         this.invalidateRelatedCache(endpoint);
       }
-      
+
       return result;
     } finally {
       // Clean up the pending request after a short delay
@@ -204,10 +216,13 @@ class ApiClient {
   private invalidateRelatedCache(endpoint: string) {
     // Invalidate related cache entries when data is modified
     const keysToDelete: string[] = [];
-    
+
     for (const [key] of this.cache) {
       // If creating/updating questions, invalidate questions list
-      if (endpoint.includes('/questions') && key.includes('GET:/forum/questions')) {
+      if (
+        endpoint.includes('/questions') &&
+        key.includes('GET:/forum/questions')
+      ) {
         keysToDelete.push(key);
       }
       // If creating comments, invalidate specific question cache
@@ -215,14 +230,17 @@ class ApiClient {
         keysToDelete.push(key);
       }
     }
-    
+
     keysToDelete.forEach(key => {
       console.log('🗑️ Invalidating cache:', key);
       this.cache.delete(key);
     });
   }
 
-  private async _makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async _makeRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     console.log('🌐 Making API request to:', url);
 
@@ -248,13 +266,17 @@ class ApiClient {
       if (response.status === 429) {
         console.warn('⚠️ Rate limit hit, backing off...');
         await new Promise(resolve => setTimeout(resolve, 2000));
-        throw new ApiError('Rate limit reached. Please wait a moment and try again.', 429);
+        throw new ApiError(
+          'Rate limit reached. Please wait a moment and try again.',
+          429
+        );
       }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new ApiError(
-          errorData?.message || `HTTP ${response.status}: ${response.statusText}`,
+          errorData?.message ||
+            `HTTP ${response.status}: ${response.statusText}`,
           response.status
         );
       }
@@ -263,17 +285,44 @@ class ApiClient {
       return data as T;
     } catch (error) {
       console.error('💥 Request failed:', error);
-      throw error;
+
+      // Enhanced error handling with detailed messages
+      if (error instanceof ApiError) {
+        throw error; // Re-throw ApiError as-is
+      }
+
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new ApiError(
+          'Network connection failed. Please check your internet connection.',
+          0
+        );
+      }
+
+      // Handle JSON parsing errors
+      if (error instanceof SyntaxError) {
+        throw new ApiError('Invalid response format from server.', 500);
+      }
+
+      // Generic error fallback
+      throw new ApiError(
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+        500
+      );
     }
   }
 
   // Helper methods with caching control
   async get<T>(endpoint: string, useCache: boolean = true): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET' }, useCache);
+    console.log('Currently in the get!!!');
+    const result = this.request<T>(endpoint, { method: 'GET' }, useCache);
+    console.log('The GET result', result);
+    return result;
   }
 
   async post<T>(endpoint: string, data?: any): Promise<T> {
-    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    const isFormData =
+      typeof FormData !== 'undefined' && data instanceof FormData;
     return this.request<T>(
       endpoint,
       {
@@ -286,7 +335,8 @@ class ApiClient {
   }
 
   async put<T>(endpoint: string, data?: any): Promise<T> {
-    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    const isFormData =
+      typeof FormData !== 'undefined' && data instanceof FormData;
     return this.request<T>(
       endpoint,
       {
@@ -298,7 +348,8 @@ class ApiClient {
   }
 
   async patch<T>(endpoint: string, data?: any): Promise<T> {
-    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    const isFormData =
+      typeof FormData !== 'undefined' && data instanceof FormData;
     return this.request<T>(
       endpoint,
       {
@@ -314,7 +365,10 @@ class ApiClient {
   }
 
   // Authenticated requests
-  async authenticatedRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async authenticatedRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
     if (!this.token) {
       throw new ApiError('Authentication required', 401);
     }
@@ -354,41 +408,81 @@ export const useApi = () => {
     else apiClient.clearToken();
   }, [token]);
 
-  const authenticatedRequest = React.useCallback(async <T>(fn: () => Promise<T>): Promise<T> => {
-    try {
-      return await fn();
-    } catch (error: any) {
-      if (error instanceof ApiError) {
-        if (error.status === 401) {
-          Alert.alert('Session Expired', 'Please log in again', [{ text: 'OK', onPress: logout }]);
-        } else if (error.status === 403) {
-          Alert.alert('Access Denied', "You don't have permission", [{ text: 'OK' }]);
+  const authenticatedRequest = React.useCallback(
+    async <T>(fn: () => Promise<T>): Promise<T> => {
+      try {
+        return await fn();
+      } catch (error: any) {
+        console.error('API Error Details:', {
+          message: error.message,
+          status: error.status,
+          stack: error.stack,
+          name: error.name,
+        });
+
+        if (error instanceof ApiError) {
+          if (error.status === 401) {
+            Alert.alert('Session Expired', 'Please log in again', [
+              { text: 'OK', onPress: logout },
+            ]);
+          } else if (error.status === 403) {
+            Alert.alert('Access Denied', "You don't have permission", [
+              { text: 'OK' },
+            ]);
+          } else {
+            Alert.alert(
+              'API Error',
+              `${error.message} (Status: ${error.status})`,
+              [{ text: 'OK' }]
+            );
+          }
         } else {
-          Alert.alert('Error', error.message, [{ text: 'OK' }]);
+          Alert.alert(
+            'Network Error',
+            error.message || 'Unexpected error occurred',
+            [{ text: 'OK' }]
+          );
         }
-      } else {
-        Alert.alert('Error', 'Unexpected error occurred', [{ text: 'OK' }]);
+        throw error;
       }
-      throw error;
-    }
-  }, [logout]);
+    },
+    [logout]
+  );
 
   // Return a stable API object to avoid re-creating functions every render
-  const api = React.useMemo(() => ({
-    // public
-    get: <T>(endpoint: string, useCache: boolean = true) => apiClient.get<T>(endpoint, useCache),
-    post: <T>(endpoint: string, data?: any) => apiClient.post<T>(endpoint, data),
-    put: <T>(endpoint: string, data?: any) => apiClient.put<T>(endpoint, data),
-    patch: <T>(endpoint: string, data?: any) => apiClient.patch<T>(endpoint, data),
-    delete: <T>(endpoint: string) => apiClient.delete<T>(endpoint),
+  const api = React.useMemo(
+    () => ({
+      // public
+      get: <T>(endpoint: string, useCache: boolean = false) =>
+        apiClient.get<T>(endpoint, useCache),
+      post: <T>(endpoint: string, data?: any) =>
+        apiClient.post<T>(endpoint, data),
+      put: <T>(endpoint: string, data?: any) =>
+        apiClient.put<T>(endpoint, data),
+      patch: <T>(endpoint: string, data?: any) =>
+        apiClient.patch<T>(endpoint, data),
+      delete: <T>(endpoint: string) => apiClient.delete<T>(endpoint),
 
-    // authenticated (adds JWT + handles 401/403)
-    authGet:    <T>(endpoint: string, useCache: boolean = true) => authenticatedRequest(() => apiClient.get<T>(endpoint, useCache)),
-    authPost:   <T>(endpoint: string, data?: any) => authenticatedRequest(() => apiClient.post<T>(endpoint, data)),
-    authPut:    <T>(endpoint: string, data?: any) => authenticatedRequest(() => apiClient.put<T>(endpoint, data)),
-    authPatch:  <T>(endpoint: string, data?: any) => authenticatedRequest(() => apiClient.patch<T>(endpoint, data)),
-    authDelete: <T>(endpoint: string) => authenticatedRequest(() => apiClient.delete<T>(endpoint)),
-  }), [authenticatedRequest]);
+      // authenticated (adds JWT + handles 401/403)
+      authGet: <T>(endpoint: string, useCache: boolean = true) =>
+        authenticatedRequest(() => apiClient.get<T>(endpoint, useCache)),
+      authPost: <T>(endpoint: string, data?: any) =>
+        authenticatedRequest(() => apiClient.post<T>(endpoint, data)),
+      authPut: <T>(endpoint: string, data?: any) =>
+        authenticatedRequest(() => apiClient.put<T>(endpoint, data)),
+      authPatch: <T>(endpoint: string, data?: any) =>
+        authenticatedRequest(() => apiClient.patch<T>(endpoint, data)),
+      authDelete: <T>(endpoint: string) =>
+        authenticatedRequest(() => apiClient.delete<T>(endpoint)),
+
+      // Additional methods
+      authenticatedRequest: <T>(fn: () => Promise<T>) =>
+        authenticatedRequest(fn),
+      forceRefresh: <T>(endpoint: string) =>
+        apiClient.forceRefresh<T>(endpoint),
+    }),
+    [authenticatedRequest]
+  );
 
   return api;
 };
@@ -397,17 +491,28 @@ export const useApi = () => {
 // Auth API
 // ------------------------
 export const authApi = {
-  register: (user: { name: string; fullname:string; email: string; password: string }) => apiClient.post('/auth/register', user),
-  login: (credentials: { email: string; password: string }) => apiClient.post('/auth/login', credentials),
+  register: (user: { name: string; email: string; password: string }) =>
+    apiClient.post('/auth/register', user),
+  login: (credentials: { email: string; password: string }) =>
+    apiClient.post('/auth/login', credentials),
 };
 
 // ------------------------
 // Courses API
 // ------------------------
 export const coursesApi = (api: ReturnType<typeof useApi>) => ({
-  getAll: () => api.get('/courses'),
-  getById: (id: string) => api.get(`/courses/${id}`),
-  create: (data: any) => api.authPost('/courses', data),
+  getAll: () => {
+    console.log('🌐 Fetching courses from /api/v1/courses');
+    return api.authGet<ApiResponse<any[]>>('/courses', false);
+  },
+  getById: (id: string) => {
+    console.log(`🌐 Fetching course ${id} from /api/v1/courses/${id}`);
+    return api.get<ApiResponse<any>>(`/courses/${id}`);
+  },
+  create: (data: any) => {
+    console.log('🌐 Creating course at /api/v1/courses');
+    return api.authPost<ApiResponse<any>>('/courses', data);
+  },
 });
 
 // ------------------------
@@ -480,7 +585,7 @@ export type Paginated<T> = {
 
 export const forumApi = (api: ReturnType<typeof useApi>) => ({
   // ===== QUESTIONS =====
-  
+
   /**
    * GET /api/v1/forum/questions - List All Questions
    * Supports pagination and filtering
@@ -488,8 +593,8 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   getQuestions: async (params: {
     page: number;
     pageSize: number;
-    refresh?: boolean;     // when true, bypass cache
-    category?: string;     // e.g. TECH_AND_PROGRAMMING (enum)
+    refresh?: boolean; // when true, bypass cache
+    category?: string; // e.g. TECH_AND_PROGRAMMING (enum)
     forumId?: string;
   }) => {
     const qs = new URLSearchParams();
@@ -501,7 +606,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     const endpoint = `/forum/questions${qs.toString() ? `?${qs.toString()}` : ''}`;
 
     // api.get(url, useCache). Use cache unless refresh is true.
-    return api.get(endpoint, !(params.refresh ?? false));
+    return api.authGet(endpoint, !(params.refresh ?? false));
   },
 
   /**
@@ -519,7 +624,13 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   createQuestion: async (payload: {
     title: string;
     body: string;
-    category: 'GENERAL_DISCUSSION' | 'ACADEMIC_HELP' | 'STUDENT_LIFE' | 'CAREER_AND_INTERNSHIPS' | 'TECH_AND_PROGRAMMING' | 'CAMPUS_SERVICES';
+    category:
+      | 'GENERAL_DISCUSSION'
+      | 'ACADEMIC_HELP'
+      | 'STUDENT_LIFE'
+      | 'CAREER_AND_INTERNSHIPS'
+      | 'TECH_AND_PROGRAMMING'
+      | 'CAMPUS_SERVICES';
     forumId?: string;
   }) => {
     const endpoint = `/forum/questions`;
@@ -529,15 +640,18 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   /**
    * PUT /api/v1/forum/questions/:id - Update Question (if supported)
    */
-  updateQuestion: (questionId: string, data: { 
-    title?: string; 
-    body?: string; 
-    tags?: string[];
-  }) => {
-    return api.authenticatedRequest<ApiResponse<ForumPost>>(`/forum/questions/${questionId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+  updateQuestion: (
+    questionId: string,
+    data: {
+      title?: string;
+      body?: string;
+      tags?: string[];
+    }
+  ) => {
+    return api.authPut<ApiResponse<ForumPost>>(
+      `/forum/questions/${questionId}`,
+      data
+    );
   },
 
   /**
@@ -552,21 +666,24 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   /**
    * POST /api/v1/forum/questions/:id/answers - Add Answer to Question
    */
-  addAnswer: (questionId: string, data: { 
-    body: string;
-    isAnonymous?: boolean;
-  }) => {
-    return api.authPost<ApiResponse<Answer>>(`/forum/questions/${questionId}/answers`, data);
+  addAnswer: (
+    questionId: string,
+    data: {
+      body: string;
+      isAnonymous?: boolean;
+    }
+  ) => {
+    return api.authPost<ApiResponse<Answer>>(
+      `/forum/questions/${questionId}/answers`,
+      data
+    );
   },
 
   /**
    * PUT /api/v1/forum/answers/:id - Update Answer (if supported)
    */
   updateAnswer: (answerId: string, data: { body: string }) => {
-    return api.authenticatedRequest<ApiResponse<Answer>>(`/forum/answers/${answerId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+    return api.authPut<ApiResponse<Answer>>(`/forum/answers/${answerId}`, data);
   },
 
   /**
@@ -580,7 +697,10 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * POST /api/v1/forum/answers/:id/vote - Vote on Answer (if supported)
    */
   voteAnswer: (answerId: string, vote: 'up' | 'down') => {
-    return api.authPost<ApiResponse<{ score: number }>>(`/forum/answers/${answerId}/vote`, { vote });
+    return api.authPost<ApiResponse<{ score: number }>>(
+      `/forum/answers/${answerId}/vote`,
+      { vote }
+    );
   },
 
   // ===== COMMENTS =====
@@ -596,8 +716,8 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   /**
    * POST /api/v1/forum/comments - Create Comment/Reply
    */
-  addComment: (data: { 
-    body: string; 
+  addComment: (data: {
+    body: string;
     answerId?: string;
     questionId?: string;
     parentId?: string; // For nested replies
@@ -610,10 +730,10 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * PUT /api/v1/forum/comments/:id - Update Comment (if supported)
    */
   updateComment: (commentId: string, data: { body: string }) => {
-    return api.authenticatedRequest<ApiResponse<Comment>>(`/forum/comments/${commentId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+    return api.authPut<ApiResponse<Comment>>(
+      `/forum/comments/${commentId}`,
+      data
+    );
   },
 
   /**
@@ -636,8 +756,8 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   /**
    * POST /api/v1/forum/forums - Create Forum (Admin only)
    */
-  createForum: (data: { 
-    name: string; 
+  createForum: (data: {
+    name: string;
     description?: string;
     isPrivate?: boolean;
   }) => {
@@ -659,10 +779,12 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     const queryParams = new URLSearchParams();
     queryParams.append('q', params.query);
     if (params.forumId) queryParams.append('forumId', params.forumId);
-    if (params.tags) params.tags.forEach(tag => queryParams.append('tags', tag));
+    if (params.tags)
+      params.tags.forEach(tag => queryParams.append('tags', tag));
     if (params.page) queryParams.append('page', params.page.toString());
-    if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString());
-    
+    if (params.pageSize)
+      queryParams.append('pageSize', params.pageSize.toString());
+
     const endpoint = `/forum/search?${queryParams.toString()}`;
     return api.get<ApiResponse<ForumPost[]>>(endpoint, false); // Don't cache search results
   },
@@ -673,7 +795,9 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * Force refresh specific question and clear related cache
    */
   refreshQuestion: async (questionId: string) => {
-    return api.forceRefresh<{ data: QuestionDetail }>(`/forum/questions/${questionId}`);
+    return api.forceRefresh<{ data: QuestionDetail }>(
+      `/forum/questions/${questionId}`
+    );
   },
 
   /**
@@ -682,7 +806,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   refreshQuestions: async (params?: { forumId?: string }) => {
     const queryParams = new URLSearchParams();
     if (params?.forumId) queryParams.append('forumId', params.forumId);
-    
+
     const endpoint = `/forum/questions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     return api.forceRefresh<ApiResponse<ForumPost[]>>(endpoint);
   },
@@ -721,7 +845,11 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
   },
 
   // Reply to an existing answer (backend: POST /api/v1/forum/comments)
-  replyToAnswer: async (params: { answerId: string; body: string; parentId?: string }) => {
+  replyToAnswer: async (params: {
+    answerId: string;
+    body: string;
+    parentId?: string;
+  }) => {
     return api.post('/forum/comments', {
       body: params.body,
       answerId: params.answerId,
@@ -731,7 +859,10 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
 
   // Public: list all replies tree under an answer (top-level + nested)
   getAnswerComments: async (answerId: string) => {
-    return api.get<ForumCommentNode[]>(`/forum/answers/${answerId}/comments`, true);
+    return api.get<ForumCommentNode[]>(
+      `/forum/answers/${answerId}/comments`,
+      true
+    );
   },
 });
 
@@ -782,26 +913,72 @@ export interface ForumPost {
   isResolved: boolean;
   createdAt: string;
   updatedAt: string;
+  // Additional properties for UI
+  isLiked?: boolean;
+  likes?: number;
+  status?: 'Cleared' | 'Pending' | 'Closed';
+  _count?: {
+    answers: number;
+  };
 }
 
 // ------------------------
 // Guide API - FIXED to match backend routes
 // ------------------------
 export const guideApi = (api: ReturnType<typeof useApi>) => ({
-  // Guide CRUD operations
-  getAll: () => api.get<ApiResponse<Guide[]>>('/guide'),
-  getById: (id: string) => api.get<ApiResponse<Guide>>(`/guide/${id}`),
-  create: (data: Partial<Guide>) => api.authPost<ApiResponse<Guide>>('/guide', data),
-  update: (id: string, data: Partial<Guide>) => api.authPut<ApiResponse<Guide>>(`/guide/${id}`, data),
-  delete: (id: string) => api.authDelete<ApiResponse<void>>(`/guide/${id}`),
+  // Guide CRUD operations - Fixed endpoints to match backend
+  getAll: () => {
+    console.log('🌐 Fetching guides from /api/v1/guide');
+    return api.authGet<ApiResponse<Guide[]>>('/guide');
+  },
+  getById: (id: string) => {
+    console.log(`🌐 Fetching guide ${id} from /api/v1/guide/${id}`);
+    return api.authGet<ApiResponse<Guide>>(`/guide/${id}`);
+  },
+  create: (data: Partial<Guide>) => {
+    console.log('🌐 Creating guide at /api/v1/guide');
+    return api.authPost<ApiResponse<Guide>>('/guide', data);
+  },
+  update: (id: string, data: Partial<Guide>) => {
+    console.log(`🌐 Updating guide ${id} at /api/v1/guide/${id}`);
+    return api.authPut<ApiResponse<Guide>>(`/guide/${id}`, data);
+  },
+  delete: (id: string) => {
+    console.log(`🌐 Deleting guide ${id} at /api/v1/guide/${id}`);
+    return api.authDelete<ApiResponse<void>>(`/guide/${id}`);
+  },
 
   // Like operations - using your actual backend routes
-  like: (guideId: string) => api.authPost<ApiResponse<LikeResponse>>(`/likes/guide/${guideId}/like`),
-  unlike: (guideId: string) => api.authDelete<ApiResponse<LikeResponse>>(`/likes/guide/${guideId}/like`),
-  
+  like: (guideId: string) => {
+    console.log(
+      `🌐 Liking guide ${guideId} at /api/v1/likes/guide/${guideId}/like`
+    );
+    return api.authPost<ApiResponse<LikeResponse>>(
+      `/likes/guide/${guideId}/like`
+    );
+  },
+  unlike: (guideId: string) => {
+    console.log(
+      `🌐 Unliking guide ${guideId} at /api/v1/likes/guide/${guideId}/like`
+    );
+    return api.authDelete<ApiResponse<LikeResponse>>(
+      `/likes/guide/${guideId}/like`
+    );
+  },
+
   // Alternative: Generic like endpoint (if you want to use the generic route)
-  genericLike: (guideId: string) => api.authPost<ApiResponse<LikeResponse>>(`/likes/guide/${guideId}/like`),
-  genericUnlike: (guideId: string) => api.authDelete<ApiResponse<LikeResponse>>(`/likes/guide/${guideId}/like`),
+  genericLike: (guideId: string) => {
+    console.log(`🌐 Generic like guide ${guideId}`);
+    return api.authPost<ApiResponse<LikeResponse>>(
+      `/likes/guide/${guideId}/like`
+    );
+  },
+  genericUnlike: (guideId: string) => {
+    console.log(`🌐 Generic unlike guide ${guideId}`);
+    return api.authDelete<ApiResponse<LikeResponse>>(
+      `/likes/guide/${guideId}/like`
+    );
+  },
 });
 
 // ------------------------
@@ -810,9 +987,16 @@ export const guideApi = (api: ReturnType<typeof useApi>) => ({
 export const mapApi = (api: ReturnType<typeof useApi>) => ({
   getAll: () => api.get('/map'),
   getById: (id: string) => api.get(`/map/${id}`),
-  create: (data: { name: string; coordinates: any; description?: string; category?: string }) => api.authPost('/map', data),
-  createAsAdmin: (data: { name: string; coordinates: any; status: string }) => api.authPost('/map/admin', data),
-  update: (id: string, data: { name?: string; coordinates?: any }) => api.authPut(`/map/${id}`, data),
+  create: (data: {
+    name: string;
+    coordinates: any;
+    description?: string;
+    category?: string;
+  }) => api.authPost('/map', data),
+  createAsAdmin: (data: { name: string; coordinates: any; status: string }) =>
+    api.authPost('/map/admin', data),
+  update: (id: string, data: { name?: string; coordinates?: any }) =>
+    api.authPut(`/map/${id}`, data),
   delete: (id: string) => api.authDelete(`/map/${id}`),
   getAllAsAdmin: () => api.authGet('/map/admin/all'),
   getByIdAsAdmin: (id: string) => api.authGet(`/map/admin/${id}`),
@@ -871,10 +1055,10 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
   const toBackendPayload = (data: UpdateProfileRequest) => {
     const { fullName, ...rest } = data;
     const payload: Record<string, any> = {
-      ...rest,                       // includes regNumber, nin if present
+      ...rest, // includes regNumber, nin if present
       ...(fullName !== undefined ? { fullname: fullName } : {}),
     };
-    Object.keys(payload).forEach((k) => {
+    Object.keys(payload).forEach(k => {
       const v = payload[k];
       if (v === '' || v === undefined || v === null) delete payload[k];
     });
@@ -888,7 +1072,10 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
     verifyFields: (data: VerifyFieldsRequest) =>
       api.authPatch<ProfileApiResponse>('/user/profile/verify', data),
     uploadAvatar: (formData: FormData) =>
-      api.authPost<{ data: { avatarUrl: string } }>('/user/profile/avatar', formData),
+      api.authPost<{ data: { avatarUrl: string } }>(
+        '/user/profile/avatar',
+        formData
+      ),
   };
 };
 
@@ -918,28 +1105,28 @@ const logRequest = async (endpoint: string, options?: any) => {
 
 export const testConnection = async (): Promise<boolean> => {
   const baseURL = process.env.EXPO_PUBLIC_API_URL || '';
-  
+
   try {
     // Extract the base server URL (without /api/v1)
     const serverURL = baseURL.replace('/api/v1', '');
     const healthURL = `${serverURL}/health`;
-    
+
     console.log('Testing local connection to:', healthURL);
-    
+
     const response = await fetch(healthURL, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
     });
-    
+
     console.log('Connection test result:', {
       url: healthURL,
       status: response.status,
       ok: response.ok,
-      statusText: response.statusText
+      statusText: response.statusText,
     });
-    
+
     return response.ok;
   } catch (error) {
     console.error('Local connection failed:', error);
@@ -963,31 +1150,3 @@ export const mapApiClient = (apiClient: ApiClient) => ({
     });
   },
 });
-
-// Example usage in Map Screen:
-// import { useApi, mapApiClient } from '@/utils/api';
-// 
-// export default function MapScreen() {
-//   const api = useApi();
-//   const apiClient = React.useMemo(() => mapApiClient(api), [api]);
-// 
-//   const fetchLocations = React.useCallback(async (isRefresh = false) => {
-//     // ...existing logic...
-//     const response = await apiClient.getAll();
-//     // ...rest
-//   }, [apiClient, hasAttempted, loading, refreshing]);
-// }
-
-// Example usage in Forum Screen:
-// import { useApi, forumApi } from '@/utils/api';
-// 
-// export default function ForumScreen() {
-//   const api = useApi();
-//   const apiClient = React.useMemo(() => forumApi(api), [api]);
-// 
-//   const fetchPosts = React.useCallback(async (isRefresh = false) => {
-//     // ...existing logic...
-//     const response = await apiClient.getQuestions();
-//     // ...rest
-//   }, [apiClient, hasAttempted, loading, refreshing]);
-// }
