@@ -9,6 +9,7 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { authApi } from '@/utils/api';
+import { showMessage } from 'react-native-flash-message';
 
 type AuthContextType = {
   user: any;
@@ -66,7 +67,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     } catch (err) {
       console.error('Error checking auth:', err);
-      Alert.alert('Error', 'Failed to check authentication');
+      showMessage({
+        message: 'Error',
+        description: 'Failed to check authentication.',
+        type: 'danger',
+        icon: 'danger',
+      });
     } finally {
       setLoading(false);
     }
@@ -76,52 +82,65 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setIsLoading(true);
     try {
       const response = await authApi.login(userData);
-     const { user, token } = response;  // ✅ not response.data
-    await AsyncStorage.setItem("user", JSON.stringify(user));
-    await AsyncStorage.setItem("token", token);
+      const { user, token } = response; // ✅ not response.data
+      await AsyncStorage.setItem('user', JSON.stringify(user));
+      await AsyncStorage.setItem('token', token);
 
-    setUser(user);
-    setToken(token);
+      setUser(user);
+      setToken(token);
     } catch (err) {
       console.error('Login error:', err);
-      Alert.alert('Error', 'Failed to log in');
+      showMessage({
+        message: 'Error',
+        description: 'Failed to log in.',
+        type: 'danger',
+        icon: 'danger',
+      });
       throw err;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const register = useCallback(async (userData: { name: string; email: string; password: string }) => {
-    setIsLoading(true);
-    try {
-      const response = await authApi.register(userData);
-      
-      // Handle different response structures
-      if (response.data && response.data.user && response.data.token) {
-        // Response has nested user and token
-        const { user: newUser, token: authToken } = response.data;
-        await AsyncStorage.setItem('user', JSON.stringify(newUser));
-        await AsyncStorage.setItem('token', authToken);
-        setUser(newUser);
-        setToken(authToken);
-      } else if (response.data) {
-        // Response data is the user object directly
-        const newUser = response.data;
-        await AsyncStorage.setItem('user', JSON.stringify(newUser));
-        setUser(newUser);
-        // No token in response, user needs to login
-      } else {
-        // Registration successful but no user data returned
-        console.log('Registration successful, user needs to login');
+  const register = useCallback(
+    async (userData: { name: string; email: string; password: string }) => {
+      setIsLoading(true);
+      try {
+        const response: any = await authApi.register(userData);
+
+        // Handle different response structures
+        if (response.data && response.data.user && response.data.token) {
+          // Response has nested user and token
+          const { user: newUser, token: authToken } = response.data;
+          await AsyncStorage.setItem('user', JSON.stringify(newUser));
+          await AsyncStorage.setItem('token', authToken);
+          setUser(newUser);
+          setToken(authToken);
+        } else if (response.data) {
+          // Response data is the user object directly
+          const newUser = response.data;
+          await AsyncStorage.setItem('user', JSON.stringify(newUser));
+          setUser(newUser);
+          // No token in response, user needs to login
+        } else {
+          // Registration successful but no user data returned
+          console.log('Registration successful, user needs to login');
+        }
+      } catch (err) {
+        console.error('Register error:', err);
+        showMessage({
+          message: 'Error',
+          description: 'Failed to register.',
+          type: 'danger',
+          icon: 'danger',
+        });
+        throw err;
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.error('Register error:', err);
-      Alert.alert('Error', 'Failed to register');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
   const logout = useCallback(async () => {
     try {
       await AsyncStorage.removeItem('user');
@@ -130,7 +149,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setToken(null);
     } catch (err) {
       console.error('Logout error:', err);
-      Alert.alert('Error', 'Failed to log out');
+      showMessage({
+        message: 'Error',
+        description: 'Failed to logout.',
+        type: 'danger',
+        icon: 'danger',
+      });
     }
   }, []);
 
@@ -140,7 +164,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, isLoading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, token, loading, isLoading, login, register, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

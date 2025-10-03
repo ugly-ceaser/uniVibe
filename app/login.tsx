@@ -83,20 +83,31 @@ export default function LoginScreen() {
       console.error('Login error:', error);
 
       if (error?.status === 429) {
-        Alert.alert(
-          'Too Many Attempts',
-          'Please wait a moment before trying again.'
-        );
-      } else if (error?.status === 0 || error?.message?.includes('Failed to connect')) {
-        Alert.alert(
-          'Connection Error',
-          'Cannot connect to the server. Please check your internet connection.'
-        );
+        showMessage({
+          message: 'Too Many Attempts',
+          description: 'Please wait a moment before trying again.',
+          type: 'danger',
+          icon: 'danger',
+        });
+      } else if (
+        error?.status === 0 ||
+        error?.message?.includes('Failed to connect')
+      ) {
+        showMessage({
+          message: 'Connection Error',
+          description:
+            'Cannot connect to the server. Please check your internet connection',
+          type: 'danger',
+          icon: 'danger',
+        });
       } else {
-        Alert.alert(
-          'Login Failed',
-          error?.message || 'Please check your credentials and try again.'
-        );
+        showMessage({
+          message: 'Login Failed',
+          description:
+            error?.message || 'Please check your credentials and try again.',
+          type: 'danger',
+          icon: 'danger',
+        });
       }
     } finally {
       setIsSubmitting(false);
@@ -129,7 +140,7 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps='handled'
         >
           {/* Header */}
           <View style={styles.header}>
@@ -145,12 +156,12 @@ export default function LoginScreen() {
               <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter your email"
-                placeholderTextColor="#9ca3af"
+                placeholder='Enter your email'
+                placeholderTextColor='#9ca3af'
                 value={formData.email}
                 onChangeText={value => handleInputChange('email', value)}
-                keyboardType="email-address"
-                autoCapitalize="none"
+                keyboardType='email-address'
+                autoCapitalize='none'
                 autoCorrect={false}
                 editable={!isSubmitting}
               />
@@ -160,8 +171,8 @@ export default function LoginScreen() {
               <Text style={styles.label}>Password</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter your password"
-                placeholderTextColor="#9ca3af"
+                placeholder='Enter your password'
+                placeholderTextColor='#9ca3af'
                 value={formData.password}
                 onChangeText={value => handleInputChange('password', value)}
                 secureTextEntry

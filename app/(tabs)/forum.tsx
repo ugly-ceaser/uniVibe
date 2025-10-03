@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import {
   View,
   Text,
@@ -11,22 +17,21 @@ import {
   Dimensions,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { 
-  Plus, 
-  Search, 
-  Heart, 
-  MessageCircle, 
-  Calendar, 
-  User, 
+import {
+  Plus,
+  Search,
+  Heart,
+  MessageCircle,
+  Calendar,
+  User,
   BookOpen,
   Code,
   Briefcase,
   Users,
-  HelpCircle
+  HelpCircle,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useApi, forumApi } from '../../utils/api';
-import { ForumPost } from '../../utils/types';
+import { useApi, forumApi, ForumPost } from '../../utils/api';
 
 const { width } = Dimensions.get('window');
 
@@ -35,30 +40,55 @@ type CategoryChipItem = { id: string; name: string; icon: any; color: string };
 
 // Fixed categories you requested
 const CATEGORY_DEFS: CategoryChipItem[] = [
-  { id: 'all',                 name: 'All Posts',            icon: Users,         color: '#667eea' },
-  { id: 'general-discussion',  name: 'General Discussion',   icon: MessageCircle, color: '#8b5cf6' },
-  { id: 'academic-help',       name: 'Academic Help',        icon: BookOpen,      color: '#10b981' },
-  { id: 'student-life',        name: 'Student Life',         icon: Users,         color: '#06b6d4' },
-  { id: 'career-internships',  name: 'Career & Internships', icon: Briefcase,     color: '#f59e0b' },
-  { id: 'tech-programming',    name: 'Tech & Programming',   icon: Code,          color: '#3b82f6' },
-  { id: 'campus-services',     name: 'Campus Services',      icon: HelpCircle,    color: '#ef4444' },
+  { id: 'all', name: 'All Posts', icon: Users, color: '#667eea' },
+  {
+    id: 'general-discussion',
+    name: 'General Discussion',
+    icon: MessageCircle,
+    color: '#8b5cf6',
+  },
+  {
+    id: 'academic-help',
+    name: 'Academic Help',
+    icon: BookOpen,
+    color: '#10b981',
+  },
+  { id: 'student-life', name: 'Student Life', icon: Users, color: '#06b6d4' },
+  {
+    id: 'career-internships',
+    name: 'Career & Internships',
+    icon: Briefcase,
+    color: '#f59e0b',
+  },
+  {
+    id: 'tech-programming',
+    name: 'Tech & Programming',
+    icon: Code,
+    color: '#3b82f6',
+  },
+  {
+    id: 'campus-services',
+    name: 'Campus Services',
+    icon: HelpCircle,
+    color: '#ef4444',
+  },
 ];
 
 // Map chip id -> API enum
 const CATEGORY_TO_ENUM: Record<string, string> = {
-  'general-discussion':  'GENERAL_DISCUSSION',
-  'academic-help':       'ACADEMIC_HELP',
-  'student-life':        'STUDENT_LIFE',
-  'career-internships':  'CAREER_AND_INTERNSHIPS',
-  'tech-programming':    'TECH_AND_PROGRAMMING',
-  'campus-services':     'CAMPUS_SERVICES'
+  'general-discussion': 'GENERAL_DISCUSSION',
+  'academic-help': 'ACADEMIC_HELP',
+  'student-life': 'STUDENT_LIFE',
+  'career-internships': 'CAREER_AND_INTERNSHIPS',
+  'tech-programming': 'TECH_AND_PROGRAMMING',
+  'campus-services': 'CAMPUS_SERVICES',
 };
 
 export default function ForumScreen() {
   const router = useRouter();
   const api = useApi();
   const forumClient = forumApi(api);
-  
+
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [allPosts, setAllPosts] = useState<ForumPost[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -82,96 +112,130 @@ export default function ForumScreen() {
 
   // Helper to get enum for current selection
   const getSelectedEnum = useCallback(() => {
-    return selectedCategory === 'all' ? undefined : CATEGORY_TO_ENUM[selectedCategory];
+    return selectedCategory === 'all'
+      ? undefined
+      : CATEGORY_TO_ENUM[selectedCategory];
   }, [selectedCategory]);
 
   // Stabilize fetchPosts by removing lastFetch from deps and passing category explicitly
-  const fetchPosts = useCallback(async (
-    pageNum: number = 1,
-    isRefresh: boolean = false,
-    isLoadMore: boolean = false,
-    categoryEnum?: string
-  ) => {
-    const now = Date.now();
-    if (!isRefresh && !isLoadMore && (now - lastFetchRef.current < MIN_FETCH_INTERVAL)) {
-      console.log('⏭️ Skipping fetch - too soon since last request');
-      return;
-    }
+  const fetchPosts = useCallback(
+    async (
+      pageNum: number = 1,
+      isRefresh: boolean = false,
+      isLoadMore: boolean = false,
+      categoryEnum?: string
+    ) => {
+      const now = Date.now();
+      if (
+        !isRefresh &&
+        !isLoadMore &&
+        now - lastFetchRef.current < MIN_FETCH_INTERVAL
+      ) {
+        console.log('⏭️ Skipping fetch - too soon since last request');
+        return;
+      }
 
-    try {
-      if (isRefresh) setRefreshing(true);
-      else if (isLoadMore) setLoadingMore(true);
-      else setLoading(true);
-      setError(null);
+      try {
+        if (isRefresh) setRefreshing(true);
+        else if (isLoadMore) setLoadingMore(true);
+        else setLoading(true);
+        setError(null);
 
-      console.log(`📋 Fetching posts - Page: ${pageNum}, CategoryEnum: ${categoryEnum ?? 'ALL'}`);
+        console.log(
+          `📋 Fetching posts - Page: ${pageNum}, CategoryEnum: ${categoryEnum ?? 'ALL'}`
+        );
 
-      const tryProcess = (data: any) => {
-        if (data?.questions) {
-          const newBatch: ForumPost[] = data.questions;
-          console.log('🧮 Questions received:', newBatch.length);
+        const tryProcess = (data: any) => {
+          if (data?.questions) {
+            const newBatch: ForumPost[] = data.questions;
+            console.log('🧮 Questions received:', newBatch.length);
 
-          if (isRefresh || pageNum === 1) {
-            setAllPosts(newBatch);
-            setPosts(newBatch);
-            setPage(2);
-          } else {
-            setAllPosts((prev) => {
-              const combined = [...prev, ...newBatch];
-              setPosts(combined);
-              return combined;
-            });
-            setPage(pageNum + 1);
+            if (isRefresh || pageNum === 1) {
+              setAllPosts(newBatch);
+              setPosts(newBatch);
+              setPage(2);
+            } else {
+              setAllPosts(prev => {
+                const combined = [...prev, ...newBatch];
+                setPosts(combined);
+                return combined;
+              });
+              setPage(pageNum + 1);
+            }
+
+            setHasMore(pageNum < (data.totalPages || 1));
+            lastFetchRef.current = now;
+            setLastFetch(now);
+            return true;
           }
+          return false;
+        };
 
-          setHasMore(pageNum < (data.totalPages || 1));
-          lastFetchRef.current = now;
-          setLastFetch(now);
-          return true;
-        }
-        return false;
-      };
-
-      const response = await forumClient.getQuestions({
-        page: pageNum,
-        pageSize: PAGE_SIZE,
-        refresh: isRefresh,
-        category: categoryEnum, // pass through to backend
-      } as any);
-      console.log('🧾 forum.getQuestions response.data:', response?.data);
-
-      let processed = tryProcess(response?.data);
-
-      if (!processed) {
-        console.log('♻️ Retrying with refresh to bypass cache...');
-        const fresh = await forumClient.getQuestions({
+        console.log('🌐 Fetching forum questions...');
+        const response: any = await forumClient.getQuestions({
           page: pageNum,
           pageSize: PAGE_SIZE,
-          refresh: true,
-          category: categoryEnum,
+          refresh: isRefresh,
+          category: categoryEnum, // pass through to backend
         } as any);
-        console.log('🧾 forum.getQuestions fresh.data:', fresh?.data);
-        processed = tryProcess(fresh?.data);
-      }
+        console.log('📊 Forum API Response:', {
+          hasData: !!response?.data,
+          hasQuestions: !!response?.data?.questions,
+          questionsLength: response?.data?.questions?.length,
+          response: response,
+        });
 
-      if (!processed) {
-        console.warn('⚠️ No data returned even after refresh; preserving current list');
+        let processed = tryProcess(response?.data);
+
+        if (!processed) {
+          console.log('♻️ Retrying with refresh to bypass cache...');
+          const fresh: any = await forumClient.getQuestions({
+            page: pageNum,
+            pageSize: PAGE_SIZE,
+            refresh: true,
+            category: categoryEnum,
+          } as any);
+          console.log('📊 Forum API Fresh Response:', {
+            hasData: !!fresh?.data,
+            hasQuestions: !!fresh?.data?.questions,
+            questionsLength: fresh?.data?.questions?.length,
+            response: fresh,
+          });
+          processed = tryProcess(fresh?.data);
+        }
+
+        if (!processed) {
+          console.warn(
+            '⚠️ No data returned even after refresh; preserving current list'
+          );
+        }
+      } catch (err: any) {
+        console.error('💥 Forum API Error:', {
+          message: err.message,
+          status: err.status,
+          stack: err.stack,
+          name: err.name,
+        });
+
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : 'Failed to load posts. Please try again.';
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+        setLoadingMore(false);
       }
-    } catch (err: any) {
-      console.error('💥 Error fetching posts:', err);
-      setError('Failed to load posts. Please try again.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, [forumClient]);
+    },
+    [forumClient]
+  );
 
   useEffect(() => {
     // initial load
     fetchPosts(1, false, false, getSelectedEnum());
   }, []);
-  
+
   // Replace client-side filter sync with a simple mirror of server results
   useEffect(() => {
     setPosts(allPosts);
@@ -202,7 +266,7 @@ export default function ForumScreen() {
       }
     }, [getSelectedEnum, fetchPosts])
   );
- 
+
   const onRefresh = useCallback(() => {
     console.log('🔃 Manual refresh triggered');
     fetchPosts(1, true, false, getSelectedEnum());
@@ -213,23 +277,34 @@ export default function ForumScreen() {
       console.log('⬇️ Loading more posts');
       fetchPosts(page, false, true, getSelectedEnum());
     }
-  }, [page, loadingMore, loading, hasMore, posts.length, getSelectedEnum, fetchPosts]);
- 
+  }, [
+    page,
+    loadingMore,
+    loading,
+    hasMore,
+    posts.length,
+    getSelectedEnum,
+    fetchPosts,
+  ]);
+
   // When category changes, filter immediately; no network call needed
-  const handleCategorySelect = useCallback((categoryId: string) => {
-    if (categoryId === selectedCategory) return;
-    console.log('[Forum] Category selected:', categoryId);
-    setSelectedCategory(categoryId);
-  }, [selectedCategory]);
- 
+  const handleCategorySelect = useCallback(
+    (categoryId: string) => {
+      if (categoryId === selectedCategory) return;
+      console.log('[Forum] Category selected:', categoryId);
+      setSelectedCategory(categoryId);
+    },
+    [selectedCategory]
+  );
+
   const handleLike = useCallback((postId: string) => {
-    setPosts(prevPosts => 
+    setPosts(prevPosts =>
       prevPosts.map(post => {
         if (post.id === postId) {
           return {
             ...post,
             isLiked: !post.isLiked,
-            likes: post.isLiked ? (post.likes || 0) - 1 : (post.likes || 0) + 1
+            likes: post.isLiked ? (post.likes || 0) - 1 : (post.likes || 0) + 1,
           };
         }
         return post;
@@ -237,9 +312,14 @@ export default function ForumScreen() {
     );
   }, []);
 
-  const navigateToPost = useCallback((post: ForumPost) => {
-    router.push(`/post/${post.id}?title=${encodeURIComponent(post.title || 'Untitled')}`);
-  }, [router]);
+  const navigateToPost = useCallback(
+    (post: ForumPost) => {
+      router.push(
+        `/post/${post.id}?title=${encodeURIComponent(post.title || 'Untitled')}`
+      );
+    },
+    [router]
+  );
 
   const formatDate = (dateString: string) => {
     try {
@@ -247,11 +327,11 @@ export default function ForumScreen() {
       const now = new Date();
       const diffTime = Math.abs(now.getTime() - date.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
+
       if (diffDays === 1) return 'Today';
       if (diffDays === 2) return 'Yesterday';
       if (diffDays <= 7) return `${diffDays - 1} days ago`;
-      
+
       return date.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -272,11 +352,20 @@ export default function ForumScreen() {
         activeOpacity={0.7}
       >
         <LinearGradient
-          colors={isSelected ? [item.color, item.color + '80'] : ['#ffffff', '#f8fafc']}
+          colors={
+            isSelected
+              ? [item.color, item.color + '80']
+              : ['#ffffff', '#f8fafc']
+          }
           style={styles.categoryGradient}
         >
           <Icon size={24} color={isSelected ? '#ffffff' : item.color} />
-          <Text style={[styles.categoryText, isSelected && styles.selectedCategoryText]}>
+          <Text
+            style={[
+              styles.categoryText,
+              isSelected && styles.selectedCategoryText,
+            ]}
+          >
             {item.name}
           </Text>
         </LinearGradient>
@@ -284,90 +373,102 @@ export default function ForumScreen() {
     );
   };
 
-  const renderPost = useCallback(({ item: post }: { item: ForumPost }) => {
-    if (!post?.id) return null;
+  const renderPost = useCallback(
+    ({ item: post }: { item: ForumPost }) => {
+      if (!post?.id) return null;
 
-    return (
-      <TouchableOpacity 
-        style={styles.postCard}
-        onPress={() => navigateToPost(post)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.postContent}>
-          <View style={styles.postHeader}>
-            <View style={styles.userInfo}>
-              <View style={styles.avatar}>
-                <User size={16} color="#6b7280" />
-              </View>
-              <View style={styles.userDetails}>
-                <Text style={styles.username}>
-                  {post.author?.fullname || 'Unknown User'}
-                </Text>
-                <View style={styles.postMeta}>
-                  <Calendar size={12} color="#9ca3af" />
-                  <Text style={styles.postDate}>
-                    {formatDate(post.createdAt)}
+      return (
+        <TouchableOpacity
+          style={styles.postCard}
+          onPress={() => navigateToPost(post)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.postContent}>
+            <View style={styles.postHeader}>
+              <View style={styles.userInfo}>
+                <View style={styles.avatar}>
+                  <User size={16} color='#6b7280' />
+                </View>
+                <View style={styles.userDetails}>
+                  <Text style={styles.username}>
+                    {post.author?.fullname || 'Unknown User'}
                   </Text>
-                  <View style={[styles.statusBadge, styles[`status${post.status}`]]}>
-                    <Text style={styles.statusText}>{post.status}</Text>
+                  <View style={styles.postMeta}>
+                    <Calendar size={12} color='#9ca3af' />
+                    <Text style={styles.postDate}>
+                      {formatDate(post.createdAt)}
+                    </Text>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        post.status === 'Cleared' && styles.statusCleared,
+                        post.status === 'Pending' && styles.statusPending,
+                        post.status === 'Closed' && styles.statusClosed,
+                      ]}
+                    >
+                      <Text style={styles.statusText}>{post.status}</Text>
+                    </View>
                   </View>
                 </View>
               </View>
             </View>
+
+            <Text style={styles.postTitle} numberOfLines={2}>
+              {post.title}
+            </Text>
+
+            <Text style={styles.postPreview} numberOfLines={3}>
+              {post.body}
+            </Text>
+
+            <View style={styles.postActions}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={e => {
+                  e.stopPropagation();
+                  handleLike(post.id);
+                }}
+              >
+                <Heart
+                  size={16}
+                  color={post.isLiked ? '#ef4444' : '#9ca3af'}
+                  fill={post.isLiked ? '#ef4444' : 'none'}
+                />
+                <Text
+                  style={[styles.actionText, post.isLiked && styles.likedText]}
+                >
+                  {post.likes || 0}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={e => e.stopPropagation()}
+              >
+                <MessageCircle size={16} color='#9ca3af' />
+                <Text style={styles.actionText}>
+                  {post._count?.answers || 0} answers
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionButton}>
+                <HelpCircle size={16} color='#9ca3af' />
+                <Text style={styles.actionText}>Help</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-
-          <Text style={styles.postTitle} numberOfLines={2}>
-            {post.title}
-          </Text>
-          
-          <Text style={styles.postPreview} numberOfLines={3}>
-            {post.body}
-          </Text>
-
-          <View style={styles.postActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleLike(post.id);
-              }}
-            >
-              <Heart 
-                size={16} 
-                color={post.isLiked ? "#ef4444" : "#9ca3af"} 
-                fill={post.isLiked ? "#ef4444" : "none"}
-              />
-              <Text style={[styles.actionText, post.isLiked && styles.likedText]}>
-                {post.likes || 0}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <MessageCircle size={16} color="#9ca3af" />
-              <Text style={styles.actionText}>
-                {post._count?.answers || 0} answers
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionButton}>
-              <HelpCircle size={16} color="#9ca3af" />
-              <Text style={styles.actionText}>Help</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [handleLike, navigateToPost]);
+        </TouchableOpacity>
+      );
+    },
+    [handleLike, navigateToPost]
+  );
 
   const renderFooter = useCallback(() => {
     if (!loadingMore) return null;
-    
+
     return (
       <View style={styles.loadingMore}>
-        <ActivityIndicator size="small" color="#667eea" />
+        <ActivityIndicator size='small' color='#667eea' />
         <Text style={styles.loadingMoreText}>Loading more posts...</Text>
       </View>
     );
@@ -375,10 +476,10 @@ export default function ForumScreen() {
 
   const renderEmpty = useCallback(() => {
     if (loading) return null;
-    
+
     return (
       <View style={styles.emptyState}>
-        <MessageCircle size={64} color="#d1d5db" />
+        <MessageCircle size={64} color='#d1d5db' />
         <Text style={styles.emptyTitle}>No Posts Yet</Text>
         <Text style={styles.emptyDescription}>
           Be the first to start a discussion in this category!
@@ -394,13 +495,13 @@ export default function ForumScreen() {
           <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>Forum</Text>
             <TouchableOpacity style={styles.searchButton}>
-              <Search size={20} color="#ffffff" />
+              <Search size={20} color='#ffffff' />
             </TouchableOpacity>
           </View>
         </LinearGradient>
-        
+
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#667eea" />
+          <ActivityIndicator size='large' color='#667eea' />
           <Text style={styles.loadingText}>Loading forum...</Text>
         </View>
       </SafeAreaView>
@@ -413,7 +514,7 @@ export default function ForumScreen() {
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Forum</Text>
           <TouchableOpacity style={styles.searchButton}>
-            <Search size={20} color="#ffffff" />
+            <Search size={20} color='#ffffff' />
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -422,7 +523,7 @@ export default function ForumScreen() {
       <View style={styles.categoriesSection}>
         <FlatList
           data={CATEGORY_DEFS}
-          keyExtractor={(item) => item.id}
+          keyExtractor={item => item.id}
           renderItem={renderCategoryItem}
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -431,7 +532,7 @@ export default function ForumScreen() {
         />
         {isCategoryLoading && (
           <View style={styles.categoriesSpinner}>
-            <ActivityIndicator size="small" color="#667eea" />
+            <ActivityIndicator size='small' color='#667eea' />
             <Text style={styles.categoriesSpinnerText}>Loading…</Text>
           </View>
         )}
@@ -440,7 +541,7 @@ export default function ForumScreen() {
       {/* Page-level loading banner */}
       {isPageLoadingBanner && (
         <View style={styles.pageLoadingBanner}>
-          <ActivityIndicator size="small" color="#667eea" />
+          <ActivityIndicator size='small' color='#667eea' />
           <Text style={styles.pageLoadingText}>Loading posts…</Text>
         </View>
       )}
@@ -448,14 +549,14 @@ export default function ForumScreen() {
       {/* Posts List (uses filtered posts state) */}
       <FlatList
         data={posts}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         renderItem={renderPost}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={['#667eea']}
-            tintColor="#667eea"
+            tintColor='#667eea'
           />
         }
         onEndReached={onLoadMore}
@@ -474,7 +575,10 @@ export default function ForumScreen() {
       {error && !refreshing && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => fetchPosts(1)} style={styles.retryButton}>
+          <TouchableOpacity
+            onPress={() => fetchPosts(1)}
+            style={styles.retryButton}
+          >
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -484,11 +588,14 @@ export default function ForumScreen() {
       <TouchableOpacity
         style={styles.postBtn}
         onPress={() => router.push('/create-post')}
-        accessibilityRole="button"
-        accessibilityLabel="Post a question"
+        accessibilityRole='button'
+        accessibilityLabel='Post a question'
       >
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.postBtnGradient}>
-          <Plus size={20} color="#ffffff" />
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.postBtnGradient}
+        >
+          <Plus size={20} color='#ffffff' />
           <Text style={styles.postBtnText}>Post a Question</Text>
         </LinearGradient>
       </TouchableOpacity>
@@ -534,7 +641,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6b7280',
   },
-  
+
   // Categories Section (Similar to Guide)
   categoriesSection: {
     backgroundColor: '#ffffff',
@@ -594,7 +701,7 @@ const styles = StyleSheet.create({
   selectedCategoryText: {
     color: '#ffffff',
   },
-  
+
   // Posts Section
   postsContainer: {
     padding: 16,
@@ -699,7 +806,7 @@ const styles = StyleSheet.create({
   likedText: {
     color: '#ef4444',
   },
-  
+
   // Loading & Empty States
   loadingMore: {
     flexDirection: 'row',
@@ -730,7 +837,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  
+
   // Error & FAB
   errorBanner: {
     position: 'absolute',

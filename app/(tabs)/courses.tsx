@@ -24,10 +24,10 @@ interface Course {
 
 export default function CoursesScreen() {
   const router = useRouter();
-  const { get } = useApi(); // useApi hook
+  const { authGet } = useApi(); // useApi hook
   const [selectedSemester, setSelectedSemester] = useState<1 | 2>(1);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,9 +36,21 @@ export default function CoursesScreen() {
         setLoading(true);
         setError(null);
 
-        // Use the unified API hook
-        const response = await get<{ data: Course[] }>('/courses');
-        setCourses(response.data || []);
+        console.log('🌐 Fetching courses...');
+        const response = await authGet<{ data: Course[] }>('/courses');
+        console.log('📊 Courses API Response:', {
+          hasData: !!response?.data,
+          dataLength: response?.data?.length,
+          response: response,
+        });
+
+        if (response && response.data && Array.isArray(response.data)) {
+          console.log('✅ Courses loaded:', response.data.length);
+          setCourses(response.data);
+        } else {
+          console.warn('⚠️ No valid courses data in response:', response);
+          setCourses([]);
+        }
       } catch (err) {
         console.error('Error fetching courses:', err);
         setError('Failed to load courses. Please try again later.');
@@ -48,14 +60,15 @@ export default function CoursesScreen() {
     };
 
     fetchCourses();
-  }, [get]);
+  }, []);
 
   const semesterCourses = courses.filter(
     course => course.semester === selectedSemester
   );
 
   const totalUnits = semesterCourses.reduce(
-    (total, course) => total + (typeof course.unitLoad === 'number' ? course.unitLoad : 0),
+    (total, course) =>
+      total + (typeof course.unitLoad === 'number' ? course.unitLoad : 0),
     0
   );
 
@@ -76,8 +89,8 @@ export default function CoursesScreen() {
           </Text>
         </LinearGradient>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#667eea" />
-          <Text style={styles.loadingText}>Loading courses...</Text>
+          <ActivityIndicator size='large' color='#667eea' />
+          <Text style={styles.loadingText}>Loading courses!!!...</Text>
         </View>
       </SafeAreaView>
     );
@@ -144,7 +157,7 @@ export default function CoursesScreen() {
                 </View>
                 <Text style={styles.courseName}>{course.name}</Text>
               </View>
-              <ChevronRight size={20} color="#9ca3af" strokeWidth={2} />
+              <ChevronRight size={20} color='#9ca3af' strokeWidth={2} />
             </TouchableOpacity>
           ))}
         </View>
@@ -166,9 +179,7 @@ export default function CoursesScreen() {
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>
-                    {totalUnits}
-                  </Text>
+                  <Text style={styles.statNumber}>{totalUnits}</Text>
                   <Text style={styles.statLabel}>Total Units</Text>
                 </View>
               </View>
@@ -179,7 +190,6 @@ export default function CoursesScreen() {
     </SafeAreaView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
