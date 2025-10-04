@@ -253,11 +253,11 @@ export default function MapScreen() {
       const sampleLocation = {
         name: `Sample Location ${Date.now()}`, // Make it unique
         coordinates: {
-          latitude: '40.7589',
-          longitude: '-73.9851',
+          latitude: 40.7589,
+          longitude: -73.9851,
         },
         description: 'Sample campus location for testing',
-        category: 'Academic',
+        category: 'Lecture Hall' as const,
       };
 
       console.log('Creating sample location:', sampleLocation);
@@ -278,15 +278,15 @@ export default function MapScreen() {
     : locations;
 
   // Get unique categories
-  const categories = [...new Set(locations.map(loc => loc.category).filter(Boolean))];
+  const categories = [...new Set(locations.map(loc => loc.category).filter((cat): cat is string => Boolean(cat)))];
 
   // Initial loading state (only on first load)
   if (loading && !hasInitialLoaded.current) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-          <Text style={styles.headerTitle}>Campus Locations</Text>
-          <Text style={styles.headerSubtitle}>Find places around campus</Text>
+          <Text style={styles.headerTitle}>Campus Map</Text>
+          <Text style={styles.headerSubtitle}>Find and navigate to places around campus</Text>
         </LinearGradient>
         
         <View style={styles.loadingContainer}>
@@ -301,12 +301,9 @@ export default function MapScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <Text style={styles.headerTitle}>Campus Locations</Text>
+        <Text style={styles.headerTitle}>Campus Map</Text>
         <Text style={styles.headerSubtitle}>
-          {locations.length === 0 
-            ? 'No locations available yet' 
-            : `${filteredLocations.length} place${filteredLocations.length !== 1 ? 's' : ''} found`
-          }
+          Find and navigate to places around campus
         </Text>
       </LinearGradient>
 

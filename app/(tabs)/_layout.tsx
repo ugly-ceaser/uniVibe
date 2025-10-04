@@ -6,7 +6,7 @@ import {
   BookOpen,
   User,
 } from 'lucide-react-native';
-import GlobalChatButton from '@/components/GlobalChatButton';
+
 import { View, StyleSheet } from 'react-native';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -87,7 +87,7 @@ export default function TabLayout() {
             }}
           />
         </Tabs>
-        {showFab ? <GlobalChatButton /> : null}
+      
       </View>
     </ErrorBoundary>
   );

@@ -83,9 +83,9 @@ export default function CoursesScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-          <Text style={styles.headerTitle}>CS Year 1 Courses</Text>
+          <Text style={styles.headerTitle}>My Courses</Text>
           <Text style={styles.headerSubtitle}>
-            Computer Science curriculum overview
+            View your semester courses and academic details
           </Text>
         </LinearGradient>
         <View style={styles.loadingContainer}>
@@ -99,9 +99,9 @@ export default function CoursesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <Text style={styles.headerTitle}>CS Year 1 Courses</Text>
+        <Text style={styles.headerTitle}>My Courses</Text>
         <Text style={styles.headerSubtitle}>
-          Computer Science curriculum overview
+          View your semester courses and academic details
         </Text>
       </LinearGradient>
 

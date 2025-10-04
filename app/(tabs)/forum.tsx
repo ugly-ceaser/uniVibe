@@ -15,6 +15,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -100,15 +101,20 @@ export default function ForumScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [lastFetch, setLastFetch] = useState(0);
   const lastFetchRef = useRef(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchInput, setShowSearchInput] = useState(false);
+  const [searchResults, setSearchResults] = useState<ForumPost[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [categories, setCategories] = useState<CategoryChipItem[]>(CATEGORY_DEFS);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const categoriesFetchedRef = useRef(false);
 
   const PAGE_SIZE = 20;
-  const MIN_FETCH_INTERVAL = 5000;
+  const MIN_FETCH_INTERVAL = 10000; // Increased to 10 seconds to reduce rate limiting
 
-  // Show a spinner on the categories row while fetching page 1 or refreshing
-  const isCategoryLoading = refreshing || (loading && page === 1);
-
-  // Page-level loading banner (not shown during load-more)
-  const isPageLoadingBanner = (loading || refreshing) && !loadingMore;
+  // Unified loading state - show single loading indicator when needed
+  const showLoadingBanner = (loading || refreshing) && !loadingMore;
 
   // Helper to get enum for current selection
   const getSelectedEnum = useCallback(() => {
@@ -123,7 +129,8 @@ export default function ForumScreen() {
       pageNum: number = 1,
       isRefresh: boolean = false,
       isLoadMore: boolean = false,
-      categoryEnum?: string
+      categoryEnum?: string,
+      retryCount: number = 0
     ) => {
       const now = Date.now();
       if (
@@ -217,8 +224,20 @@ export default function ForumScreen() {
           name: err.name,
         });
 
-        const errorMessage =
-          err instanceof Error
+        // Handle rate limiting with exponential backoff
+        if (err.status === 429 && retryCount < 3) {
+          const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+          console.log(`⏰ Rate limited. Retrying in ${delayMs}ms (attempt ${retryCount + 1}/3)`);
+          
+          setTimeout(() => {
+            fetchPosts(pageNum, isRefresh, isLoadMore, categoryEnum, retryCount + 1);
+          }, delayMs);
+          return;
+        }
+
+        const errorMessage = err.status === 429 
+          ? 'Too many requests. Please wait a moment and try again.'
+          : err instanceof Error
             ? err.message
             : 'Failed to load posts. Please try again.';
         setError(errorMessage);
@@ -236,6 +255,8 @@ export default function ForumScreen() {
     fetchPosts(1, false, false, getSelectedEnum());
   }, []);
 
+  // This useEffect will be moved after fetchCategories is defined
+
   // Replace client-side filter sync with a simple mirror of server results
   useEffect(() => {
     setPosts(allPosts);
@@ -251,26 +272,10 @@ export default function ForumScreen() {
     // NOTE: do NOT include fetchPosts in deps to avoid infinite loop
   }, [selectedCategory]);
 
-  // Refresh when screen comes into focus (but not too frequently)
-  const didFocusOnce = useRef(false);
-  useFocusEffect(
-    useCallback(() => {
-      if (!didFocusOnce.current) {
-        didFocusOnce.current = true;
-        return;
-      }
-      const now = Date.now();
-      if (now - lastFetchRef.current > MIN_FETCH_INTERVAL * 2) {
-        console.log('🔄 Screen focused - refreshing posts');
-        fetchPosts(1, true, false, getSelectedEnum());
-      }
-    }, [getSelectedEnum, fetchPosts])
-  );
+  // Remove automatic focus refresh to prevent rate limiting
+  // Categories and posts will only refresh on manual pull-to-refresh
 
-  const onRefresh = useCallback(() => {
-    console.log('🔃 Manual refresh triggered');
-    fetchPosts(1, true, false, getSelectedEnum());
-  }, [getSelectedEnum, fetchPosts]);
+  // onRefresh will be defined after fetchCategories
 
   const onLoadMore = useCallback(() => {
     if (!loadingMore && !loading && hasMore && posts.length > 0) {
@@ -297,20 +302,7 @@ export default function ForumScreen() {
     [selectedCategory]
   );
 
-  const handleLike = useCallback((postId: string) => {
-    setPosts(prevPosts =>
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          return {
-            ...post,
-            isLiked: !post.isLiked,
-            likes: post.isLiked ? (post.likes || 0) - 1 : (post.likes || 0) + 1,
-          };
-        }
-        return post;
-      })
-    );
-  }, []);
+
 
   const navigateToPost = useCallback(
     (post: ForumPost) => {
@@ -320,6 +312,139 @@ export default function ForumScreen() {
     },
     [router]
   );
+
+  const handleSearch = useCallback(async (query: string, retryCount: number = 0) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+      const response = await forumClient.searchQuestions({
+        query: query.trim(),
+        page: 1,
+        pageSize: 20,
+      });
+      
+      const results = response?.data || [];
+      setSearchResults(results);
+    } catch (error: any) {
+      console.error('Search failed:', error);
+      
+      // Handle rate limiting for search
+      if (error.status === 429 && retryCount < 2) {
+        const delayMs = Math.pow(2, retryCount) * 1500; // 1.5s, 3s
+        console.log(`⏰ Search rate limited. Retrying in ${delayMs}ms`);
+        
+        setTimeout(() => {
+          handleSearch(query, retryCount + 1);
+        }, delayMs);
+        return;
+      }
+      
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [forumClient]);
+
+  const toggleSearch = useCallback(() => {
+    setShowSearchInput(!showSearchInput);
+    if (showSearchInput) {
+      // Closing search - clear results
+      setSearchQuery('');
+      setSearchResults([]);
+      setIsSearching(false);
+    }
+  }, [showSearchInput]);
+
+  const fetchCategories = useCallback(async (retryCount: number = 0) => {
+    try {
+      setLoadingCategories(true);
+      const response = await forumClient.listCategories();
+      const fetchedCategories = response?.data || [];
+      
+      // Combine static 'All Posts' with dynamic categories
+      const dynamicCategories: CategoryChipItem[] = [
+        { id: 'all', name: 'All Posts', icon: Users, color: '#667eea' },
+        ...fetchedCategories.map((cat: any) => ({
+          id: cat.slug || cat.id,
+          name: cat.name,
+          icon: getIconForCategory(cat.name),
+          color: getColorForCategory(cat.name)
+        }))
+      ];
+      
+      setCategories(dynamicCategories);
+    } catch (error: any) {
+      console.error('Failed to fetch categories:', error);
+      
+      // Handle rate limiting for categories
+      if (error.status === 429 && retryCount < 2) {
+        const delayMs = Math.pow(2, retryCount) * 3000; // 3s, 6s
+        console.log(`⏰ Categories rate limited. Retrying in ${delayMs}ms (attempt ${retryCount + 1}/2)`);
+        
+        setTimeout(() => {
+          fetchCategories(retryCount + 1);
+        }, delayMs);
+        return;
+      }
+      
+      // Keep using static categories on error or max retries reached
+      console.log('🔄 Using static categories due to API issues');
+    } finally {
+      setLoadingCategories(false);
+    }
+  }, [forumClient]);
+
+  // onRefresh callback to refresh both posts and categories
+  const onRefresh = useCallback(() => {
+    console.log('🔃 Manual refresh triggered');
+    fetchPosts(1, true, false, getSelectedEnum());
+    // Also refresh categories on manual pull-to-refresh
+    fetchCategories();
+  }, [getSelectedEnum, fetchPosts, fetchCategories]);
+
+  // Fetch categories only once on initial load
+  useEffect(() => {
+    if (!categoriesFetchedRef.current) {
+      categoriesFetchedRef.current = true;
+      fetchCategories();
+    }
+  }, [fetchCategories]);
+
+  const getIconForCategory = (categoryName: string) => {
+    const name = categoryName.toLowerCase();
+    if (name.includes('academic') || name.includes('help')) return BookOpen;
+    if (name.includes('career') || name.includes('internship')) return Briefcase;
+    if (name.includes('tech') || name.includes('programming')) return Code;
+    if (name.includes('student') || name.includes('life')) return Users;
+    if (name.includes('campus') || name.includes('service')) return HelpCircle;
+    return MessageCircle;
+  };
+
+  const getColorForCategory = (categoryName: string) => {
+    const name = categoryName.toLowerCase();
+    if (name.includes('academic')) return '#10b981';
+    if (name.includes('career')) return '#f59e0b';
+    if (name.includes('tech')) return '#3b82f6';
+    if (name.includes('student')) return '#06b6d4';
+    if (name.includes('campus')) return '#ef4444';
+    return '#8b5cf6';
+  };
+
+  // onRefresh and useEffect for categories will be defined after fetchCategories
+
+  // Cleanup search timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const formatDate = (dateString: string) => {
     try {
@@ -391,23 +516,14 @@ export default function ForumScreen() {
                 </View>
                 <View style={styles.userDetails}>
                   <Text style={styles.username}>
-                    {post.author?.fullname || 'Unknown User'}
+                    {post.author.fullname || 'Unknown User'}
                   </Text>
                   <View style={styles.postMeta}>
                     <Calendar size={12} color='#9ca3af' />
                     <Text style={styles.postDate}>
                       {formatDate(post.createdAt)}
                     </Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        post.status === 'Cleared' && styles.statusCleared,
-                        post.status === 'Pending' && styles.statusPending,
-                        post.status === 'Closed' && styles.statusClosed,
-                      ]}
-                    >
-                      <Text style={styles.statusText}>{post.status}</Text>
-                    </View>
+                   
                   </View>
                 </View>
               </View>
@@ -422,25 +538,6 @@ export default function ForumScreen() {
             </Text>
 
             <View style={styles.postActions}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={e => {
-                  e.stopPropagation();
-                  handleLike(post.id);
-                }}
-              >
-                <Heart
-                  size={16}
-                  color={post.isLiked ? '#ef4444' : '#9ca3af'}
-                  fill={post.isLiked ? '#ef4444' : 'none'}
-                />
-                <Text
-                  style={[styles.actionText, post.isLiked && styles.likedText]}
-                >
-                  {post.likes || 0}
-                </Text>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={e => e.stopPropagation()}
@@ -460,7 +557,7 @@ export default function ForumScreen() {
         </TouchableOpacity>
       );
     },
-    [handleLike, navigateToPost]
+    [navigateToPost]
   );
 
   const renderFooter = useCallback(() => {
@@ -488,13 +585,19 @@ export default function ForumScreen() {
     );
   }, [loading]);
 
-  if (loading && posts.length === 0) {
+  // Show full loading screen only on initial load
+  if (loading && !refreshing && posts.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Forum</Text>
-            <TouchableOpacity style={styles.searchButton}>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerTitle}>Student Forum</Text>
+              <Text style={styles.headerSubtitle}>
+                Ask questions and share knowledge with peers
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.searchButton} onPress={toggleSearch}>
               <Search size={20} color='#ffffff' />
             </TouchableOpacity>
           </View>
@@ -512,17 +615,50 @@ export default function ForumScreen() {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Forum</Text>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Student Forum</Text>
+            <Text style={styles.headerSubtitle}>
+              Ask questions and share knowledge with peers
+            </Text>
+          </View>
           <TouchableOpacity style={styles.searchButton}>
             <Search size={20} color='#ffffff' />
           </TouchableOpacity>
         </View>
       </LinearGradient>
 
+      {/* Search Input Section */}
+      {showSearchInput && (
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search questions..."
+            value={searchQuery}
+            onChangeText={(text: string) => {
+              setSearchQuery(text);
+              
+              // Clear previous timeout
+              if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+              }
+              
+              // Debounce search - wait 800ms after user stops typing
+              searchTimeoutRef.current = setTimeout(() => {
+                handleSearch(text);
+              }, 800);
+            }}
+            autoFocus
+          />
+          {isSearching && (
+            <ActivityIndicator size="small" color="#667eea" style={styles.searchSpinner} />
+          )}
+        </View>
+      )}
+
       {/* Categories Section - Dynamic chips (same screen) */}
       <View style={styles.categoriesSection}>
         <FlatList
-          data={CATEGORY_DEFS}
+          data={categories}
           keyExtractor={item => item.id}
           renderItem={renderCategoryItem}
           horizontal
@@ -530,25 +666,21 @@ export default function ForumScreen() {
           contentContainerStyle={styles.categoriesContainer}
           extraData={selectedCategory} // ensure chip highlight re-renders
         />
-        {isCategoryLoading && (
-          <View style={styles.categoriesSpinner}>
-            <ActivityIndicator size='small' color='#667eea' />
-            <Text style={styles.categoriesSpinnerText}>Loading…</Text>
-          </View>
-        )}
       </View>
 
-      {/* Page-level loading banner */}
-      {isPageLoadingBanner && (
+      {/* Unified loading banner - shows for initial load or refresh */}
+      {showLoadingBanner && (
         <View style={styles.pageLoadingBanner}>
           <ActivityIndicator size='small' color='#667eea' />
-          <Text style={styles.pageLoadingText}>Loading posts…</Text>
+          <Text style={styles.pageLoadingText}>
+            {refreshing ? 'Refreshing...' : 'Loading posts...'}
+          </Text>
         </View>
       )}
 
-      {/* Posts List (uses filtered posts state) */}
+      {/* Posts List (uses filtered posts state or search results) */}
       <FlatList
-        data={posts}
+        data={showSearchInput && searchQuery.trim() ? searchResults : posts}
         keyExtractor={item => item.id}
         renderItem={renderPost}
         refreshControl={
@@ -618,10 +750,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerTextContainer: {
+    flex: 1,
+  },
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   searchButton: {
     width: 40,
@@ -652,25 +792,6 @@ const styles = StyleSheet.create({
   },
   categoriesContainer: {
     paddingHorizontal: 16,
-  },
-  categoriesSpinner: {
-    position: 'absolute',
-    right: 16,
-    top: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  categoriesSpinnerText: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '500',
   },
   categoryCard: {
     marginRight: 12,
@@ -803,9 +924,6 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontWeight: '500',
   },
-  likedText: {
-    color: '#ef4444',
-  },
 
   // Loading & Empty States
   loadingMore: {
@@ -894,6 +1012,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginLeft: 8,
+  },
+  
+  // Search styles
+  searchContainer: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  searchSpinner: {
+    marginLeft: 12,
   },
   pageLoadingBanner: {
     flexDirection: 'row',

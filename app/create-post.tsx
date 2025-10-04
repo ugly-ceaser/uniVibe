@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ArrowLeft } from 'lucide-react-native';
 import { forumApi, useApi } from '@/utils/api';
 
 type CategoryEnum =
@@ -93,7 +94,17 @@ export default function CreatePostScreen() {
         </View>
       ) : null}
 
-      <Stack.Screen options={{ headerShown: true, title: 'Post a Question' }} />
+      {/* Custom Header */}
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Post a Question</Text>
+      </LinearGradient>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>Title</Text>
         <TextInput
@@ -168,6 +179,27 @@ export default function CreatePostScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
+  header: {
+    paddingTop: 20,
+    paddingBottom: 30,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
   content: { padding: 16, gap: 12 },
   label: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 8 },
   input: {

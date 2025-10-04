@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { ApiResponse, Guide } from '@/types/api';
 import { Category, LikeResponse } from '@/types';
-import { PaginationMeta, QuestionSummary } from './types';
+import { PaginationMeta, QuestionSummary, UserProfile, UpdateProfileRequest, VerifyFieldsRequest, ProfileApiResponse, MapLocation, MapApiClient } from './types';
 
 // ------------------------
 // Base setup
@@ -60,7 +60,7 @@ class ApiClient {
   constructor() {
     this.baseURL =
       process.env.EXPO_PUBLIC_API_URL ||
-      'https://univibesbackend.onrender.com/api/v1';
+      'http://localhost:3000/api/v1';
     console.log('🌐 API Base URL:', this.baseURL);
 
     // Test connection on initialization
@@ -100,6 +100,22 @@ class ApiClient {
   private clearCache() {
     this.cache.clear();
     this.pendingRequests.clear();
+  }
+
+  // 🐛 Debug method to clear all pending requests
+  public clearPendingRequests() {
+    console.log('🧹 Clearing all pending requests:', Array.from(this.pendingRequests.keys()));
+    this.pendingRequests.clear();
+  }
+
+  // 🐛 Debug method to get current state
+  public getDebugInfo() {
+    return {
+      pendingRequests: Array.from(this.pendingRequests.keys()),
+      cacheKeys: Array.from(this.cache.keys()),
+      baseURL: this.baseURL,
+      hasToken: !!this.token,
+    };
   }
 
   private getCacheKey(endpoint: string, method: string = 'GET'): string {
@@ -175,10 +191,25 @@ class ApiClient {
       return this.getCachedData<T>(cacheKey)!;
     }
 
-    // If there's already a pending request for this exact endpoint, return it
+    // 🔧 FIXED: Better deduplication with promise resolution tracking
     if (this.pendingRequests.has(requestKey)) {
       console.log('🔄 Deduplicating request:', requestKey);
-      return this.pendingRequests.get(requestKey)!;
+      const existingPromise = this.pendingRequests.get(requestKey)!;
+      
+      // Check if the existing promise is still pending
+      try {
+        const result = await Promise.race([
+          existingPromise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 10000)
+          )
+        ]);
+        return result;
+      } catch (error) {
+        // If the existing promise failed or timed out, remove it and continue with new request
+        console.warn('⚠️ Existing request failed, creating new one:', error);
+        this.pendingRequests.delete(requestKey);
+      }
     }
 
     // Check if we need to throttle this request
@@ -186,12 +217,13 @@ class ApiClient {
       await this.waitForThrottle(requestKey);
     }
 
+    console.log('🚀 Creating new request for:', requestKey);
     const requestPromise = this._makeRequest<T>(endpoint, options);
     this.pendingRequests.set(requestKey, requestPromise);
 
     try {
       const result = await requestPromise;
-      console.log('Make Request Result', result);
+      console.log('✅ Request completed for:', requestKey, 'Result:', result);
       this.requestTimestamps.set(requestKey, Date.now());
 
       // Cache GET requests
@@ -205,11 +237,13 @@ class ApiClient {
       }
 
       return result;
+    } catch (error) {
+      console.error('💥 Request failed for:', requestKey, error);
+      throw error;
     } finally {
-      // Clean up the pending request after a short delay
-      setTimeout(() => {
-        this.pendingRequests.delete(requestKey);
-      }, 1000);
+      // Clean up the pending request immediately after completion
+      this.pendingRequests.delete(requestKey);
+      console.log('🧹 Cleaned up pending request:', requestKey);
     }
   }
 
@@ -243,6 +277,12 @@ class ApiClient {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     console.log('🌐 Making API request to:', url);
+    console.log('🔍 [DEBUG] Request options:', {
+      method: options.method || 'GET',
+      hasToken: !!this.token,
+      tokenLength: this.token?.length || 0,
+      headers: options.headers,
+    });
 
     // Build headers safely so we don't force JSON for FormData
     const mergedHeaders: Record<string, string> = {
@@ -255,13 +295,28 @@ class ApiClient {
       mergedHeaders['Authorization'] = `Bearer ${this.token}`;
     }
 
+    console.log('🔍 [DEBUG] Final headers:', mergedHeaders);
+
     try {
-      const response = await fetch(url, {
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.warn('⏰ Request timeout after 30 seconds');
+        controller.abort();
+      }, 30000); // 30 second timeout
+
+      const fetchOptions = {
         ...options,
         headers: mergedHeaders,
-      });
+        signal: controller.signal,
+      };
 
-      console.log('📊 Response status:', response.status);
+      console.log('🚀 [DEBUG] Starting fetch request...');
+      const response = await fetch(url, fetchOptions);
+      
+      clearTimeout(timeoutId);
+      console.log('📊 Response received with status:', response.status);
+      console.log('🔍 [DEBUG] Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (response.status === 429) {
         console.warn('⚠️ Rate limit hit, backing off...');
@@ -273,7 +328,20 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
+        console.error('❌ [DEBUG] Non-OK response:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+        });
+        
+        let errorData = null;
+        try {
+          errorData = await response.json();
+          console.log('🔍 [DEBUG] Error response body:', errorData);
+        } catch (jsonError) {
+          console.warn('⚠️ Could not parse error response as JSON:', jsonError);
+        }
+        
         throw new ApiError(
           errorData?.message ||
             `HTTP ${response.status}: ${response.statusText}`,
@@ -281,14 +349,35 @@ class ApiClient {
         );
       }
 
+      console.log('📦 [DEBUG] Parsing response JSON...');
       const data = await response.json();
+      console.log('✅ [DEBUG] Response data parsed successfully:', {
+        dataType: typeof data,
+        hasData: !!data?.data,
+        dataKeys: data ? Object.keys(data) : [],
+        dataLength: Array.isArray(data?.data) ? data.data.length : 'N/A',
+      });
+      
       return data as T;
     } catch (error) {
-      console.error('💥 Request failed:', error);
+      console.error('💥 Request failed with error:', {
+        error: error,
+        message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : typeof error,
+        stack: error instanceof Error ? error.stack?.substring(0, 200) : undefined,
+      });
 
       // Enhanced error handling with detailed messages
       if (error instanceof ApiError) {
         throw error; // Re-throw ApiError as-is
+      }
+
+      // Handle abort errors (timeout)
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(
+          'Request timed out after 30 seconds. Please try again.',
+          408
+        );
       }
 
       // Handle network errors
@@ -314,9 +403,12 @@ class ApiClient {
 
   // Helper methods with caching control
   async get<T>(endpoint: string, useCache: boolean = true): Promise<T> {
-    console.log('Currently in the get!!!');
-    const result = this.request<T>(endpoint, { method: 'GET' }, useCache);
-    console.log('The GET result', result);
+    console.log('🔍 [DEBUG] GET method called for:', endpoint, 'useCache:', useCache);
+    console.log('🔍 [DEBUG] Current pending requests:', Array.from(this.pendingRequests.keys()));
+    console.log('🔍 [DEBUG] Current cache keys:', Array.from(this.cache.keys()));
+    
+    const result = await this.request<T>(endpoint, { method: 'GET' }, useCache);
+    console.log('🔍 [DEBUG] GET method returning result for:', endpoint, result);
     return result;
   }
 
@@ -480,6 +572,10 @@ export const useApi = () => {
         authenticatedRequest(fn),
       forceRefresh: <T>(endpoint: string) =>
         apiClient.forceRefresh<T>(endpoint),
+      
+      // 🐛 Debug methods
+      clearPendingRequests: () => apiClient.clearPendingRequests(),
+      getDebugInfo: () => apiClient.getDebugInfo(),
     }),
     [authenticatedRequest]
   );
@@ -513,6 +609,72 @@ export const coursesApi = (api: ReturnType<typeof useApi>) => ({
     console.log('🌐 Creating course at /api/v1/courses');
     return api.authPost<ApiResponse<any>>('/courses', data);
   },
+});
+
+// ------------------------
+// AI Chat API - Course-specific AI assistance
+// ------------------------
+export interface AIChatRequest {
+  message: string;
+  courseId: string;
+  context: {
+    courseCode: string;
+    courseName: string;
+    outline?: string[];
+    assessment?: Array<{type: string; percentage: number}>;
+    instructor?: string;
+    description?: string;
+  };
+  conversationHistory?: Array<{role: 'user' | 'assistant'; content: string}>;
+}
+
+export interface AIChatResponse {
+  response: string;
+  confidence: number;
+  sources?: string[];
+  suggestions?: string[];
+}
+
+export const aiApi = (api: ReturnType<typeof useApi>) => ({
+  // Course-specific AI chat
+  courseChat: (data: AIChatRequest) => {
+    console.log(`🤖 Sending AI chat request for course ${data.courseId}`);
+    return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/course', data);
+  },
+  
+  // General AI chat (existing global chat)
+  generalChat: (message: string, conversationHistory?: Array<{role: 'user' | 'assistant'; content: string}>) => {
+    console.log('🤖 Sending general AI chat request');
+    return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/general', {
+      message,
+      conversationHistory
+    });
+  },
+  
+  // Get course insights and study recommendations
+  getCourseInsights: (courseId: string) => {
+    console.log(`📚 Fetching AI insights for course ${courseId}`);
+    return api.authGet<ApiResponse<{
+      studyPlan: string[];
+      keyTopics: string[];
+      assessmentTips: string[];
+      resources: string[];
+    }>>(`/ai/insights/course/${courseId}`);
+  },
+  
+  // Analyze student's performance and provide recommendations
+  getPersonalizedRecommendations: (courseId: string, studentData?: {
+    completedTopics?: string[];
+    strugglingAreas?: string[];
+    studyHours?: number;
+  }) => {
+    console.log(`🎯 Fetching personalized recommendations for course ${courseId}`);
+    return api.authPost<ApiResponse<{
+      recommendations: string[];
+      focusAreas: string[];
+      timeAllocation: Record<string, number>;
+    }>>(`/ai/recommendations/course/${courseId}`, studentData);
+  }
 });
 
 // ------------------------
@@ -984,26 +1146,29 @@ export const guideApi = (api: ReturnType<typeof useApi>) => ({
 // ------------------------
 // Map API
 // ------------------------
-export const mapApi = (api: ReturnType<typeof useApi>) => ({
-  getAll: () => api.get('/map'),
-  getById: (id: string) => api.get(`/map/${id}`),
-  create: (data: {
-    name: string;
-    coordinates: any;
-    description?: string;
-    category?: string;
-  }) => api.authPost('/map', data),
-  createAsAdmin: (data: { name: string; coordinates: any; status: string }) =>
-    api.authPost('/map/admin', data),
-  update: (id: string, data: { name?: string; coordinates?: any }) =>
-    api.authPut(`/map/${id}`, data),
-  delete: (id: string) => api.authDelete(`/map/${id}`),
-  getAllAsAdmin: () => api.authGet('/map/admin/all'),
-  getByIdAsAdmin: (id: string) => api.authGet(`/map/admin/${id}`),
-  getPending: () => api.authGet('/map/admin/pending'),
-  approve: (id: string) => api.authPatch(`/map/${id}/approve`, {}),
-  reject: (id: string) => api.authPatch(`/map/${id}/reject`, {}),
-  investigate: (id: string) => api.authPatch(`/map/${id}/investigate`, {}),
+export const mapApi = (api: ReturnType<typeof useApi>): MapApiClient => ({
+  getAll: () => api.get<ApiResponse<MapLocation[]>>('/map'),
+  getById: (id: string) => api.get<ApiResponse<MapLocation>>(`/map/${id}`),
+  create: (data: Partial<MapLocation>) => 
+    api.authPost<ApiResponse<MapLocation>>('/map', data),
+  createAsAdmin: (data: Partial<MapLocation>) =>
+    api.authPost<ApiResponse<MapLocation>>('/map/admin', data),
+  update: (id: string, data: Partial<MapLocation>) =>
+    api.authPut<ApiResponse<MapLocation>>(`/map/${id}`, data),
+  delete: (id: string) => 
+    api.authDelete<ApiResponse<{ id: string }>>(`/map/${id}`),
+  getAllAsAdmin: () => 
+    api.authGet<ApiResponse<MapLocation[]>>('/map/admin/all'),
+  getByIdAsAdmin: (id: string) => 
+    api.authGet<ApiResponse<MapLocation>>(`/map/admin/${id}`),
+  getPending: () => 
+    api.authGet<ApiResponse<MapLocation[]>>('/map/admin/pending'),
+  approve: (id: string) => 
+    api.authPatch<ApiResponse<MapLocation>>(`/map/${id}/approve`, {}),
+  reject: (id: string) => 
+    api.authPatch<ApiResponse<MapLocation>>(`/map/${id}/reject`, {}),
+  investigate: (id: string) => 
+    api.authPatch<ApiResponse<MapLocation>>(`/map/${id}/investigate`, {}),
 });
 
 // ------------------------
@@ -1020,36 +1185,8 @@ export interface Profile {
   semester?: string;
 }
 
-export interface UserProfile extends Profile {
-  regNumber?: string;
-  nin?: string;
-  role?: string;
-  avatarUrl?: string;
-  verificationStatus?: boolean;
-  status?: string;
-  createdAt?: string;
-}
-
-export interface UpdateProfileRequest {
-  fullName?: string;
-  phone?: string;
-  department?: string;
-  faculty?: string;
-  level?: number;
-  semester?: 'First' | 'Second' | string;
-}
-
-export interface VerifyFieldsRequest {
-  email?: boolean;
-  phone?: boolean;
-  nin?: boolean;
-  regNumber?: boolean;
-}
-
-export interface ProfileApiResponse {
-  data: UserProfile;
-  message?: string;
-}
+// UserProfile, UpdateProfileRequest, VerifyFieldsRequest, and ProfileApiResponse
+// are now imported from utils/types.ts to maintain single source of truth
 
 export const profileApi = (api: ReturnType<typeof useApi>) => {
   const toBackendPayload = (data: UpdateProfileRequest) => {
@@ -1065,12 +1202,53 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
     return payload;
   };
 
+  // Transform API response to match our strict UserProfile type
+  const transformUserProfile = (apiData: any): UserProfile => {
+    const validRoles: Array<'STUDENT' | 'ADMIN' | 'LECTURER'> = ['STUDENT', 'ADMIN', 'LECTURER'];
+    const validSemesters: Array<'First' | 'Second'> = ['First', 'Second'];
+    const validStatuses: Array<'Cleared' | 'Pending' | 'Suspended'> = ['Cleared', 'Pending', 'Suspended'];
+    
+    return {
+      id: apiData.id || '',
+      email: apiData.email || '',
+      fullname: apiData.fullname || '',
+      role: validRoles.includes(apiData.role) ? apiData.role : 'STUDENT',
+      regNumber: apiData.regNumber || '',
+      department: apiData.department || '',
+      faculty: apiData.faculty || '',
+      level: apiData.level || 100,
+      semester: validSemesters.includes(apiData.semester) ? apiData.semester : 'First',
+      phone: apiData.phone || '',
+      nin: apiData.nin || '',
+      avatarUrl: apiData.avatarUrl,
+      verificationStatus: apiData.verificationStatus || false,
+      status: validStatuses.includes(apiData.status) ? apiData.status : 'Pending',
+      createdAt: apiData.createdAt || new Date().toISOString(),
+    };
+  };
+
   return {
-    getProfile: () => api.authGet<ProfileApiResponse>('/user/profile', false),
-    updateProfile: (data: UpdateProfileRequest) =>
-      api.authPut<ProfileApiResponse>('/user/profile', toBackendPayload(data)),
-    verifyFields: (data: VerifyFieldsRequest) =>
-      api.authPatch<ProfileApiResponse>('/user/profile/verify', data),
+    getProfile: async (): Promise<ProfileApiResponse> => {
+      const response = await api.authGet<{ data: any; message?: string }>('/user/profile', false);
+      return {
+        data: transformUserProfile(response.data),
+        message: response.message,
+      };
+    },
+    updateProfile: async (data: UpdateProfileRequest): Promise<ProfileApiResponse> => {
+      const response = await api.authPut<{ data: any; message?: string }>('/user/profile', toBackendPayload(data));
+      return {
+        data: transformUserProfile(response.data),
+        message: response.message,
+      };
+    },
+    verifyFields: async (data: VerifyFieldsRequest): Promise<ProfileApiResponse> => {
+      const response = await api.authPatch<{ data: any; message?: string }>('/user/profile/verify', data);
+      return {
+        data: transformUserProfile(response.data),
+        message: response.message,
+      };
+    },
     uploadAvatar: (formData: FormData) =>
       api.authPost<{ data: { avatarUrl: string } }>(
         '/user/profile/avatar',
@@ -1134,19 +1312,4 @@ export const testConnection = async (): Promise<boolean> => {
   }
 };
 
-// Add these API helper functions
 
-export const mapApiClient = (apiClient: ApiClient) => ({
-  getAll: (): Promise<ApiResponse<Location[]>> => {
-    return apiClient.request<ApiResponse<Location[]>>('/map');
-  },
-  getById: (id: string): Promise<ApiResponse<Location>> => {
-    return apiClient.request<ApiResponse<Location>>(`/map/${id}`);
-  },
-  create: (locationData: Partial<Location>): Promise<ApiResponse<Location>> => {
-    return apiClient.request<ApiResponse<Location>>('/map', {
-      method: 'POST',
-      body: JSON.stringify(locationData),
-    });
-  },
-});

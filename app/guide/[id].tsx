@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { useLocalSearchParams, useRouter, Stack } from "expo-router";
-import { Heart, Share, Clock, User } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Heart, Share, Clock, User, ArrowLeft } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useGuide } from "@/hooks/useGuide";
 import { ErrorMessage } from "@/components/ErrorMessage";
@@ -45,11 +45,7 @@ export default function GuideDetailScreen() {
   };
 
   return (
-    <>
-      {/* ✅ Enhanced default navigation header with guaranteed back button */}
-      
-
-      <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container}>
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color="#667eea" />
@@ -75,6 +71,14 @@ export default function GuideDetailScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => router.back()}
+                activeOpacity={0.7}
+              >
+                <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
+              </TouchableOpacity>
+              
               <Text style={styles.guideCategory}>{guide.category}</Text>
               <Text style={styles.guideTitle}>{guide.title}</Text>
 
@@ -125,8 +129,7 @@ export default function GuideDetailScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
-    </>
-  );
+    );
 }
 
 // Keep your existing styles...
@@ -159,6 +162,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 40,
     paddingBottom: 30,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    alignSelf: 'flex-start',
   },
   guideCategory: {
     fontSize: 13,

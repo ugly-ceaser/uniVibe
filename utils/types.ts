@@ -106,4 +106,37 @@ export interface PaginationMeta {
   pageCount: number;
 }
 
+// Map and location types
+export interface MapLocation {
+  id: string;
+  name: string;
+  description?: string;
+  category: 'Lecture Hall' | 'Hostel' | 'Cafeteria' | 'Lab' | 'ATM' | 'Library' | 'Admin' | 'Recreation';
+  coordinates: {
+    latitude: number;
+    longitude: number;
+  };
+  status?: 'active' | 'pending' | 'rejected' | 'investigating';
+  googleMapsUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+}
+
+// Map API client interface
+export interface MapApiClient {
+  getAll: () => Promise<import('@/types/api').ApiResponse<MapLocation[]>>;
+  getById: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  create: (data: Partial<MapLocation>) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  createAsAdmin: (data: Partial<MapLocation>) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  update: (id: string, data: Partial<MapLocation>) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  delete: (id: string) => Promise<import('@/types/api').ApiResponse<{ id: string }>>;
+  getAllAsAdmin: () => Promise<import('@/types/api').ApiResponse<MapLocation[]>>;
+  getByIdAsAdmin: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  getPending: () => Promise<import('@/types/api').ApiResponse<MapLocation[]>>;
+  approve: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  reject: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  investigate: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+}
+
 // ... existing code below stays the same ...

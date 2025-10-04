@@ -25,7 +25,7 @@ import {
   MoreVertical,
   Calendar,
 } from 'lucide-react-native';
-import { forumApi, useApi, ForumCommentNode } from '@/utils/api';
+import { forumApi, useApi, ForumCommentNode, QuestionDetail, Answer } from '@/utils/api';
 
 export default function PostDetailScreenInner() {
   const router = useRouter();
@@ -34,7 +34,7 @@ export default function PostDetailScreenInner() {
   const forumClient = useMemo(() => forumApi(api), [api]);
 
   // State
-  const [post, setPost] = useState(null);
+  const [post, setPost] = useState<QuestionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<{ id: string; author?: string } | null>(null);
@@ -52,9 +52,6 @@ export default function PostDetailScreenInner() {
   const getName = useCallback((u?: { name?: string; fullname?: string } | null) => {
     return u?.fullname ?? u?.name ?? 'Anonymous';
   }, []);
-  const getCategoryLabel = useCallback((c?: { name?: string; title?: string } | string | null) => {
-    return typeof c === 'string' ? c : (c?.name ?? c?.title ?? 'Uncategorized');
-  }, []);
   const formatDate = useCallback((d?: string) => {
     if (!d) return '';
     try {
@@ -64,46 +61,191 @@ export default function PostDetailScreenInner() {
     }
   }, []);
 
+
+
+  const handleDeletePost = useCallback(async () => {
+    if (!post?.id) return;
+    
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await forumClient.deleteQuestion(post.id);
+              Alert.alert('Success', 'Post deleted successfully');
+              router.back();
+            } catch (error) {
+              console.error('Failed to delete post:', error);
+              Alert.alert('Error', 'Failed to delete post. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }, [post?.id, forumClient, router]);
+
+  const handleDeleteAnswer = useCallback(async (answerId: string) => {
+    Alert.alert(
+      'Delete Answer',
+      'Are you sure you want to delete this answer?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await forumClient.deleteAnswer(answerId);
+              // Update post state to remove the deleted answer
+              setPost(prevPost => {
+                if (!prevPost) return null;
+                return {
+                  ...prevPost,
+                  answers: prevPost.answers.filter(answer => answer.id !== answerId),
+                  _count: {
+                    ...prevPost._count,
+                    answers: prevPost._count.answers - 1
+                  }
+                };
+              });
+              Alert.alert('Success', 'Answer deleted successfully');
+            } catch (error) {
+              console.error('Failed to delete answer:', error);
+              Alert.alert('Error', 'Failed to delete answer. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }, [forumClient]);
+
+  // Fetch post with retry logic
+  const fetchPost = useCallback(async (questionId: string, retryCount: number = 0) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await forumClient.getQuestion(questionId);
+      setPost(res?.data ?? null);
+    } catch (e: any) {
+      console.error('Failed to load post:', e);
+      
+      // Handle rate limiting
+      if (e.status === 429 && retryCount < 3) {
+        const delayMs = Math.pow(2, retryCount) * 1000;
+        console.log(`⏰ Post fetch rate limited. Retrying in ${delayMs}ms`);
+        
+        setTimeout(() => {
+          fetchPost(questionId, retryCount + 1);
+        }, delayMs);
+        return;
+      }
+      
+      const errorMessage = e.status === 429 
+        ? 'Too many requests. Please wait a moment and try again.'
+        : e?.message || 'Failed to load post';
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [forumClient]);
+
   // Fetch post
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
-    setError(null);
-    forumClient.getQuestion(id)
-      .then(res => setPost(res?.data ?? null))
-      .catch(e => setError(e?.message || 'Failed to load post'))
-      .finally(() => setLoading(false));
-  }, [id, forumClient]);
+    const questionId = Array.isArray(id) ? id[0] : id;
+    fetchPost(questionId);
+  }, [id, fetchPost]);
 
-  // Submit reply
-  const submitReply = async () => {
-    if (!replyingTo || !replyBody.trim() || submittingReply) return;
+  // State for new answer
+  const [newAnswerBody, setNewAnswerBody] = useState('');
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [showAnswerInput, setShowAnswerInput] = useState(false);
+
+  // Submit new answer to question
+  const submitAnswer = async () => {
+    if (!post?.id || !newAnswerBody.trim() || submittingAnswer) return;
     try {
-      setSubmittingReply(true);
-      const res = await forumClient.replyToAnswer({
-        answerId: replyingTo.id,
-        body: replyBody.trim(),
+      setSubmittingAnswer(true);
+      const res = await forumClient.addAnswer(post.id, {
+        body: newAnswerBody.trim(),
+        isAnonymous: false,
       });
-      const newReply = res?.data ?? {
+      
+      const newAnswer = (res as any)?.data ?? {
         id: String(Date.now()),
-        body: replyBody.trim(),
+        body: newAnswerBody.trim(),
         createdAt: new Date().toISOString(),
-        author: { fullname: 'You' },
+        author: { id: 'current-user', fullname: 'You', email: '' },
+        status: 'Pending' as const,
+        _count: { comments: 0 },
       };
+      
+      // Add new answer to post
       setPost(prevPost => {
         if (!prevPost) return null;
         return {
           ...prevPost,
-          answers: prevPost.answers.map(a =>
-            a.id === replyingTo.id
-              ? { ...a, replies: [ ...(a.replies || []), newReply ] }
-              : a
-          ),
+          answers: [...prevPost.answers, newAnswer],
+          _count: {
+            ...prevPost._count,
+            answers: prevPost._count.answers + 1
+          }
         };
       });
+      
+      setNewAnswerBody('');
+      setShowAnswerInput(false);
+      Alert.alert('Success', 'Your answer has been posted!');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to submit answer');
+    } finally {
+      setSubmittingAnswer(false);
+    }
+  };
+
+  // Submit reply to answer
+  const submitReply = async () => {
+    if (!replyingTo || !replyBody.trim() || submittingReply) return;
+    try {
+      setSubmittingReply(true);
+      const res = await forumClient.addComment({
+        body: replyBody.trim(),
+        answerId: replyingTo.id,
+        isAnonymous: false,
+      });
+      
+      const newReply = (res as any)?.data ?? {
+        id: String(Date.now()),
+        body: replyBody.trim(),
+        createdAt: new Date().toISOString(),
+        author: { id: 'current-user', fullname: 'You', email: '' },
+        answerId: replyingTo.id,
+        replies: [],
+      };
+      
+      // Update the replies state
+      setRepliesByAnswer(prev => {
+        const currentReplies = prev[replyingTo.id] || { items: [], loading: false, error: null, expanded: true };
+        const existingItems = Array.isArray(currentReplies.items) ? currentReplies.items : [];
+        return {
+          ...prev,
+          [replyingTo.id]: {
+            ...currentReplies,
+            items: [...existingItems, newReply],
+            expanded: true
+          }
+        };
+      });
+      
       setReplyingTo(null);
       setReplyBody('');
-    } catch (e) {
+      Alert.alert('Success', 'Your reply has been posted!');
+    } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to submit reply');
     } finally {
       setSubmittingReply(false);
@@ -126,7 +268,7 @@ export default function PostDetailScreenInner() {
         const res = await forumClient.getAnswerComments(answerId);
         setRepliesByAnswer(prev => ({
           ...prev,
-          [answerId]: { items: res?.data ?? [], loading: false, error: null, expanded: true },
+          [answerId]: { items: Array.isArray(res) ? res : [], loading: false, error: null, expanded: true },
         }));
       } catch (e: any) {
         setRepliesByAnswer(prev => ({
@@ -149,6 +291,8 @@ export default function PostDetailScreenInner() {
     </View>
   ), [getName]);
 
+
+
   const renderAnswer = useCallback((answer: Answer) => {
     const replyState = repliesByAnswer[answer.id];
 
@@ -162,16 +306,6 @@ export default function PostDetailScreenInner() {
 
         <View style={styles.answerActionsRow}>
           <TouchableOpacity
-            onPress={() => setReplyingTo({ id: answer.id, author: getName(answer.author) })}
-            activeOpacity={0.8}
-            style={styles.replyChip}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <CornerUpRight size={14} color="#4f46e5" />
-            <Text style={styles.replyChipText}>Reply</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             onPress={() => toggleReplies(answer.id)}
             activeOpacity={0.8}
             style={styles.replyCountBadge}
@@ -179,9 +313,29 @@ export default function PostDetailScreenInner() {
           >
             <MessageCircle size={12} color="#6b7280" />
             <Text style={styles.replyCountText}>
-              {replyState?.expanded ? 'Hide' : 'View'} replies
-              {typeof answer?._count?.comments === 'number' ? ` (${answer._count.comments})` : ''}
+              {typeof answer?._count?.comments === 'number' ? answer._count.comments : 0}
             </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            onPress={() => {
+              // Ensure replies section is expanded when starting to reply
+              setRepliesByAnswer(prev => ({
+                ...prev,
+                [answer.id]: {
+                  ...prev[answer.id],
+                  expanded: true
+                }
+              }));
+              setReplyingTo({ id: answer.id, author: getName(answer.author) });
+              setTimeout(() => replyInputRef.current?.focus(), 150);
+            }}
+            activeOpacity={0.8}
+            style={styles.replyButton}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <CornerUpRight size={12} color="#4f46e5" />
+            <Text style={styles.replyButtonText}>Reply</Text>
           </TouchableOpacity>
         </View>
 
@@ -201,11 +355,11 @@ export default function PostDetailScreenInner() {
               </TouchableOpacity>
             )}
 
-            {!replyState.loading && !replyState.error && replyState.items?.length === 0 && (
+            {!replyState.loading && !replyState.error && Array.isArray(replyState.items) && replyState.items.length === 0 && (
               <Text style={styles.emptyRepliesText}>No replies yet.</Text>
             )}
 
-            {replyState.items?.map(node => renderCommentNode(node, 0))}
+            {Array.isArray(replyState.items) && replyState.items.map(node => renderCommentNode(node, 0))}
 
             {/* Inline composer shown under this answer if replying */}
             {replyingTo?.id === answer.id && (
@@ -253,7 +407,7 @@ export default function PostDetailScreenInner() {
     return (
       <View style={styles.center}>
         <Text style={styles.error}>{error}</Text>
-        <TouchableOpacity onPress={() => router.replace(router.asPath || `/post/${id}`)} style={styles.retryBtn}>
+        <TouchableOpacity onPress={() => router.replace(`/post/${id}`)} style={styles.retryBtn}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -277,6 +431,9 @@ export default function PostDetailScreenInner() {
           <Text style={styles.headerTitle} numberOfLines={1}>
             Discussion
           </Text>
+          <TouchableOpacity style={styles.moreButton} onPress={handleDeletePost}>
+            <MoreVertical size={20} color="#ffffff" />
+          </TouchableOpacity>
         </View>
       </LinearGradient>
       <ScrollView contentContainerStyle={styles.content}>
@@ -292,14 +449,58 @@ export default function PostDetailScreenInner() {
               <Text style={styles.metaText}>{formatDate(post.createdAt)}</Text>
             </View>
           )}
-          {!!post.category && (
-            <View style={styles.categoryPill}>
-              <Text style={styles.categoryText}>{getCategoryLabel(post.category)}</Text>
+         
+        </View>
+        <Text style={styles.body}>{post.body}</Text>
+        
+        {/* Answer Input Section */}
+        <View style={styles.answerSection}>
+          <View style={styles.answerSectionHeader}>
+            <Text style={styles.sectionTitle}>Answers ({post.answers?.length ?? 0})</Text>
+            <TouchableOpacity 
+              style={styles.addAnswerButton}
+              onPress={() => setShowAnswerInput(!showAnswerInput)}
+            >
+              <Text style={styles.addAnswerText}>
+                {showAnswerInput ? 'Cancel' : 'Add Answer'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {showAnswerInput && (
+            <View style={styles.newAnswerContainer}>
+              <TextInput
+                style={styles.newAnswerInput}
+                placeholder="Write your answer here..."
+                value={newAnswerBody}
+                onChangeText={setNewAnswerBody}
+                multiline
+                textAlignVertical="top"
+                maxLength={2000}
+              />
+              <View style={styles.answerActions}>
+                <Text style={styles.characterCount}>
+                  {newAnswerBody.length}/2000
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.submitAnswerButton,
+                    (!newAnswerBody.trim() || submittingAnswer) && styles.submitAnswerButtonDisabled
+                  ]}
+                  onPress={submitAnswer}
+                  disabled={!newAnswerBody.trim() || submittingAnswer}
+                >
+                  {submittingAnswer ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Text style={styles.submitAnswerButtonText}>Post Answer</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
-        <Text style={styles.body}>{post.body}</Text>
-        <Text style={styles.sectionTitle}>Answers ({post.answers?.length ?? 0})</Text>
+        
         {post.answers?.map(ans => renderAnswer(ans))}
       </ScrollView>
     </SafeAreaView>
@@ -312,6 +513,7 @@ const styles = StyleSheet.create({
   headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
   backButton: { marginRight: 8, padding: 4, borderRadius: 8, backgroundColor: '#4f46e5' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: '#fff' },
+  moreButton: { marginLeft: 8, padding: 4, borderRadius: 8, backgroundColor: '#4f46e5' },
   content: { padding: 16, gap: 12 },
   title: { fontSize: 20, fontWeight: '800', color: '#111827' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
@@ -420,7 +622,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   retryText: { color: '#4f46e5', fontWeight: '700' },
-  answerActionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  answerActionsRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 8 },
   replyCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -433,6 +635,19 @@ const styles = StyleSheet.create({
     borderColor: '#dbe3ff',
   },
   replyCountText: { color: '#374151', fontSize: 12 },
+  replyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#f0f4ff',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    marginLeft: 8,
+  },
+  replyButtonText: { color: '#4f46e5', fontSize: 12, fontWeight: '600' },
   repliesLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   repliesLoadingText: { color: '#374151', fontSize: 12 },
   repliesErrorRow: {
@@ -445,4 +660,75 @@ const styles = StyleSheet.create({
   },
   repliesErrorText: { color: '#dc2626', fontSize: 12, textAlign: 'center' },
   emptyRepliesText: { color: '#6b7280', fontSize: 12, textAlign: 'center', marginTop: 8 },
+  
+  // Answer input section styles
+  answerSection: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  answerSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addAnswerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#eef2ff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#dbe3ff',
+  },
+  addAnswerText: {
+    color: '#4f46e5',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  newAnswerContainer: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 16,
+  },
+  newAnswerInput: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    minHeight: 100,
+    maxHeight: 200,
+    fontSize: 14,
+    color: '#111827',
+    marginBottom: 12,
+  },
+  answerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  characterCount: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  submitAnswerButton: {
+    backgroundColor: '#4f46e5',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  submitAnswerButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  submitAnswerButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
 });

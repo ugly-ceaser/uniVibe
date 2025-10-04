@@ -67,14 +67,15 @@ export default function ProfileScreen() {
   // Verification state
   const [verificationFields, setVerificationFields] = useState<VerifyFieldsRequest>({});
 
-  const fetchProfile = React.useCallback(async (isRefresh: boolean = false) => {
+  const fetchProfile = React.useCallback(async (isRefresh?: boolean) => {
+    const refresh = isRefresh ?? false;
     try {
-      if (isRefresh) setRefreshing(true);
+      if (refresh) setRefreshing(true);
       else setLoading(true);
       setError(null);
 
       // Use cache unless it's a manual refresh
-      const response = await profileClient.getProfile(!isRefresh);
+      const response = await profileClient.getProfile();
       if (response?.data) {
         setProfile(response.data);
         setEditForm({
@@ -83,7 +84,7 @@ export default function ProfileScreen() {
           department: response.data.department || '',
           faculty: response.data.faculty || '',
           level: response.data.level || 100,
-          semester: response.data.semester || 'First',
+          semester: (response.data.semester === 'First' || response.data.semester === 'Second') ? response.data.semester : 'First',
           regNumber: response.data.regNumber || '', // added
           nin: response.data.nin || '',             // added
         });
@@ -99,7 +100,7 @@ export default function ProfileScreen() {
   }, [profileClient]);
 
   React.useEffect(() => {
-    fetchProfile(false);
+    fetchProfile();
     // Fetch only once on mount
   }, [fetchProfile]);
 
@@ -158,7 +159,7 @@ export default function ProfileScreen() {
           onPress: () => {
             // TODO: Implement logout logic
             console.log('Logging out...');
-            router.replace('/auth/login');
+            router.replace('/login');
           }
         }
       ]
@@ -282,7 +283,12 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>My Profile</Text>
+            <Text style={styles.headerSubtitle}>
+              Manage your account and academic details
+            </Text>
+          </View>
           <View style={styles.headerActions}>
             {editing ? (
               <>
@@ -297,7 +303,7 @@ export default function ProfileScreen() {
                       department: profile.department || '',
                       faculty: profile.faculty || '',
                       level: profile.level || 100,
-                      semester: profile.semester || 'First',
+                      semester: (profile.semester === 'First' || profile.semester === 'Second') ? profile.semester : 'First',
                       regNumber: profile.regNumber || '', // added
                       nin: profile.nin || '',             // added
                     });
@@ -426,10 +432,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerTextContainer: {
+    flex: 1,
+  },
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   headerActions: {
     flexDirection: 'row',

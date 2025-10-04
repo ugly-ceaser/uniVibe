@@ -21,7 +21,7 @@ import {
   Heart,
   LucideIcon,
 } from 'lucide-react-native';
-import { ApiError, guideApi, useApi, ApiInstance, mapApiClient } from '@/utils/api';
+import { ApiError, guideApi, useApi, ApiInstance } from '@/utils/api';
 import { Guide } from '@/types/guide';
 import { useAsync } from '@/hooks/useAsync';
 import { ErrorMessage } from '@/components/ErrorMessage';
@@ -59,7 +59,8 @@ export default function TipDetailScreen() {
 
   const handleLike = async () => {
     try {
-      await apiClient.getLikesCount(tipId as string);
+      // TODO: Fix - getLikesCount doesn't exist on guideApi
+      // await apiClient.getLikesCount(tipId as string);
       // Update UI optimistically
     } catch (err) {
       // Revert optimistic update

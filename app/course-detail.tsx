@@ -22,6 +22,7 @@ import {
   CircleCheck as CheckCircle,
 } from 'lucide-react-native';
 import { useApi } from '@/utils/api';
+import UnifiedAIChat from '@/components/UnifiedAIChat';
 
 export default function CourseDetailScreen() {
   const api = useApi();
@@ -35,7 +36,7 @@ export default function CourseDetailScreen() {
       try {
         setLoading(true);
         // Use the correct endpoint and api client
-        const response = await api.get(`/courses/${courseId}`);
+        const response = await api.get(`/courses/${courseId}`) as any;
         setCourse(response.data);
       } catch (error) {
         console.error('Error fetching course details:', error);
@@ -193,7 +194,31 @@ export default function CourseDetailScreen() {
             ))}
           </View>
         </View>
+
       </ScrollView>
+
+      {/* Floating Course AI Assistant */}
+      <UnifiedAIChat
+        contextType="course"
+        courseContext={{
+          courseId: courseId as string,
+          courseCode: course.code,
+          courseName: course.name,
+          outline: course.outline,
+          assessment: course.assessment,
+          instructor: course.instructor,
+          description: course.description
+        }}
+        buttonPosition="floating"
+        buttonSize="medium"
+        onMessageSent={(message, context) => {
+          console.log('Course AI message sent:', message.text, 'Context:', context);
+        }}
+        onError={(error: string) => {
+          console.error('Course AI Error:', error);
+          Alert.alert('AI Assistant Error', error);
+        }}
+      />
     </SafeAreaView>
   );
 }
