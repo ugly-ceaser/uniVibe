@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import {
   View,
   Text,
@@ -13,11 +19,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MessageCircle, X, Send, Bot, BookOpen, Lightbulb } from 'lucide-react-native';
+import {
+  MessageCircle,
+  X,
+  Send,
+  Bot,
+  BookOpen,
+  Lightbulb,
+} from 'lucide-react-native';
 import { ChatMessage } from '@/types';
 import { validateChatMessage } from '@/utils/validation';
 import { gradients, shadows } from '@/constants/theme';
-import { useApi } from '@/utils/api';
+import { useApi, aiApi } from '@/utils/api';
 
 // Course-specific AI message types
 interface CourseContext {
@@ -25,7 +38,7 @@ interface CourseContext {
   courseCode: string;
   courseName: string;
   outline?: string[];
-  assessment?: Array<{type: string; percentage: number}>;
+  assessment?: Array<{ type: string; percentage: number }>;
   instructor?: string;
   description?: string;
 }
@@ -35,6 +48,8 @@ interface CourseAIChatProps {
   onMessageSent?: (message: ChatMessage) => void;
   onError?: (error: string) => void;
   maxMessages?: number;
+  typingSpeed?: 'slow' | 'normal' | 'fast';
+  enableTypewriter?: boolean;
 }
 
 // Course-specific AI prompts and responses
@@ -57,92 +72,134 @@ What would you like to know about this course?`,
   }),
 });
 
-// Enhanced course-specific AI responses
-const generateCourseResponse = (userMessage: string, context: CourseContext): string => {
-  const message = userMessage.toLowerCase();
-  
-  // Course outline related
-  if (message.includes('outline') || message.includes('topics') || message.includes('syllabus')) {
-    if (context.outline && context.outline.length > 0) {
-      return `Here's the course outline for ${context.courseCode}:
-
-${context.outline.map((topic, index) => `${index + 1}. ${topic}`).join('\n')}
-
-Would you like me to explain any specific topic in detail?`;
-    }
-    return `The course outline for ${context.courseCode} covers various important topics. You can find the detailed syllabus in your course materials or ask your instructor ${context.instructor || 'your course coordinator'} for more information.`;
-  }
-  
-  // Assessment related
-  if (message.includes('assessment') || message.includes('exam') || message.includes('assignment') || message.includes('grade')) {
-    if (context.assessment && context.assessment.length > 0) {
-      return `Here's the assessment breakdown for ${context.courseCode}:
-
-${context.assessment.map(a => `• ${a.type}: ${a.percentage}%`).join('\n')}
-
-Remember to prepare well for each component as they all contribute to your final grade!`;
-    }
-    return `For detailed assessment information in ${context.courseCode}, please refer to your course handbook or contact ${context.instructor || 'your instructor'}.`;
-  }
-  
-  // Study strategies
-  if (message.includes('study') || message.includes('prepare') || message.includes('tips')) {
-    return `Here are some study strategies for ${context.courseCode}:
-
-🎯 **Focus Areas:**
-• Review course outline regularly
-• Practice with past questions
-• Form study groups with classmates
-• Attend all lectures and tutorials
-
-📚 **Study Schedule:**
-• Break topics into manageable chunks
-• Allocate more time to complex topics
-• Review material within 24 hours of learning
-
-Need help with any specific topic?`;
-  }
-  
-  // Instructor information
-  if (message.includes('instructor') || message.includes('teacher') || message.includes('lecturer') || message.includes('contact')) {
-    return `For ${context.courseCode}, your course coordinator is ${context.instructor || 'listed in your course materials'}.
-
-📧 You can reach out during office hours or via email for:
-• Course-related questions
-• Assignment clarifications  
-• Additional resources
-• Academic guidance
-
-Always be respectful and specific in your communications!`;
-  }
-  
-  // Default course-specific response
-  const responses = [
-    `Great question about ${context.courseCode}! Based on the course content, I'd recommend focusing on the key concepts and practical applications.`,
-    `For ${context.courseName}, understanding the fundamentals is crucial. Would you like me to break down any specific topic?`,
-    `That's an important aspect of ${context.courseCode}. Let me help you understand this better with some practical examples.`,
-    `In ${context.courseName}, this concept connects to several other topics. Here's how you can approach it systematically.`,
-  ];
-  
-  return responses[Math.floor(Math.random() * responses.length)];
-};
-
 export default function CourseAIChat({
   courseContext,
   onMessageSent,
   onError,
   maxMessages = 50,
+  typingSpeed = 'normal',
+  enableTypewriter = true,
 }: CourseAIChatProps): React.JSX.Element {
   const api = useApi();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [showCursor, setShowCursor] = useState(true);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const typingTimeoutRef = useRef<number | null>(null);
+  const cursorIntervalRef = useRef<number | null>(null);
 
-  // Initialize with course-specific greeting
+  // Initialize with course-specific greeting and load chat history
   useEffect(() => {
-    setMessages([getCourseSpecificGreeting(courseContext)]);
-  }, [courseContext]);
+    const initializeCourseChat = async () => {
+      try {
+        setIsLoadingSession(true);
+        console.log('🔄 Initializing course chat for:', courseContext.courseId);
+
+        // First try to get existing session with chat history
+        try {
+          const sessionResponse = await aiApi(api).getCourseActiveSession(
+            courseContext.courseId
+          );
+          console.log('📋 Session response:', sessionResponse);
+
+          // Handle the actual backend response format: { data: { session: {...}, course: {...} } }
+          const session = sessionResponse.data.session;
+          setCurrentSessionId(session.id);
+
+          // Check if we have messages in the session
+          if (session.messages && session.messages.length > 0) {
+            console.log(
+              `💬 Found ${session.messages.length} existing messages`
+            );
+
+            // Convert session messages to ChatMessage format
+            const sessionMessages = session.messages.map((msg, index) => ({
+              id: msg.id || `session-msg-${index}`,
+              text:
+                msg.content || msg.role === 'user'
+                  ? msg.content
+                  : 'Message content unavailable',
+              isUser: msg.role === 'user',
+              timestamp: msg.createdAt
+                ? new Date(msg.createdAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+            }));
+
+            console.log('📝 Converted messages:', sessionMessages);
+            setMessages(sessionMessages);
+
+            // Show success message in console
+            console.log('✅ Successfully loaded chat history');
+            return;
+          } else {
+            console.log(
+              '📝 No existing messages found, starting with greeting'
+            );
+          }
+        } catch (sessionError) {
+          console.warn('⚠️ Session API not available or failed:', sessionError);
+          // Continue to fallback behavior
+        }
+
+        // Fallback: No existing messages or session API failed, start with greeting
+        console.log('🎯 Starting with course greeting');
+        setMessages([getCourseSpecificGreeting(courseContext)]);
+      } catch (error) {
+        console.error('❌ Failed to initialize course chat:', error);
+        // Ultimate fallback to greeting only
+        setMessages([getCourseSpecificGreeting(courseContext)]);
+      } finally {
+        setIsLoadingSession(false);
+        console.log('✅ Course chat initialization complete');
+      }
+    };
+
+    // Only initialize when we have a valid courseId and the modal is visible
+    if (courseContext.courseId && isVisible) {
+      initializeCourseChat();
+    } else if (courseContext.courseId && !isVisible) {
+      // When modal is closed, reset to greeting for fresh start next time
+      setMessages([getCourseSpecificGreeting(courseContext)]);
+      setCurrentSessionId(null);
+    }
+  }, [courseContext.courseId, api, isVisible]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollViewRef.current && messages.length > 0) {
+      // Small delay to ensure the message is rendered before scrolling
+      const timeoutId = setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, isLoading]);
+
+  // Auto-scroll when modal opens
+  useEffect(() => {
+    if (isVisible && scrollViewRef.current && messages.length > 0) {
+      // Delay to ensure modal animation completes
+      const timeoutId = setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isVisible]);
 
   const handleSend = useCallback(async (): Promise<void> => {
     try {
@@ -169,53 +226,111 @@ export default function CourseAIChat({
 
       // Check message limit
       if (messages.length >= maxMessages) {
-        const errorMessage = 'Maximum message limit reached. Please start a new conversation.';
+        const errorMessage =
+          'Maximum message limit reached. Please start a new conversation.';
         onError?.(errorMessage);
         Alert.alert('Message Limit', errorMessage);
         return;
       }
 
       setMessages(prev => [...prev, userMessage]);
-      setInputText('');
       setIsLoading(true);
       onMessageSent?.(userMessage);
 
-      // TODO: Replace with actual API call to your backend
-      // Example API call structure:
-      /*
-      const response = await api.authPost('/ai/chat/course', {
-        message: userMessage.text,
-        courseId: courseContext.courseId,
-        context: {
-          courseCode: courseContext.courseCode,
-          courseName: courseContext.courseName,
-          outline: courseContext.outline,
-          assessment: courseContext.assessment
-        }
-      });
-      */
+      // Store the original input text to restore if needed
+      const originalInputText = inputText.trim();
+      setInputText(''); // Clear input optimistically
 
-      // Simulate AI response with course context
-      setTimeout(() => {
+      // API call to backend AI service
+      try {
+        // Use course chat API (it automatically manages sessions on the backend)
+        const response = await aiApi(api).courseChat({
+          message: userMessage.text,
+          courseId: courseContext.courseId,
+          context: {
+            courseCode: courseContext.courseCode,
+            courseName: courseContext.courseName,
+            outline: courseContext.outline,
+            assessment: courseContext.assessment,
+            instructor: courseContext.instructor,
+            description: courseContext.description,
+          },
+          conversationHistory: messages.slice(1).map(msg => ({
+            role: msg.isUser ? ('user' as const) : ('assistant' as const),
+            content: msg.text,
+          })),
+          userMode: 'balanced',
+        });
+
+        const aiResponseId = (Date.now() + 1).toString();
         const aiResponse: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          text: generateCourseResponse(userMessage.text, courseContext),
+          id: aiResponseId,
+          text: '', // Start with empty text for typing effect
           isUser: false,
           timestamp: new Date().toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
           }),
         };
+
+        // Add empty AI message first
         setMessages(prev => [...prev, aiResponse]);
+        setFailedMessage(null); // Clear any previous failed message
+
+        // Start typing animation or show instantly
+        if (enableTypewriter) {
+          setTypingMessageId(aiResponseId);
+          setShowCursor(true);
+          animateTyping(aiResponseId, response.data.response);
+        } else {
+          // Show response immediately
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === aiResponseId
+                ? { ...msg, text: response.data.response }
+                : msg
+            )
+          );
+          setIsLoading(false);
+        }
+      } catch (apiError) {
+        console.error('AI API failed:', apiError);
+        // Restore the original input text on failure
+        setInputText(originalInputText);
+        setFailedMessage(originalInputText);
+        // Remove the user message that was optimistically added
+        setMessages(prev => prev.slice(0, -1));
+
+        const errorMessage =
+          apiError instanceof Error
+            ? apiError.message
+            : 'AI service is currently unavailable';
+        onError?.(errorMessage);
+        Alert.alert(
+          'Message Failed to Send',
+          "Your message couldn't be sent. It has been restored to the input field so you can try again.",
+          [{ text: 'OK' }]
+        );
         setIsLoading(false);
-      }, 1500);
+      }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+      // If we haven't cleared the input yet, we don't need to restore it
+      // This handles validation errors and early returns
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to send message';
       onError?.(errorMessage);
       Alert.alert('Error', errorMessage);
       setIsLoading(false);
     }
-  }, [inputText, messages.length, maxMessages, onMessageSent, onError, courseContext, api]);
+  }, [
+    inputText,
+    messages.length,
+    maxMessages,
+    onMessageSent,
+    onError,
+    courseContext,
+    api,
+  ]);
 
   const handleClose = useCallback((): void => {
     setIsVisible(false);
@@ -226,6 +341,134 @@ export default function CourseAIChat({
     if (text.length <= 500) {
       setInputText(text);
     }
+  }, []);
+
+  // Handle scroll position to show/hide scroll-to-bottom button
+  const handleScroll = useCallback(
+    (event: any) => {
+      const { contentOffset, contentSize, layoutMeasurement } =
+        event.nativeEvent;
+      const isNearBottom =
+        contentOffset.y + layoutMeasurement.height >= contentSize.height - 100;
+      setShowScrollButton(!isNearBottom && messages.length > 3);
+    },
+    [messages.length]
+  );
+
+  // Scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+    setShowScrollButton(false);
+  }, []);
+
+  // Debug helper function to test session loading
+  const testSessionLoading = useCallback(async () => {
+    console.log(
+      '🔍 Testing session loading for course:',
+      courseContext.courseId
+    );
+
+    try {
+      // Test 1: Try to get course chat sessions
+      console.log('🔍 Test 1: Getting all course chat sessions');
+      const allSessions = await aiApi(api).getCourseChatSessions(
+        courseContext.courseId
+      );
+      console.log('✅ All sessions result:', allSessions);
+
+      // Test 2: Try to get active session
+      console.log('🔍 Test 2: Getting active session');
+      const activeSession = await aiApi(api).getCourseActiveSession(
+        courseContext.courseId
+      );
+      console.log('✅ Active session result:', activeSession);
+
+      Alert.alert(
+        'Debug Test',
+        `Found session: ${activeSession.data.session.id}\nMessages: ${
+          activeSession.data.session.messages?.length || 0
+        }`
+      );
+    } catch (error) {
+      console.error('❌ Session test failed:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Debug Test Failed', `Error: ${errorMsg}`);
+    }
+  }, [courseContext.courseId, api]);
+
+  // Typewriter effect function
+  const animateTyping = useCallback(
+    (messageId: string, fullText: string, currentIndex: number = 0) => {
+      if (currentIndex < fullText.length) {
+        const displayText = fullText.substring(0, currentIndex + 1);
+
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId
+              ? { ...msg, text: displayText + (showCursor ? '|' : '') }
+              : msg
+          )
+        );
+
+        // Variable typing speed for more natural feel
+        const char = fullText[currentIndex];
+        const speedMultiplier =
+          typingSpeed === 'fast' ? 0.5 : typingSpeed === 'slow' ? 2 : 1;
+        let delay = 50 * speedMultiplier; // Base delay
+
+        if (char === ' ') delay = 80 * speedMultiplier; // Slower for spaces
+        else if (char === '.' || char === '!' || char === '?')
+          delay = 300 * speedMultiplier; // Pause at sentence endings
+        else if (char === ',' || char === ';')
+          delay = 150 * speedMultiplier; // Short pause at commas
+        else if (char === '\n') delay = 200 * speedMultiplier; // Pause at line breaks
+
+        typingTimeoutRef.current = setTimeout(() => {
+          animateTyping(messageId, fullText, currentIndex + 1);
+        }, delay) as unknown as number;
+      } else {
+        // Typing complete - remove cursor and clean up
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, text: fullText } : msg
+          )
+        );
+        setTypingMessageId(null);
+        setIsLoading(false);
+        if (cursorIntervalRef.current) {
+          clearInterval(cursorIntervalRef.current);
+          cursorIntervalRef.current = null;
+        }
+      }
+    },
+    [showCursor]
+  );
+
+  // Cursor blinking effect
+  useEffect(() => {
+    if (typingMessageId) {
+      cursorIntervalRef.current = setInterval(() => {
+        setShowCursor(prev => !prev);
+      }, 500) as unknown as number;
+    } else {
+      if (cursorIntervalRef.current) {
+        clearInterval(cursorIntervalRef.current);
+        cursorIntervalRef.current = null;
+      }
+      setShowCursor(true);
+    }
+  }, [typingMessageId]);
+
+  // Cleanup typing animation on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (cursorIntervalRef.current) {
+        clearInterval(cursorIntervalRef.current);
+      }
+    };
   }, []);
 
   const isInputValid = useMemo((): boolean => {
@@ -242,7 +485,10 @@ export default function CourseAIChat({
         accessibilityLabel={`Open course AI assistant for ${courseContext.courseCode}`}
         accessibilityHint='Get AI-powered insights about this specific course'
       >
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.chatGradient}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.chatGradient}
+        >
           {/* Clean chat icon */}
           <MessageCircle size={20} color='#ffffff' strokeWidth={2} />
         </LinearGradient>
@@ -269,6 +515,12 @@ export default function CourseAIChat({
                 </Text>
                 <Text style={styles.chatHeaderSubtitle}>
                   {courseContext.courseName}
+                  {currentSessionId && (
+                    <Text style={styles.sessionIndicator}>
+                      {' '}
+                      • Session Active
+                    </Text>
+                  )}
                 </Text>
               </View>
             </View>
@@ -284,69 +536,141 @@ export default function CourseAIChat({
 
           {/* Quick action buttons */}
           <View style={styles.quickActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => setInputText('Show me the course outline')}
             >
               <BookOpen size={14} color='#10b981' />
               <Text style={styles.quickActionText}>Outline</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.quickActionButton}
-              onPress={() => setInputText('What are the assessment components?')}
+              onPress={() =>
+                setInputText('What are the assessment components?')
+              }
             >
               <BookOpen size={14} color='#10b981' />
               <Text style={styles.quickActionText}>Assessment</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => setInputText('Give me study tips for this course')}
             >
               <Lightbulb size={14} color='#10b981' />
               <Text style={styles.quickActionText}>Study Tips</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.quickActionButton,
+                { backgroundColor: '#fef2f2', borderColor: '#fca5a5' },
+              ]}
+              onPress={testSessionLoading}
+            >
+              <Text style={[styles.quickActionText, { color: '#dc2626' }]}>
+                Test Session
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          <ScrollView
-            style={styles.chatContent}
-            showsVerticalScrollIndicator={false}
-            accessibilityLabel='Chat messages'
-          >
-            {messages.map(message => (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageContainer,
-                  message.isUser ? styles.userMessage : styles.aiMessage,
-                ]}
-                accessibilityRole='text'
-                accessibilityLabel={`${message.isUser ? 'You' : 'AI Assistant'}: ${message.text}`}
+          <View style={{ flex: 1, position: 'relative' }}>
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.chatContent}
+              showsVerticalScrollIndicator={false}
+              accessibilityLabel='Chat messages'
+              contentContainerStyle={{ paddingBottom: 10 }}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+            >
+              {messages.map(message => (
+                <TouchableOpacity
+                  key={message.id}
+                  style={[
+                    styles.messageContainer,
+                    message.isUser ? styles.userMessage : styles.aiMessage,
+                  ]}
+                  accessibilityRole='text'
+                  accessibilityLabel={`${
+                    message.isUser ? 'You' : 'AI Assistant'
+                  }: ${message.text}`}
+                  onPress={() => {
+                    // Tap to complete typing if this message is currently typing
+                    if (
+                      typingMessageId === message.id &&
+                      typingTimeoutRef.current
+                    ) {
+                      clearTimeout(typingTimeoutRef.current);
+                      if (cursorIntervalRef.current) {
+                        clearInterval(cursorIntervalRef.current);
+                      }
+                      // Find the full text and display it immediately
+                      // This would need the full text stored somewhere
+                      setTypingMessageId(null);
+                      setIsLoading(false);
+                    }
+                  }}
+                  activeOpacity={typingMessageId === message.id ? 0.7 : 1}
+                >
+                  <Text
+                    style={[
+                      styles.messageText,
+                      message.isUser
+                        ? styles.userMessageText
+                        : styles.aiMessageText,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.messageTime,
+                      message.isUser
+                        ? styles.userMessageTime
+                        : styles.aiMessageTime,
+                    ]}
+                  >
+                    {message.timestamp}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {isLoadingSession && (
+                <View style={[styles.messageContainer, styles.aiMessage]}>
+                  <ActivityIndicator size='small' color='#10b981' />
+                  <Text style={styles.aiMessageText}>
+                    Loading chat history...
+                  </Text>
+                </View>
+              )}
+              {isLoading && !typingMessageId && !isLoadingSession && (
+                <View style={[styles.messageContainer, styles.aiMessage]}>
+                  <ActivityIndicator size='small' color='#10b981' />
+                  <Text style={styles.aiMessageText}>
+                    AI is analyzing your question...
+                  </Text>
+                </View>
+              )}
+              {typingMessageId && (
+                <View style={[styles.messageContainer, styles.aiMessage]}>
+                  <View style={styles.typingIndicator}>
+                    <ActivityIndicator size='small' color='#10b981' />
+                    <Text style={styles.aiMessageText}>AI is typing...</Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Scroll to bottom button */}
+            {showScrollButton && (
+              <TouchableOpacity
+                style={styles.scrollToBottomButton}
+                onPress={scrollToBottom}
+                activeOpacity={0.8}
+                accessibilityLabel='Scroll to bottom'
               >
-                <Text
-                  style={[
-                    styles.messageText,
-                    message.isUser ? styles.userMessageText : styles.aiMessageText,
-                  ]}
-                >
-                  {message.text}
-                </Text>
-                <Text
-                  style={[
-                    styles.messageTime,
-                    message.isUser ? styles.userMessageTime : styles.aiMessageTime,
-                  ]}
-                >
-                  {message.timestamp}
-                </Text>
-              </View>
-            ))}
-            {isLoading && (
-              <View style={[styles.messageContainer, styles.aiMessage]}>
-                <ActivityIndicator size="small" color="#10b981" />
-                <Text style={styles.aiMessageText}>AI is analyzing your question...</Text>
-              </View>
+                <Text style={styles.scrollToBottomText}>↓</Text>
+              </TouchableOpacity>
             )}
-          </ScrollView>
+          </View>
 
           <View style={styles.chatInputContainer}>
             <TextInput
@@ -548,5 +872,42 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     paddingBottom: 10,
     fontFamily: 'Inter-Regular',
+  },
+  scrollToBottomButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    zIndex: 10,
+  },
+  scrollToBottomText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  chatInputError: {
+    borderColor: '#ef4444',
+    borderWidth: 2,
+    backgroundColor: '#fef2f2',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sessionIndicator: {
+    fontSize: 10,
+    color: '#10b981',
+    fontFamily: 'Inter-Medium',
   },
 });

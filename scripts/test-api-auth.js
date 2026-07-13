@@ -21,7 +21,9 @@ const TEST_SCENARIOS = [
     ],
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.TEST_TOKEN || 'your-test-token-here'}`,
+      Authorization: `Bearer ${
+        process.env.TEST_TOKEN || 'your-test-token-here'
+      }`,
     },
   },
   {

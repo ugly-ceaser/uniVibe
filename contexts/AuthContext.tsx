@@ -16,6 +16,7 @@ type AuthContextType = {
   token: string | null;
   loading: boolean;
   isLoading: boolean;
+  isAuthenticated: boolean;
   login: (userData: any) => Promise<void>;
   register: (userData: any) => Promise<void>;
   logout: () => Promise<void>;
@@ -26,6 +27,7 @@ export const AuthContext = createContext<AuthContextType>({
   token: null,
   loading: true,
   isLoading: false,
+  isAuthenticated: false,
   login: async () => {},
   register: async () => {},
   logout: async () => {},
@@ -82,7 +84,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setIsLoading(true);
     try {
       const response = await authApi.login(userData);
-      const { user, token } = response; // ✅ not response.data
+      const { user, token } = response as any; // ✅ not response.data
       await AsyncStorage.setItem('user', JSON.stringify(user));
       await AsyncStorage.setItem('token', token);
 
@@ -102,45 +104,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, []);
 
-  const register = useCallback(
-    async (userData: { name: string; email: string; password: string }) => {
-      setIsLoading(true);
-      try {
-        const response: any = await authApi.register(userData);
+  const register = useCallback(async (userData: any) => {
+    setIsLoading(true);
+    try {
+      const response: any = await authApi.register(userData);
 
-        // Handle different response structures
-        if (response.data && response.data.user && response.data.token) {
-          // Response has nested user and token
-          const { user: newUser, token: authToken } = response.data;
-          await AsyncStorage.setItem('user', JSON.stringify(newUser));
-          await AsyncStorage.setItem('token', authToken);
-          setUser(newUser);
-          setToken(authToken);
-        } else if (response.data) {
-          // Response data is the user object directly
-          const newUser = response.data;
-          await AsyncStorage.setItem('user', JSON.stringify(newUser));
-          setUser(newUser);
-          // No token in response, user needs to login
-        } else {
-          // Registration successful but no user data returned
-          console.log('Registration successful, user needs to login');
-        }
-      } catch (err) {
-        console.error('Register error:', err);
-        showMessage({
-          message: 'Error',
-          description: 'Failed to register.',
-          type: 'danger',
-          icon: 'danger',
-        });
-        throw err;
-      } finally {
-        setIsLoading(false);
+      // Handle different response structures
+      if (response.data && response.data.user && response.data.token) {
+        // Response has nested user and token
+        const { user: newUser, token: authToken } = response.data;
+        await AsyncStorage.setItem('user', JSON.stringify(newUser));
+        await AsyncStorage.setItem('token', authToken);
+        setUser(newUser);
+        setToken(authToken);
+      } else if (response.data) {
+        // Response data is the user object directly
+        const newUser = response.data;
+        await AsyncStorage.setItem('user', JSON.stringify(newUser));
+        setUser(newUser);
+        // No token in response, user needs to login
+      } else {
+        // Registration successful but no user data returned
+        console.log('Registration successful, user needs to login');
       }
-    },
-    []
-  );
+    } catch (err) {
+      console.error('Register error:', err);
+      showMessage({
+        message: 'Error',
+        description: 'Failed to register.',
+        type: 'danger',
+        icon: 'danger',
+      });
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
   const logout = useCallback(async () => {
     try {
       await AsyncStorage.removeItem('user');
@@ -163,9 +162,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     checkAuth();
   }, []);
 
+  const isAuthenticated = !!token;
+
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, isLoading, login, register, logout }}
+      value={{
+        user,
+        token,
+        loading,
+        isLoading,
+        isAuthenticated,
+        login,
+        register,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -9,12 +9,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { showMessage } from 'react-native-flash-message';
 import { testConnection } from '@/utils/api';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+
+const { width } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,17 +28,15 @@ export default function LoginScreen() {
     email: '',
     password: '',
   });
-
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   React.useEffect(() => {
-    // Test connection on component mount
     const checkConnection = async () => {
       console.log('Testing API connection...');
       const isConnected = await testConnection();
       console.log('API connection status:', isConnected);
     };
-
     checkConnection();
   }, []);
 
@@ -51,7 +53,6 @@ export default function LoginScreen() {
       return;
     }
 
-    // Test connection first
     const isConnected = await testConnection();
     if (!isConnected) {
       Alert.alert(
@@ -69,7 +70,6 @@ export default function LoginScreen() {
         password,
       });
 
-      // Success feedback
       showMessage({
         message: 'Login Successful',
         description: 'Welcome back!',
@@ -77,7 +77,6 @@ export default function LoginScreen() {
         icon: 'success',
       });
 
-      // Navigate to main app
       router.replace('/(tabs)');
     } catch (error: any) {
       console.error('Login error:', error);
@@ -118,17 +117,8 @@ export default function LoginScreen() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleRegisterPress = () => {
-    router.push('/register');
-  };
-
   const handleForgotPassword = () => {
-    showMessage({
-      message: 'Forgot Password',
-      description: 'Please contact your administrator to reset your password.',
-      type: 'info',
-      icon: 'info',
-    });
+    router.push('/forgot-password');
   };
 
   return (
@@ -136,27 +126,49 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.background}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps='handled'
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps='handled'
+      >
+        {/* Header gradient section */}
+        <LinearGradient
+          colors={['#4B1FA8', '#7B2FBE', '#A855F7']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>
-              Sign in to continue your learning journey
-            </Text>
+          {/* Decorative orbs */}
+          <View style={styles.orb1} />
+          <View style={styles.orb2} />
+
+          {/* Pill badge */}
+          <View style={styles.pillBadge}>
+            <Text style={styles.pillBadgeText}>WELCOME BACK</Text>
           </View>
 
-          {/* Login Form */}
-          <View style={styles.formContainer}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+          {/* Headline */}
+          <Text style={styles.headline}>{"Let's get\nyou in ⚡"}</Text>
+          <Text style={styles.headerSubtitle}>
+            Sign in to keep the streak going.
+          </Text>
+        </LinearGradient>
+
+        {/* Form section */}
+        <View style={styles.formContainer}>
+          {/* Email */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email</Text>
+            <View style={styles.inputWrapper}>
+              <Mail
+                size={18}
+                color='#9ca3af'
+                strokeWidth={2}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
-                placeholder='Enter your email'
+                placeholder='you@university.edu'
                 placeholderTextColor='#9ca3af'
                 value={formData.email}
                 onChangeText={value => handleInputChange('email', value)}
@@ -166,56 +178,83 @@ export default function LoginScreen() {
                 editable={!isSubmitting}
               />
             </View>
+          </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
+          {/* Password */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputWrapper}>
+              <Lock
+                size={18}
+                color='#9ca3af'
+                strokeWidth={2}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
-                placeholder='Enter your password'
+                placeholder='••••••••'
                 placeholderTextColor='#9ca3af'
                 value={formData.password}
                 onChangeText={value => handleInputChange('password', value)}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 editable={!isSubmitting}
               />
-            </View>
-
-            {/* Forgot Password */}
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={handleForgotPassword}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-
-            {/* Login Button */}
-            <TouchableOpacity
-              style={[
-                styles.loginButton,
-                (isSubmitting || isLoading) && styles.loginButtonDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={isSubmitting || isLoading}
-            >
-              <Text style={styles.loginButtonText}>
-                {isSubmitting ? 'Signing In...' : 'Sign In'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Register Link */}
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>Don't have an account? </Text>
               <TouchableOpacity
-                onPress={handleRegisterPress}
-                disabled={isSubmitting}
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
               >
-                <Text style={styles.registerLink}>Sign Up</Text>
+                {showPassword ? (
+                  <EyeOff size={18} color='#9ca3af' strokeWidth={2} />
+                ) : (
+                  <Eye size={18} color='#9ca3af' strokeWidth={2} />
+                )}
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
-      </LinearGradient>
+
+          {/* Forgot password */}
+          <TouchableOpacity
+            style={styles.forgotPassword}
+            onPress={handleForgotPassword}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+          </TouchableOpacity>
+
+          {/* Sign in button */}
+          <TouchableOpacity
+            style={[
+              styles.signInButton,
+              (isSubmitting || isLoading) && styles.signInButtonDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={isSubmitting || isLoading}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#F43F5E', '#7B2FBE']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.signInGradient}
+            >
+              <Text style={styles.signInButtonText}>
+                {isSubmitting ? 'Signing In...' : 'Sign in'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Register link */}
+          <View style={styles.registerContainer}>
+            <Text style={styles.registerText}>New here? </Text>
+            <TouchableOpacity
+              onPress={() => router.push('/register')}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.registerLink}>Create an account</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -223,93 +262,141 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  background: {
-    flex: 1,
+    backgroundColor: '#EDE9F8',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 40,
   },
   header: {
-    alignItems: 'center',
-    paddingTop: 80,
-    paddingBottom: 40,
+    paddingTop: 70,
+    paddingBottom: 48,
+    paddingHorizontal: 24,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
+  orb1: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(168, 85, 247, 0.35)',
+    top: -30,
+    right: -30,
+  },
+  orb2: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(168, 85, 247, 0.25)',
+    bottom: 10,
+    right: 60,
+  },
+  pillBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#C8F135',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginBottom: 20,
+  },
+  pillBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1a1a1a',
+    letterSpacing: 1,
     fontFamily: 'Inter-Bold',
   },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
+  headline: {
+    fontSize: 40,
+    fontWeight: '900',
+    color: '#ffffff',
+    lineHeight: 46,
+    marginBottom: 12,
+    fontFamily: 'Inter-Bold',
+  },
+  headerSubtitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
     fontFamily: 'Inter-Regular',
   },
   formContainer: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    flex: 1,
+    backgroundColor: '#EDE9F8',
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 18,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#1a1a2e',
     marginBottom: 8,
     fontFamily: 'Inter-SemiBold',
   },
-  input: {
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
     borderWidth: 2,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    backgroundColor: '#f9fafb',
-    fontFamily: 'Inter_400Regular',
+    borderColor: '#1a1a2e',
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1a1a2e',
+    paddingVertical: 13,
+    fontFamily: 'Inter-Regular',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
+  },
+  eyeButton: {
+    padding: 4,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginBottom: 24,
+    marginBottom: 28,
   },
   forgotPasswordText: {
-    color: '#667eea',
+    color: '#7B2FBE',
     fontSize: 14,
-    fontFamily: 'Inter_500Medium',
+    fontWeight: '600',
+    fontFamily: 'Inter-SemiBold',
   },
-  loginButton: {
-    backgroundColor: '#667eea',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+  signInButton: {
+    borderRadius: 14,
+    marginBottom: 28,
+    shadowColor: '#7B2FBE',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  loginButtonDisabled: {
-    backgroundColor: '#9ca3af',
+  signInButtonDisabled: {
     opacity: 0.6,
   },
-  loginButtonText: {
+  signInGradient: {
+    paddingVertical: 17,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  signInButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'Inter_600SemiBold',
+    fontWeight: '700',
+    fontFamily: 'Inter-Bold',
   },
   registerContainer: {
     flexDirection: 'row',
@@ -319,12 +406,12 @@ const styles = StyleSheet.create({
   registerText: {
     color: '#6b7280',
     fontSize: 14,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Inter-Regular',
   },
   registerLink: {
-    color: '#667eea',
+    color: '#7B2FBE',
     fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'Inter_600SemiBold',
+    fontWeight: '700',
+    fontFamily: 'Inter-Bold',
   },
 });

@@ -57,6 +57,7 @@ export interface UserProfile {
   verificationStatus: boolean;
   status: 'Cleared' | 'Pending' | 'Suspended';
   createdAt: string;
+  university?: string | null;
 }
 
 export interface UpdateProfileRequest {
@@ -67,7 +68,8 @@ export interface UpdateProfileRequest {
   level?: number;
   semester?: 'First' | 'Second';
   regNumber?: string; // added
-  nin?: string;       // added
+  nin?: string; // added
+  university?: string;
 }
 
 export interface VerifyFieldsRequest {
@@ -111,7 +113,15 @@ export interface MapLocation {
   id: string;
   name: string;
   description?: string;
-  category: 'Lecture Hall' | 'Hostel' | 'Cafeteria' | 'Lab' | 'ATM' | 'Library' | 'Admin' | 'Recreation';
+  category:
+    | 'Lecture Hall'
+    | 'Hostel'
+    | 'Cafeteria'
+    | 'Lab'
+    | 'ATM'
+    | 'Library'
+    | 'Admin'
+    | 'Recreation';
   coordinates: {
     latitude: number;
     longitude: number;
@@ -126,17 +136,38 @@ export interface MapLocation {
 // Map API client interface
 export interface MapApiClient {
   getAll: () => Promise<import('@/types/api').ApiResponse<MapLocation[]>>;
-  getById: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
-  create: (data: Partial<MapLocation>) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
-  createAsAdmin: (data: Partial<MapLocation>) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
-  update: (id: string, data: Partial<MapLocation>) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
-  delete: (id: string) => Promise<import('@/types/api').ApiResponse<{ id: string }>>;
-  getAllAsAdmin: () => Promise<import('@/types/api').ApiResponse<MapLocation[]>>;
-  getByIdAsAdmin: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  getById: (
+    id: string
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  create: (
+    data: Partial<MapLocation>
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  createAsAdmin: (
+    data: Partial<MapLocation>
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  update: (
+    id: string,
+    data: Partial<MapLocation>
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  delete: (
+    id: string
+  ) => Promise<import('@/types/api').ApiResponse<{ id: string }>>;
+  getAllAsAdmin: () => Promise<
+    import('@/types/api').ApiResponse<MapLocation[]>
+  >;
+  getByIdAsAdmin: (
+    id: string
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
   getPending: () => Promise<import('@/types/api').ApiResponse<MapLocation[]>>;
-  approve: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
-  reject: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
-  investigate: (id: string) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  approve: (
+    id: string
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  reject: (
+    id: string
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
+  investigate: (
+    id: string
+  ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
 }
 
 // ... existing code below stays the same ...

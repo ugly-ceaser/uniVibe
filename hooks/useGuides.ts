@@ -54,7 +54,9 @@ export const useGuides = (): UseGuidesReturn => {
               item.content?.substring(0, 120) + '...' ||
               'No description available',
             category: 'Academics' as Category,
-            readTime: `${Math.ceil((item.content?.split(' ').length || 0) / 200)} min read`,
+            readTime: `${Math.ceil(
+              (item.content?.split(' ').length || 0) / 200
+            )} min read`,
             likes: item.likesCount || 0,
             author: 'UniVibe Team',
             createdAt: item.createdAt,

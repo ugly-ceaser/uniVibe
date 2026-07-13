@@ -1,9 +1,19 @@
 import React from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApiResponse, Guide } from '@/types/api';
+import { ApiResponse } from '@/types/api';
+import { Guide } from '@/types';
 import { Category, LikeResponse } from '@/types';
-import { PaginationMeta, QuestionSummary, UserProfile, UpdateProfileRequest, VerifyFieldsRequest, ProfileApiResponse, MapLocation, MapApiClient } from './types';
+import {
+  PaginationMeta,
+  QuestionSummary,
+  UserProfile,
+  UpdateProfileRequest,
+  VerifyFieldsRequest,
+  ProfileApiResponse,
+  MapLocation,
+  MapApiClient,
+} from './types';
 
 // ------------------------
 // Base setup
@@ -59,8 +69,7 @@ class ApiClient {
 
   constructor() {
     this.baseURL =
-      process.env.EXPO_PUBLIC_API_URL ||
-      'http://localhost:3000/api/v1';
+      process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
     console.log('🌐 API Base URL:', this.baseURL);
 
     // Test connection on initialization
@@ -104,7 +113,10 @@ class ApiClient {
 
   // 🐛 Debug method to clear all pending requests
   public clearPendingRequests() {
-    console.log('🧹 Clearing all pending requests:', Array.from(this.pendingRequests.keys()));
+    console.log(
+      '🧹 Clearing all pending requests:',
+      Array.from(this.pendingRequests.keys())
+    );
     this.pendingRequests.clear();
   }
 
@@ -195,14 +207,14 @@ class ApiClient {
     if (this.pendingRequests.has(requestKey)) {
       console.log('🔄 Deduplicating request:', requestKey);
       const existingPromise = this.pendingRequests.get(requestKey)!;
-      
+
       // Check if the existing promise is still pending
       try {
         const result = await Promise.race([
           existingPromise,
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Request timeout')), 10000)
-          )
+          ),
         ]);
         return result;
       } catch (error) {
@@ -313,10 +325,13 @@ class ApiClient {
 
       console.log('🚀 [DEBUG] Starting fetch request...');
       const response = await fetch(url, fetchOptions);
-      
+
       clearTimeout(timeoutId);
       console.log('📊 Response received with status:', response.status);
-      console.log('🔍 [DEBUG] Response headers:', Object.fromEntries(response.headers.entries()));
+      console.log(
+        '🔍 [DEBUG] Response headers:',
+        Object.fromEntries(response.headers.entries())
+      );
 
       if (response.status === 429) {
         console.warn('⚠️ Rate limit hit, backing off...');
@@ -333,7 +348,7 @@ class ApiClient {
           statusText: response.statusText,
           url: response.url,
         });
-        
+
         let errorData = null;
         try {
           errorData = await response.json();
@@ -341,7 +356,7 @@ class ApiClient {
         } catch (jsonError) {
           console.warn('⚠️ Could not parse error response as JSON:', jsonError);
         }
-        
+
         throw new ApiError(
           errorData?.message ||
             `HTTP ${response.status}: ${response.statusText}`,
@@ -357,14 +372,15 @@ class ApiClient {
         dataKeys: data ? Object.keys(data) : [],
         dataLength: Array.isArray(data?.data) ? data.data.length : 'N/A',
       });
-      
+
       return data as T;
     } catch (error) {
       console.error('💥 Request failed with error:', {
         error: error,
         message: error instanceof Error ? error.message : String(error),
         name: error instanceof Error ? error.name : typeof error,
-        stack: error instanceof Error ? error.stack?.substring(0, 200) : undefined,
+        stack:
+          error instanceof Error ? error.stack?.substring(0, 200) : undefined,
       });
 
       // Enhanced error handling with detailed messages
@@ -403,12 +419,27 @@ class ApiClient {
 
   // Helper methods with caching control
   async get<T>(endpoint: string, useCache: boolean = true): Promise<T> {
-    console.log('🔍 [DEBUG] GET method called for:', endpoint, 'useCache:', useCache);
-    console.log('🔍 [DEBUG] Current pending requests:', Array.from(this.pendingRequests.keys()));
-    console.log('🔍 [DEBUG] Current cache keys:', Array.from(this.cache.keys()));
-    
+    console.log(
+      '🔍 [DEBUG] GET method called for:',
+      endpoint,
+      'useCache:',
+      useCache
+    );
+    console.log(
+      '🔍 [DEBUG] Current pending requests:',
+      Array.from(this.pendingRequests.keys())
+    );
+    console.log(
+      '🔍 [DEBUG] Current cache keys:',
+      Array.from(this.cache.keys())
+    );
+
     const result = await this.request<T>(endpoint, { method: 'GET' }, useCache);
-    console.log('🔍 [DEBUG] GET method returning result for:', endpoint, result);
+    console.log(
+      '🔍 [DEBUG] GET method returning result for:',
+      endpoint,
+      result
+    );
     return result;
   }
 
@@ -572,7 +603,7 @@ export const useApi = () => {
         authenticatedRequest(fn),
       forceRefresh: <T>(endpoint: string) =>
         apiClient.forceRefresh<T>(endpoint),
-      
+
       // 🐛 Debug methods
       clearPendingRequests: () => apiClient.clearPendingRequests(),
       getDebugInfo: () => apiClient.getDebugInfo(),
@@ -591,28 +622,145 @@ export const authApi = {
     apiClient.post('/auth/register', user),
   login: (credentials: { email: string; password: string }) =>
     apiClient.post('/auth/login', credentials),
+  checkUsername: (username: string) =>
+    apiClient.post<{ available: boolean }>('/auth/check-username', {
+      username,
+    }),
 };
 
 // ------------------------
 // Courses API
 // ------------------------
 export const coursesApi = (api: ReturnType<typeof useApi>) => ({
-  getAll: () => {
-    console.log('🌐 Fetching courses from /api/v1/courses');
-    return api.authGet<ApiResponse<any[]>>('/courses', false);
+  // ─── Official Courses ────────────────────────────────────────────────
+  getAll: (filters?: {
+    universityId?: string;
+    facultyId?: string;
+    departmentId?: string;
+    programmeId?: string;
+    levelId?: string;
+    semesterId?: string;
+  }) => {
+    const params = filters
+      ? '?' +
+        new URLSearchParams(
+          Object.entries(filters).filter(([, v]) => !!v) as any
+        ).toString()
+      : '';
+    return api.authGet<{ data: any[] }>(`/courses${params}`, false);
   },
-  getById: (id: string) => {
-    console.log(`🌐 Fetching course ${id} from /api/v1/courses/${id}`);
-    return api.get<ApiResponse<any>>(`/courses/${id}`);
+  getById: (id: string) => api.authGet<{ data: any }>(`/courses/${id}`),
+  search: (q: string, universityId?: string) => {
+    const params = new URLSearchParams({
+      q,
+      ...(universityId ? { universityId } : {}),
+    });
+    return api.authGet<{ data: any[] }>(
+      `/courses/search?${params.toString()}`,
+      false
+    );
   },
-  create: (data: any) => {
-    console.log('🌐 Creating course at /api/v1/courses');
-    return api.authPost<ApiResponse<any>>('/courses', data);
+
+  // ─── Selected/Enrolled Courses ─────────────────────────────────────────
+  getSelected: () => api.authGet<{ data: any[] }>('/courses/selected', false),
+  enroll: (id: string) =>
+    api.authPost<{ message: string }>(`/courses/${id}/enroll`),
+  unenroll: (id: string) =>
+    api.authPost<{ message: string }>(`/courses/${id}/unenroll`),
+
+  // ─── University Hierarchy Browser ───────────────────────────────────
+  getUniversities: (country?: string, state?: string) => {
+    const params = new URLSearchParams(
+      Object.entries({ country, state }).filter(([, v]) => !!v) as any
+    ).toString();
+    return api.get<{ data: any[] }>(
+      `/courses/universities${params ? '?' + params : ''}`,
+      true
+    );
   },
+  getFaculties: (universityId: string) =>
+    api.get<{ data: any[] }>(
+      `/courses/universities/${universityId}/faculties`,
+      true
+    ),
+  getDepartments: (facultyId: string) =>
+    api.get<{ data: any[] }>(
+      `/courses/faculties/${facultyId}/departments`,
+      true
+    ),
+  getProgrammes: (departmentId: string) =>
+    api.get<{ data: any[] }>(
+      `/courses/departments/${departmentId}/programmes`,
+      true
+    ),
+  getLevels: (programmeId: string) =>
+    api.get<{ data: any[] }>(`/courses/programmes/${programmeId}/levels`, true),
+  getSemesters: (programmeId: string) =>
+    api.get<{ data: any[] }>(
+      `/courses/programmes/${programmeId}/semesters`,
+      true
+    ),
+
+  // ─── Submission Workflow ─────────────────────────────────────────────
+  submitCourse: (data: {
+    universityId: string;
+    facultyId: string;
+    departmentId: string;
+    programmeId: string;
+    levelId: string;
+    semesterId: string;
+    courseCode: string;
+    title: string;
+    creditUnit: number;
+    note?: string;
+  }) =>
+    api.authPost<{ type: string; message: string; data: any }>(
+      '/courses/submissions',
+      data
+    ),
+
+  listSubmissions: (filters?: {
+    universityId?: string;
+    facultyId?: string;
+    departmentId?: string;
+    status?: string;
+  }) => {
+    const params = filters
+      ? '?' +
+        new URLSearchParams(
+          Object.entries(filters).filter(([, v]) => !!v) as any
+        ).toString()
+      : '';
+    return api.authGet<{ data: any[] }>(`/courses/submissions${params}`, false);
+  },
+
+  getSubmission: (id: string) =>
+    api.authGet<{ data: any }>(`/courses/submissions/${id}`, false),
+
+  approveSubmission: (id: string, courseType?: string) =>
+    api.authPost<{ message: string; data: any }>(
+      `/courses/submissions/${id}/approve`,
+      { courseType }
+    ),
+
+  rejectSubmission: (id: string, reason?: string) =>
+    api.authPost<{ message: string }>(`/courses/submissions/${id}/reject`, {
+      reason,
+    }),
+
+  bulkApprove: (submissionIds: string[]) =>
+    api.authPost<{ approved: number; failed: number; total: number }>(
+      '/courses/submissions/bulk-approve',
+      { submissionIds }
+    ),
+
+  // ─── Legacy Course Requests (backward compat) ────────────────────────
+  getRequestStatus: () => api.authGet<any>('/courses/requests/status', false),
+  submitRequest: (data: any) => api.authPost<any>('/courses/requests', data),
 });
 
 // ------------------------
-// AI Chat API - Course-specific AI assistance
+// AI Chat API - Updated to match backend specifications
 // ------------------------
 export interface AIChatRequest {
   message: string;
@@ -621,11 +769,33 @@ export interface AIChatRequest {
     courseCode: string;
     courseName: string;
     outline?: string[];
-    assessment?: Array<{type: string; percentage: number}>;
+    assessment?: Array<{ type: string; percentage: number }>;
     instructor?: string;
     description?: string;
   };
-  conversationHistory?: Array<{role: 'user' | 'assistant'; content: string}>;
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  userMode?: 'fast' | 'balanced' | 'smart';
+}
+
+export interface GeneralChatRequest {
+  message: string;
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  userMode?: 'fast' | 'balanced' | 'smart';
+}
+
+export interface AcademicChatRequest {
+  message: string;
+  studentContext: {
+    studentId: string;
+    currentGPA?: number;
+    enrolledCourses?: string[];
+    completedCourses?: string[];
+    strugglingSubjects?: string[];
+    studyHours?: number;
+    activeForumPosts?: number;
+  };
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  userMode?: 'fast' | 'balanced' | 'smart';
 }
 
 export interface AIChatResponse {
@@ -633,48 +803,244 @@ export interface AIChatResponse {
   confidence: number;
   sources?: string[];
   suggestions?: string[];
+  cached: boolean;
+  model: string;
+  tokensUsed?: number;
+  estimatedCost?: number;
+}
+
+// Backend API response wrapper
+export interface AIApiResponse {
+  data: AIChatResponse;
+  message: string;
+  timestamp: string;
+  sessionId?: string;
+}
+
+// Course session response format
+export interface CourseSessionResponse {
+  data: {
+    session: {
+      id: string;
+      studentId: string;
+      courseId: string;
+      title: string;
+      createdAt: string;
+      messages: Array<{
+        id: string;
+        role: 'user' | 'assistant' | 'system';
+        content: string;
+        createdAt: string;
+      }>;
+    };
+    course: {
+      id: string;
+      name: string;
+      code: string;
+    };
+  };
+  message: string;
+}
+
+// Course chats list response format
+export interface CourseChatsListResponse {
+  data: {
+    course: {
+      id: string;
+      name: string;
+      code: string;
+    };
+    sessions: Array<{
+      id: string;
+      title: string;
+      createdAt: string;
+      messages: Array<{
+        id: string;
+        role: 'user' | 'assistant';
+        content: string;
+        createdAt: string;
+      }>;
+      _count: {
+        messages: number;
+      };
+    }>;
+  };
+  message: string;
+}
+
+export interface ChatSession {
+  id: string;
+  studentId: string;
+  title: string;
+  createdAt: string;
+  messages: ChatMessage[];
+  _count: {
+    messages: number;
+  };
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt: string;
+}
+
+export interface CourseInsights {
+  studyPlan: string[];
+  keyTopics: string[];
+  assessmentTips: string[];
+  resources: string[];
+  difficultyRating: string;
+  estimatedStudyHours: number;
+}
+
+export interface PersonalizedRecommendations {
+  recommendations: string[];
+  focusAreas: string[];
+  timeAllocation: Record<string, number>;
+  nextSteps: string[];
+}
+
+export interface CourseChatSession {
+  id: string;
+  courseId: string;
+  studentId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+  _count: {
+    messages: number;
+  };
+}
+
+export interface CourseChatsResponse {
+  data: {
+    course: {
+      id: string;
+      name: string;
+      code: string;
+    };
+    sessions: Array<{
+      id: string;
+      title: string;
+      createdAt: string;
+      messages: Array<{
+        id: string;
+        role: 'user' | 'assistant';
+        content: string;
+        createdAt: string;
+      }>;
+      _count: {
+        messages: number;
+      };
+    }>;
+  };
+  message: string;
 }
 
 export const aiApi = (api: ReturnType<typeof useApi>) => ({
   // Course-specific AI chat
   courseChat: (data: AIChatRequest) => {
     console.log(`🤖 Sending AI chat request for course ${data.courseId}`);
-    return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/course', data);
+    return api.authPost<AIApiResponse>('/ai/chat/course', data);
   },
-  
-  // General AI chat (existing global chat)
-  generalChat: (message: string, conversationHistory?: Array<{role: 'user' | 'assistant'; content: string}>) => {
+
+  // General AI chat
+  generalChat: (data: GeneralChatRequest) => {
     console.log('🤖 Sending general AI chat request');
-    return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/general', {
-      message,
-      conversationHistory
-    });
+    return api.authPost<AIApiResponse>('/ai/chat/general', data);
   },
-  
+
+  // Academic progress AI chat
+  academicChat: (data: AcademicChatRequest) => {
+    console.log('🤖 Sending academic progress AI chat request');
+    return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/academic', data);
+  },
+
   // Get course insights and study recommendations
   getCourseInsights: (courseId: string) => {
     console.log(`📚 Fetching AI insights for course ${courseId}`);
-    return api.authGet<ApiResponse<{
-      studyPlan: string[];
-      keyTopics: string[];
-      assessmentTips: string[];
-      resources: string[];
-    }>>(`/ai/insights/course/${courseId}`);
+    return api.authGet<ApiResponse<CourseInsights>>(
+      `/ai/insights/course/${courseId}`
+    );
   },
-  
-  // Analyze student's performance and provide recommendations
-  getPersonalizedRecommendations: (courseId: string, studentData?: {
-    completedTopics?: string[];
-    strugglingAreas?: string[];
-    studyHours?: number;
-  }) => {
-    console.log(`🎯 Fetching personalized recommendations for course ${courseId}`);
-    return api.authPost<ApiResponse<{
-      recommendations: string[];
-      focusAreas: string[];
-      timeAllocation: Record<string, number>;
-    }>>(`/ai/recommendations/course/${courseId}`, studentData);
-  }
+
+  // Get personalized recommendations for a course
+  getPersonalizedRecommendations: (
+    courseId: string,
+    studentData?: {
+      completedTopics?: string[];
+      strugglingAreas?: string[];
+      studyHours?: number;
+      lastAssignmentScore?: number;
+      attendanceRate?: number;
+      forumParticipation?: string;
+    }
+  ) => {
+    console.log(
+      `🎯 Fetching personalized recommendations for course ${courseId}`
+    );
+    return api.authPost<ApiResponse<PersonalizedRecommendations>>(
+      `/ai/recommendations/course/${courseId}`,
+      {
+        studentData,
+      }
+    );
+  },
+
+  // Chat session management
+  getChatSessions: () => {
+    console.log('📋 Fetching user chat sessions');
+    return api.authGet<ApiResponse<ChatSession[]>>('/ai/sessions');
+  },
+
+  getChatSession: (sessionId: string) => {
+    console.log(`📋 Fetching chat session ${sessionId}`);
+    return api.authGet<ApiResponse<ChatSession>>(`/ai/sessions/${sessionId}`);
+  },
+
+  deleteChatSession: (sessionId: string) => {
+    console.log(`🗑️ Deleting chat session ${sessionId}`);
+    return api.authDelete<ApiResponse<void>>(`/ai/sessions/${sessionId}`);
+  },
+
+  // Course-specific chat session management
+  getCourseChatSessions: (courseId: string) => {
+    console.log(`📚 Fetching chat sessions for course ${courseId}`);
+    return api.authGet<CourseChatsListResponse>(
+      `/ai/courses/${courseId}/chats`
+    );
+  },
+
+  getCourseActiveSession: (courseId: string) => {
+    console.log(`💬 Getting active chat session for course ${courseId}`);
+    return api.authGet<CourseSessionResponse>(
+      `/ai/courses/${courseId}/chats/session`
+    );
+  },
+
+  // Enhanced course chat with automatic session management
+  courseChatWithSession: (data: AIChatRequest) => {
+    console.log(
+      `🤖 Sending AI chat request for course ${data.courseId} with session management`
+    );
+    return api.authPost<AIApiResponse>('/ai/chat/course', data);
+  },
+
+  // Legacy method for backward compatibility
+  generalUniversityChat: (
+    message: string,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  ) => {
+    console.log('🤖 Sending general AI chat request (legacy)');
+    return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/general', {
+      message,
+      conversationHistory,
+      userMode: 'balanced',
+    });
+  },
 });
 
 // ------------------------
@@ -765,7 +1131,9 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     if (params.category) qs.set('category', params.category);
     if (params.forumId) qs.set('forumId', params.forumId);
 
-    const endpoint = `/forum/questions${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const endpoint = `/forum/questions${
+      qs.toString() ? `?${qs.toString()}` : ''
+    }`;
 
     // api.get(url, useCache). Use cache unless refresh is true.
     return api.authGet(endpoint, !(params.refresh ?? false));
@@ -969,7 +1337,9 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     const queryParams = new URLSearchParams();
     if (params?.forumId) queryParams.append('forumId', params.forumId);
 
-    const endpoint = `/forum/questions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    const endpoint = `/forum/questions${
+      queryParams.toString() ? `?${queryParams.toString()}` : ''
+    }`;
     return api.forceRefresh<ApiResponse<ForumPost[]>>(endpoint);
   },
 
@@ -1149,25 +1519,25 @@ export const guideApi = (api: ReturnType<typeof useApi>) => ({
 export const mapApi = (api: ReturnType<typeof useApi>): MapApiClient => ({
   getAll: () => api.get<ApiResponse<MapLocation[]>>('/map'),
   getById: (id: string) => api.get<ApiResponse<MapLocation>>(`/map/${id}`),
-  create: (data: Partial<MapLocation>) => 
+  create: (data: Partial<MapLocation>) =>
     api.authPost<ApiResponse<MapLocation>>('/map', data),
   createAsAdmin: (data: Partial<MapLocation>) =>
     api.authPost<ApiResponse<MapLocation>>('/map/admin', data),
   update: (id: string, data: Partial<MapLocation>) =>
     api.authPut<ApiResponse<MapLocation>>(`/map/${id}`, data),
-  delete: (id: string) => 
+  delete: (id: string) =>
     api.authDelete<ApiResponse<{ id: string }>>(`/map/${id}`),
-  getAllAsAdmin: () => 
+  getAllAsAdmin: () =>
     api.authGet<ApiResponse<MapLocation[]>>('/map/admin/all'),
-  getByIdAsAdmin: (id: string) => 
+  getByIdAsAdmin: (id: string) =>
     api.authGet<ApiResponse<MapLocation>>(`/map/admin/${id}`),
-  getPending: () => 
+  getPending: () =>
     api.authGet<ApiResponse<MapLocation[]>>('/map/admin/pending'),
-  approve: (id: string) => 
+  approve: (id: string) =>
     api.authPatch<ApiResponse<MapLocation>>(`/map/${id}/approve`, {}),
-  reject: (id: string) => 
+  reject: (id: string) =>
     api.authPatch<ApiResponse<MapLocation>>(`/map/${id}/reject`, {}),
-  investigate: (id: string) => 
+  investigate: (id: string) =>
     api.authPatch<ApiResponse<MapLocation>>(`/map/${id}/investigate`, {}),
 });
 
@@ -1204,10 +1574,18 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
 
   // Transform API response to match our strict UserProfile type
   const transformUserProfile = (apiData: any): UserProfile => {
-    const validRoles: Array<'STUDENT' | 'ADMIN' | 'LECTURER'> = ['STUDENT', 'ADMIN', 'LECTURER'];
+    const validRoles: Array<'STUDENT' | 'ADMIN' | 'LECTURER'> = [
+      'STUDENT',
+      'ADMIN',
+      'LECTURER',
+    ];
     const validSemesters: Array<'First' | 'Second'> = ['First', 'Second'];
-    const validStatuses: Array<'Cleared' | 'Pending' | 'Suspended'> = ['Cleared', 'Pending', 'Suspended'];
-    
+    const validStatuses: Array<'Cleared' | 'Pending' | 'Suspended'> = [
+      'Cleared',
+      'Pending',
+      'Suspended',
+    ];
+
     return {
       id: apiData.id || '',
       email: apiData.email || '',
@@ -1217,33 +1595,51 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
       department: apiData.department || '',
       faculty: apiData.faculty || '',
       level: apiData.level || 100,
-      semester: validSemesters.includes(apiData.semester) ? apiData.semester : 'First',
+      semester: validSemesters.includes(apiData.semester)
+        ? apiData.semester
+        : 'First',
       phone: apiData.phone || '',
       nin: apiData.nin || '',
       avatarUrl: apiData.avatarUrl,
       verificationStatus: apiData.verificationStatus || false,
-      status: validStatuses.includes(apiData.status) ? apiData.status : 'Pending',
+      status: validStatuses.includes(apiData.status)
+        ? apiData.status
+        : 'Pending',
       createdAt: apiData.createdAt || new Date().toISOString(),
+      university: apiData.university || '',
     };
   };
 
   return {
     getProfile: async (): Promise<ProfileApiResponse> => {
-      const response = await api.authGet<{ data: any; message?: string }>('/user/profile', false);
+      const response = await api.authGet<{ data: any; message?: string }>(
+        '/user/profile',
+        false
+      );
       return {
         data: transformUserProfile(response.data),
         message: response.message,
       };
     },
-    updateProfile: async (data: UpdateProfileRequest): Promise<ProfileApiResponse> => {
-      const response = await api.authPut<{ data: any; message?: string }>('/user/profile', toBackendPayload(data));
+    updateProfile: async (
+      data: UpdateProfileRequest
+    ): Promise<ProfileApiResponse> => {
+      const response = await api.authPut<{ data: any; message?: string }>(
+        '/user/profile',
+        toBackendPayload(data)
+      );
       return {
         data: transformUserProfile(response.data),
         message: response.message,
       };
     },
-    verifyFields: async (data: VerifyFieldsRequest): Promise<ProfileApiResponse> => {
-      const response = await api.authPatch<{ data: any; message?: string }>('/user/profile/verify', data);
+    verifyFields: async (
+      data: VerifyFieldsRequest
+    ): Promise<ProfileApiResponse> => {
+      const response = await api.authPatch<{ data: any; message?: string }>(
+        '/user/profile/verify',
+        data
+      );
       return {
         data: transformUserProfile(response.data),
         message: response.message,
@@ -1311,5 +1707,3 @@ export const testConnection = async (): Promise<boolean> => {
     return false;
   }
 };
-
-

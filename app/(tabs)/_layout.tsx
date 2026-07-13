@@ -1,43 +1,32 @@
-import { Tabs, usePathname } from 'expo-router';
-import {
-  Chrome as Home,
-  Map,
-  MessageSquare,
-  BookOpen,
-  User,
-} from 'lucide-react-native';
-
-import { View, StyleSheet } from 'react-native';
+import { Tabs } from 'expo-router';
+import { Home, Map, MessageCircle, Square, User } from 'lucide-react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
-export default function TabLayout() {
-  const pathname = usePathname();
-  // Hide FAB on /forum and /(tabs)/forum (and any nested paths)
-  const isForum =
-    pathname === '/forum' ||
-    pathname?.startsWith('/forum') ||
-    pathname?.startsWith('/(tabs)/forum');
-  const showFab = !isForum;
+const ACTIVE_COLOR = '#C4FF0E';
+const INACTIVE_COLOR = '#555577';
+const TAB_BG = '#0F0F16';
 
+export default function TabLayout() {
   return (
     <ErrorBoundary>
       <View style={styles.container}>
         <Tabs
           screenOptions={{
             headerShown: false,
-            tabBarActiveTintColor: '#667eea',
-            tabBarInactiveTintColor: '#9ca3af',
+            tabBarActiveTintColor: ACTIVE_COLOR,
+            tabBarInactiveTintColor: INACTIVE_COLOR,
             tabBarStyle: {
-              backgroundColor: '#ffffff',
-              borderTopWidth: 1,
-              borderTopColor: '#f3f4f6',
-              paddingBottom: 8,
-              paddingTop: 8,
-              height: 70,
+              backgroundColor: TAB_BG,
+              borderTopWidth: 0,
+              paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+              paddingTop: 10,
+              height: Platform.OS === 'ios' ? 88 : 74,
             },
             tabBarLabelStyle: {
-              fontFamily: 'Inter-Medium',
-              fontSize: 12,
+              fontSize: 11,
+              fontWeight: '600',
+              marginTop: 2,
             },
           }}
         >
@@ -46,7 +35,7 @@ export default function TabLayout() {
             options={{
               title: 'Home',
               tabBarIcon: ({ size, color }) => (
-                <Home size={size} color={color} strokeWidth={2} />
+                <Home size={size - 2} color={color} strokeWidth={2.2} />
               ),
             }}
           />
@@ -55,7 +44,7 @@ export default function TabLayout() {
             options={{
               title: 'Map',
               tabBarIcon: ({ size, color }) => (
-                <Map size={size} color={color} strokeWidth={2} />
+                <Map size={size - 2} color={color} strokeWidth={2.2} />
               ),
             }}
           />
@@ -64,7 +53,11 @@ export default function TabLayout() {
             options={{
               title: 'Forum',
               tabBarIcon: ({ size, color }) => (
-                <MessageSquare size={size} color={color} strokeWidth={2} />
+                <MessageCircle
+                  size={size - 2}
+                  color={color}
+                  strokeWidth={2.2}
+                />
               ),
             }}
           />
@@ -73,7 +66,7 @@ export default function TabLayout() {
             options={{
               title: 'Courses',
               tabBarIcon: ({ size, color }) => (
-                <BookOpen size={size} color={color} strokeWidth={2} />
+                <Square size={size - 2} color={color} strokeWidth={2.2} />
               ),
             }}
           />
@@ -82,12 +75,11 @@ export default function TabLayout() {
             options={{
               title: 'Profile',
               tabBarIcon: ({ size, color }) => (
-                <User size={size} color={color} strokeWidth={2} />
+                <User size={size - 2} color={color} strokeWidth={2.2} />
               ),
             }}
           />
         </Tabs>
-      
       </View>
     </ErrorBoundary>
   );
@@ -96,5 +88,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#EBEFFF',
   },
 });

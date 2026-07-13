@@ -19,8 +19,7 @@ export interface Comment {
   replies: Reply[];
 }
 
-export interface Reply {
-}
+export interface Reply {}
 export const forumPosts: ForumPost[] = [
   {
     id: '1',

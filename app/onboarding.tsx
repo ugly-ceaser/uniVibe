@@ -9,34 +9,36 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { BookOpen, Users, MapPin } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
 const onboardingData = [
   {
     id: 1,
-    icon: BookOpen,
-    title: 'Academic Excellence',
+    emoji: '📚',
+    iconBg: '#C8F135',
+    title: 'Academic\nexcellence',
     description:
-      'Get survival tips, course guides, and study strategies to excel in your first year.',
-    color: ['#667eea', '#764ba2'],
+      'Survival tips, course guides, and study strategies to actually pass your first year.',
+    colors: ['#4B1FA8', '#7B2FBE', '#B056F5'] as const,
   },
   {
     id: 2,
-    icon: MapPin,
-    title: 'Navigate Campus',
+    emoji: '📍',
+    iconBg: '#ffffff',
+    title: 'Navigate\ncampus',
     description:
-      'Find your way around campus with our comprehensive location guide and maps.',
-    color: ['#f093fb', '#f5576c'],
+      'Find your way around with shortcuts, maps, and the fastest routes between classes.',
+    colors: ['#5B1E9C', '#8B3FC8', '#B050E8'] as const,
   },
   {
     id: 3,
-    icon: Users,
-    title: 'Connect & Learn',
+    emoji: '👥',
+    iconBg: '#4DD9D9',
+    title: 'Connect &\nlearn',
     description:
-      'Join discussions, ask questions, and connect with fellow students in our forum.',
-    color: ['#4facfe', '#00f2fe'],
+      'Join discussions, ask questions, and link up with fellow students in the forum.',
+    colors: ['#F43F5E', '#C2376B', '#8B2080'] as const,
   },
 ];
 
@@ -62,6 +64,9 @@ export default function OnboardingScreen() {
     router.replace('/login');
   };
 
+  const isLast = currentIndex === onboardingData.length - 1;
+  const current = onboardingData[currentIndex];
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -69,6 +74,7 @@ export default function OnboardingScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        scrollEnabled={false}
         onMomentumScrollEnd={event => {
           const index = Math.round(event.nativeEvent.contentOffset.x / width);
           setCurrentIndex(index);
@@ -77,44 +83,60 @@ export default function OnboardingScreen() {
         {onboardingData.map((item, index) => (
           <LinearGradient
             key={item.id}
-            colors={item.color}
+            colors={item.colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
             style={styles.slide}
           >
-            <View style={styles.content}>
-              <View style={styles.iconContainer}>
-                <item.icon size={80} color='#ffffff' strokeWidth={1.5} />
-              </View>
+            {/* Decorative orbs */}
+            <View style={styles.orb1} />
+            <View style={styles.orb2} />
 
-              <Text style={styles.title}>{item.title}</Text>
-              <Text style={styles.description}>{item.description}</Text>
+            {/* Icon */}
+            <View
+              style={[styles.iconContainer, { backgroundColor: item.iconBg }]}
+            >
+              <Text style={styles.iconEmoji}>{item.emoji}</Text>
+            </View>
+
+            {/* Title */}
+            <Text style={styles.title}>{item.title}</Text>
+
+            {/* Description */}
+            <Text style={styles.description}>{item.description}</Text>
+
+            {/* Pagination dots */}
+            <View style={styles.pagination}>
+              {onboardingData.map((_, dotIndex) => (
+                <View
+                  key={dotIndex}
+                  style={[styles.dot, dotIndex === index && styles.activeDot]}
+                />
+              ))}
             </View>
           </LinearGradient>
         ))}
       </ScrollView>
 
+      {/* Bottom controls */}
       <View style={styles.footer}>
-        <View style={styles.pagination}>
-          {onboardingData.map((_, index) => (
-            <View
-              key={index}
-              style={[styles.dot, index === currentIndex && styles.activeDot]}
-            />
-          ))}
-        </View>
-
-        <View style={styles.buttonContainer}>
+        {!isLast ? (
           <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
+        ) : (
+          <View style={styles.skipButton} />
+        )}
 
-          <TouchableOpacity onPress={handleNext} style={styles.nextButton}>
-            <Text style={styles.nextText}>
-              {currentIndex === onboardingData.length - 1
-                ? 'Get Started'
-                : 'Next'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={handleNext}
+          style={[styles.nextButton, isLast && styles.getStartedButton]}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.nextText, isLast && styles.getStartedText]}>
+            {isLast ? 'Get started 🚀' : 'Next →'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -123,91 +145,126 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#4B1FA8',
   },
   slide: {
     width,
     height,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 36,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
+  orb1: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(168, 85, 247, 0.25)',
+    top: 60,
+    left: -60,
+  },
+  orb2: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    bottom: 100,
+    right: -40,
   },
   iconContainer: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 120,
+    height: 120,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: 48,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  iconEmoji: {
+    fontSize: 52,
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Poppins-Bold',
+    fontSize: 34,
+    fontWeight: '900',
     color: '#ffffff',
     textAlign: 'center',
+    lineHeight: 40,
     marginBottom: 20,
+    fontFamily: 'Inter-Bold',
   },
   description: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     lineHeight: 24,
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 60,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 40,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 48,
   },
   pagination: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 40,
+    alignItems: 'center',
+    gap: 8,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    marginHorizontal: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
   },
   activeDot: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#C8F135',
     width: 24,
+    borderRadius: 4,
   },
-  buttonContainer: {
+  footer: {
+    position: 'absolute',
+    bottom: 52,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 32,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   skipButton: {
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 8,
+    minWidth: 60,
   },
   skipText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.75)',
   },
   nextButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#C8F135',
     paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    paddingHorizontal: 28,
+    borderRadius: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  getStartedButton: {
+    backgroundColor: '#ffffff',
   },
   nextText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
+    fontWeight: '700',
+    color: '#1a1a2e',
+    fontFamily: 'Inter-Bold',
+  },
+  getStartedText: {
+    color: '#1a1a2e',
   },
 });

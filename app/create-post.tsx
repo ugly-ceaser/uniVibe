@@ -1,5 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
@@ -13,14 +24,17 @@ type CategoryEnum =
   | 'TECH_AND_PROGRAMMING'
   | 'CAMPUS_SERVICES';
 
-const CATEGORY_OPTIONS: { id: CategoryEnum; label: string }[] = [
-  { id: 'GENERAL_DISCUSSION',    label: 'General Discussion' },
-  { id: 'ACADEMIC_HELP',         label: 'Academic Help' },
-  { id: 'STUDENT_LIFE',          label: 'Student Life' },
-  { id: 'CAREER_AND_INTERNSHIPS',label: 'Career & Internships' },
-  { id: 'TECH_AND_PROGRAMMING',  label: 'Tech & Programming' },
-  { id: 'CAMPUS_SERVICES',       label: 'Campus Services' },
+const CATEGORY_OPTIONS: { id: CategoryEnum; label: string; emoji: string }[] = [
+  { id: 'GENERAL_DISCUSSION', label: 'General', emoji: '💡' },
+  { id: 'ACADEMIC_HELP', label: 'Academic help', emoji: '📖' },
+  { id: 'STUDENT_LIFE', label: 'Student life', emoji: '🎒' },
+  { id: 'CAREER_AND_INTERNSHIPS', label: 'Career', emoji: '💼' },
+  { id: 'TECH_AND_PROGRAMMING', label: 'Tech', emoji: '💻' },
+  { id: 'CAMPUS_SERVICES', label: 'Campus services', emoji: '🏫' },
 ];
+
+const TITLE_MAX = 80;
+const BODY_MAX = 500;
 
 export default function CreatePostScreen() {
   const router = useRouter();
@@ -31,241 +45,384 @@ export default function CreatePostScreen() {
   const [body, setBody] = useState('');
   const [category, setCategory] = useState<CategoryEnum>('GENERAL_DISCUSSION');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [createdPostId, setCreatedPostId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
-  const canSubmit = title.trim().length >= 4 && body.trim().length >= 10 && !!category;
+  const canSubmit = title.trim().length >= 4 && body.trim().length >= 10;
 
-  const showToast = (type: 'success' | 'error', message: string, durationMs = 1800) => {
+  const showToast = (type: 'success' | 'error', message: string, ms = 2000) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), durationMs);
+    setTimeout(() => setToast(null), ms);
   };
 
   const submit = async () => {
     if (!canSubmit) {
-      setError('Please enter a title (min 4 chars), body (min 10 chars), and select a category.');
-      showToast('error', 'Fill in all fields correctly.');
+      showToast('error', 'Title (min 4) and details (min 10) are required.');
       return;
     }
-    setError(null);
     setSubmitting(true);
     try {
-      const res = await client.createQuestion({
+      await client.createQuestion({
         title: title.trim(),
         body: body.trim(),
         category,
       });
-
-      const id =
-        (res as any)?.data?.id ??
-        (res as any)?.data?.question?.id ??
-        null;
-
-      setCreatedPostId(id);
-      showToast('success', 'Your question has been posted!');
-      // Stay on this screen; do not navigate.
-      // Optional: clear the form
+      showToast('success', '🎉 Your question is live!');
       setTitle('');
       setBody('');
       setCategory('GENERAL_DISCUSSION');
+      setTimeout(() => router.back(), 1800);
     } catch (e: any) {
-      console.error('Failed to create question', e);
-      const msg = e?.message || 'Failed to create question. Please try again.';
-      setError(msg);
-      showToast('error', msg);
+      showToast('error', e?.message || 'Failed to post. Try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Toast */}
-      {toast ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.toast,
-            toast.type === 'success' ? styles.toastSuccess : styles.toastError,
-          ]}
-        >
-          <Text style={styles.toastText}>{toast.message}</Text>
-        </View>
-      ) : null}
-
-      {/* Custom Header */}
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Post a Question</Text>
-      </LinearGradient>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>Title</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="E.g. How do I prepare for finals?"
-          value={title}
-          onChangeText={setTitle}
-          maxLength={120}
-        />
-
-        <Text style={styles.label}>Details</Text>
-        <TextInput
-          style={[styles.input, styles.textarea]}
-          placeholder="Describe your question with enough context..."
-          value={body}
-          onChangeText={setBody}
-          multiline
-          textAlignVertical="top"
-          numberOfLines={8}
-        />
-
-        <Text style={styles.label}>Category</Text>
-        <View style={styles.categoriesRow}>
-          {CATEGORY_OPTIONS.map(opt => {
-            const selected = category === opt.id;
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                style={[styles.chip, selected && styles.chipSelected]}
-                onPress={() => setCategory(opt.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <TouchableOpacity
-          style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
-          onPress={submit}
-          disabled={!canSubmit || submitting}
-          accessibilityRole="button"
-          accessibilityLabel="Submit your question"
-        >
-          <LinearGradient
-            colors={['#667eea', '#764ba2']}
-            style={[styles.submitBtnGradient, submitting && { opacity: 0.8 }]}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* ── Toast ── */}
+        {toast && (
+          <View
+            pointerEvents='none'
+            style={[
+              styles.toast,
+              toast.type === 'success'
+                ? styles.toastSuccess
+                : styles.toastError,
+            ]}
           >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.submitBtnText}>Post Question</Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-      </ScrollView>
+            <Text style={styles.toastText}>{toast.message}</Text>
+          </View>
+        )}
 
-      {/* Inline success banner (no auto navigation) */}
-      {createdPostId ? (
-        <View style={styles.successBanner}>
-          <Text style={styles.successBannerText}>Posted successfully.</Text>
+        {/* ── Header ── */}
+        <LinearGradient
+          colors={['#3B0F6F', '#7B2FBE', '#C026D3']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <View style={styles.orb} />
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            activeOpacity={0.8}
+          >
+            <ArrowLeft size={20} color='#fff' strokeWidth={2.5} />
+          </TouchableOpacity>
+          <View style={styles.headerBody}>
+            <Text style={styles.headerLabel}>STUDENT FORUM</Text>
+            <Text style={styles.headerTitle}>Post a question</Text>
+          </View>
+        </LinearGradient>
+
+        {/* ── Form ── */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps='handled'
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Title */}
+          <View style={styles.fieldHeader}>
+            <Text style={styles.label}>Title</Text>
+            <Text
+              style={[
+                styles.counter,
+                title.length > TITLE_MAX * 0.85 && styles.counterWarn,
+              ]}
+            >
+              {title.length}/{TITLE_MAX}
+            </Text>
+          </View>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder={'E.g. How do I prepare for finals? 📋'}
+              placeholderTextColor='#9CA3AF'
+              value={title}
+              onChangeText={t => setTitle(t.slice(0, TITLE_MAX))}
+              returnKeyType='next'
+            />
+          </View>
+
+          {/* Details */}
+          <View style={[styles.fieldHeader, { marginTop: 18 }]}>
+            <Text style={styles.label}>Details</Text>
+            <Text
+              style={[
+                styles.counter,
+                body.length > BODY_MAX * 0.85 && styles.counterWarn,
+              ]}
+            >
+              {body.length}/{BODY_MAX}
+            </Text>
+          </View>
+          <View style={[styles.inputWrapper, styles.textareaWrapper]}>
+            <TextInput
+              style={[styles.input, styles.textarea]}
+              placeholder={
+                "Give it enough context so people can\nactually help — what have you tried,\nwhat's confusing?"
+              }
+              placeholderTextColor='#9CA3AF'
+              value={body}
+              onChangeText={t => setBody(t.slice(0, BODY_MAX))}
+              multiline
+              textAlignVertical='top'
+              numberOfLines={6}
+            />
+          </View>
+
+          {/* Tip card */}
+          <View style={styles.tipCard}>
+            <Text style={styles.tipEmoji}>💡</Text>
+            <Text style={styles.tipText}>
+              <Text style={styles.tipBold}>Tip: </Text>
+              Questions with details get 3x more answers. Screenshots help too.
+            </Text>
+          </View>
+
+          {/* Category */}
+          <Text style={[styles.label, { marginTop: 20, marginBottom: 12 }]}>
+            Category
+          </Text>
+          <View style={styles.categoriesRow}>
+            {CATEGORY_OPTIONS.map(opt => {
+              const selected = category === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[styles.chip, selected && styles.chipSelected]}
+                  onPress={() => setCategory(opt.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.chipEmoji}>{opt.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      selected && styles.chipTextSelected,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        {/* ── Sticky submit button ── */}
+        <View style={styles.submitContainer}>
+          <TouchableOpacity
+            style={[
+              styles.submitBtn,
+              (!canSubmit || submitting) && styles.submitBtnDisabled,
+            ]}
+            onPress={submit}
+            disabled={!canSubmit || submitting}
+            activeOpacity={0.88}
+          >
+            <LinearGradient
+              colors={['#F43F5E', '#9333EA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.submitGradient}
+            >
+              {submitting ? (
+                <ActivityIndicator color='#fff' />
+              ) : (
+                <Text style={styles.submitText}>🚀 Post question</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
-      ) : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+  safeArea: { flex: 1, backgroundColor: '#EDE9F8' },
+
+  // ── Toast ──
+  toast: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    right: 16,
+    zIndex: 200,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+  },
+  toastSuccess: { backgroundColor: '#ECFDF5', borderColor: '#34D399' },
+  toastError: { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' },
+  toastText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+  },
+
+  // ── Header ──
   header: {
-    paddingTop: 20,
-    paddingBottom: 30,
+    paddingTop: 16,
+    paddingBottom: 24,
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  orb: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    top: -20,
+    right: -20,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
+  },
+  headerBody: { flex: 1 },
+  headerLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#C8F135',
+    letterSpacing: 1.5,
+    marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#fff',
   },
-  content: { padding: 16, gap: 12 },
-  label: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 8 },
+
+  // ── Form ──
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 24 },
+
+  fieldHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  label: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
+  counter: { fontSize: 12, fontWeight: '600', color: '#9CA3AF' },
+  counterWarn: { color: '#F59E0B' },
+
+  inputWrapper: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
+    overflow: 'hidden',
+  },
+  textareaWrapper: { minHeight: 130 },
   input: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    fontSize: 15,
+    color: '#1a1a2e',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   textarea: {
-    minHeight: 140,
+    minHeight: 130,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
+
+  // ── Tip card ──
+  tipCard: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#7B2FBE',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    padding: 14,
+  },
+  tipEmoji: { fontSize: 18, marginTop: 1 },
+  tipText: { flex: 1, fontSize: 13, color: '#4B5563', lineHeight: 19 },
+  tipBold: { fontWeight: '800', color: '#1a1a2e' },
+
+  // ── Category chips ──
   categoriesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 6,
+    gap: 10,
   },
   chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 30,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
   },
   chipSelected: {
-    backgroundColor: '#eef2ff',
-    borderColor: '#667eea',
+    backgroundColor: '#C8F135',
+    borderColor: '#1a1a2e',
   },
-  chipText: { fontSize: 12, fontWeight: '600', color: '#374151' },
-  chipTextSelected: { color: '#4f46e5' },
-  submitBtn: { marginTop: 16, borderRadius: 28, overflow: 'hidden' },
-  submitBtnDisabled: { opacity: 0.6 },
-  submitBtnGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderRadius: 28,
-  },
-  submitBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-  errorText: { color: '#dc2626', marginTop: 8, fontSize: 13 },
-  toast: {
-    position: 'absolute',
-    top: 12,
-    left: 16,
-    right: 16,
-    zIndex: 100,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-  },
-  toastSuccess: { backgroundColor: '#ecfdf5', borderColor: '#34d399' },
-  toastError: { backgroundColor: '#fef2f2', borderColor: '#fca5a5' },
-  toastText: { color: '#111827', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  chipEmoji: { fontSize: 14 },
+  chipText: { fontSize: 13, fontWeight: '700', color: '#1a1a2e' },
+  chipTextSelected: { color: '#1a1a2e' },
 
-  successBanner: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#f0fdf4',
-    borderWidth: 1,
-    borderColor: '#86efac',
+  // ── Submit ──
+  submitContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    paddingTop: 12,
+    backgroundColor: '#EDE9F8',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
   },
-  successBannerText: { color: '#166534', fontWeight: '700' },
+  submitBtn: {
+    borderRadius: 30,
+    overflow: 'hidden',
+    shadowColor: '#9333EA',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  submitBtnDisabled: { opacity: 0.55 },
+  submitGradient: {
+    paddingVertical: 17,
+    alignItems: 'center',
+    borderRadius: 30,
+  },
+  submitText: { color: '#fff', fontSize: 17, fontWeight: '800' },
 });

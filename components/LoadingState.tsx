@@ -1,5 +1,11 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, SafeAreaView } from 'react-native';
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  SafeAreaView,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface LoadingStateProps {
@@ -10,10 +16,12 @@ export const LoadingState: React.FC<LoadingStateProps> = ({ title }) => (
   <SafeAreaView style={styles.container}>
     <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
       <Text style={styles.headerTitle}>Welcome to UniVibe</Text>
-      <Text style={styles.headerSubtitle}>Discover guides to enhance your university experience</Text>
+      <Text style={styles.headerSubtitle}>
+        Discover guides to enhance your university experience
+      </Text>
     </LinearGradient>
     <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#667eea" />
+      <ActivityIndicator size='large' color='#667eea' />
       <Text style={styles.loadingText}>{title}</Text>
     </View>
   </SafeAreaView>

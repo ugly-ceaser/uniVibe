@@ -48,7 +48,12 @@ export default function TipDetailScreen() {
 
   const api = useApi();
   const apiClient = React.useMemo(() => guideApi(api), [api]);
-  const { data: guide, loading, error: fetchError, execute } = useAsync<Guide>();
+  const {
+    data: guide,
+    loading,
+    error: fetchError,
+    execute,
+  } = useAsync<Guide>();
 
   React.useEffect(() => {
     const id = Array.isArray(tipId) ? tipId[0] : tipId;
@@ -74,7 +79,7 @@ export default function TipDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#667eea" />
+          <ActivityIndicator size='large' color='#667eea' />
           <Text style={styles.loadingText}>Loading guide...</Text>
         </View>
       </SafeAreaView>
@@ -82,15 +87,27 @@ export default function TipDetailScreen() {
   }
 
   if (fetchError) {
-    return <ErrorMessage message={fetchError} onRetry={() => execute(() => apiClient.getById(tipId as string).then(res => res.data))} />;
+    return (
+      <ErrorMessage
+        message={fetchError}
+        onRetry={() =>
+          execute(() =>
+            apiClient.getById(tipId as string).then(res => res.data)
+          )
+        }
+      />
+    );
   }
 
   if (!guide) {
-    return <ErrorMessage message="Guide not found" />;
+    return <ErrorMessage message='Guide not found' />;
   }
 
-  const IconComponent = categoryIcons[guide.category as CategoryType] || BookOpen;
-  const colors = categoryColors[guide.category as CategoryType] || (['#667eea', '#764ba2'] as const);
+  const IconComponent =
+    categoryIcons[guide.category as CategoryType] || BookOpen;
+  const colors =
+    categoryColors[guide.category as CategoryType] ||
+    (['#667eea', '#764ba2'] as const);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -111,7 +128,9 @@ export default function TipDetailScreen() {
           <Text style={styles.title}>{guide.title}</Text>
           <View style={styles.readTimeContainer}>
             <Clock size={16} color='rgba(255, 255, 255, 0.8)' strokeWidth={2} />
-            <Text style={styles.readTime}>{guide.readTime || '3 min read'}</Text>
+            <Text style={styles.readTime}>
+              {guide.readTime || '3 min read'}
+            </Text>
           </View>
         </View>
       </LinearGradient>
@@ -122,10 +141,7 @@ export default function TipDetailScreen() {
           <Text style={styles.contentText}>{guide.content}</Text>
 
           <View style={styles.tipActions}>
-            <TouchableOpacity
-              style={styles.likeButton}
-              onPress={handleLike}
-            >
+            <TouchableOpacity style={styles.likeButton} onPress={handleLike}>
               <Heart size={20} color='#ef4444' strokeWidth={2} />
               <Text style={styles.likesText}>{guide.likes || 0} likes</Text>
             </TouchableOpacity>
@@ -251,4 +267,3 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
 });
-

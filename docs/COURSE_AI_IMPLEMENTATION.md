@@ -1,16 +1,19 @@
 # Course-Specific AI Chat API Implementation Guide
 
 ## 🎯 Overview
+
 This guide outlines how to implement course-specific AI chat functionality that provides personalized insights based on course outlines, assessment structures, and student context.
 
 ## 📚 API Endpoints Structure
 
 ### 1. Course-Specific AI Chat
+
 ```
 POST /api/v1/ai/chat/course
 ```
 
 **Request Body:**
+
 ```json
 {
   "message": "What are the main topics in this course?",
@@ -25,22 +28,23 @@ POST /api/v1/ai/chat/course
       "Software Engineering Principles"
     ],
     "assessment": [
-      {"type": "Midterm Exam", "percentage": 30},
-      {"type": "Final Exam", "percentage": 40},
-      {"type": "Assignments", "percentage": 20},
-      {"type": "Lab Work", "percentage": 10}
+      { "type": "Midterm Exam", "percentage": 30 },
+      { "type": "Final Exam", "percentage": 40 },
+      { "type": "Assignments", "percentage": 20 },
+      { "type": "Lab Work", "percentage": 10 }
     ],
     "instructor": "Dr. Jane Smith",
     "description": "Introduction to fundamental concepts in computer science..."
   },
   "conversationHistory": [
-    {"role": "user", "content": "Previous user message"},
-    {"role": "assistant", "content": "Previous AI response"}
+    { "role": "user", "content": "Previous user message" },
+    { "role": "assistant", "content": "Previous AI response" }
   ]
 }
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -58,11 +62,13 @@ POST /api/v1/ai/chat/course
 ```
 
 ### 2. Course Insights Generation
+
 ```
 GET /api/v1/ai/insights/course/{courseId}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -96,11 +102,13 @@ GET /api/v1/ai/insights/course/{courseId}
 ```
 
 ### 3. Personalized Recommendations
+
 ```
 POST /api/v1/ai/recommendations/course/{courseId}
 ```
 
 **Request Body:**
+
 ```json
 {
   "completedTopics": ["Programming Fundamentals", "Basic Data Structures"],
@@ -112,6 +120,7 @@ POST /api/v1/ai/recommendations/course/{courseId}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -142,16 +151,17 @@ POST /api/v1/ai/recommendations/course/{courseId}
 ### Backend Implementation Approach
 
 #### 1. Context-Aware Prompt Engineering
+
 ```python
 def build_course_prompt(message, course_context, conversation_history):
     system_prompt = f"""
     You are an AI teaching assistant for {course_context['courseCode']} - {course_context['courseName']}.
-    
+
     Course Information:
     - Instructor: {course_context.get('instructor', 'N/A')}
     - Course Outline: {', '.join(course_context.get('outline', []))}
     - Assessment: {format_assessment(course_context.get('assessment', []))}
-    
+
     Guidelines:
     1. Provide course-specific answers based on the outline and assessment structure
     2. Reference specific topics from the course outline when relevant
@@ -159,25 +169,26 @@ def build_course_prompt(message, course_context, conversation_history):
     4. Maintain an encouraging and educational tone
     5. If unsure about course-specific details, guide student to instructor
     """
-    
+
     # Build conversation context
     conversation_context = format_conversation_history(conversation_history)
-    
+
     user_prompt = f"""
     Course Context: {course_context['courseCode']}
     Student Question: {message}
     Previous Conversation: {conversation_context}
     """
-    
+
     return system_prompt, user_prompt
 ```
 
 #### 2. Course Content Indexing
+
 ```python
 class CourseContentIndexer:
     def __init__(self):
         self.vector_store = VectorStore()
-        
+
     def index_course_content(self, course_id, content):
         """Index course materials for semantic search"""
         documents = [
@@ -186,14 +197,14 @@ class CourseContentIndexer:
             {"type": "assessment", "content": content['assessment']},
             {"type": "instructor_info", "content": content['instructor']}
         ]
-        
+
         for doc in documents:
             self.vector_store.add_document(
                 course_id=course_id,
                 document_type=doc['type'],
                 content=doc['content']
             )
-    
+
     def retrieve_relevant_content(self, course_id, query):
         """Retrieve course-specific content relevant to query"""
         return self.vector_store.similarity_search(
@@ -204,21 +215,22 @@ class CourseContentIndexer:
 ```
 
 #### 3. Response Generation Pipeline
+
 ```python
 async def generate_course_response(message, course_context, conversation_history):
     try:
         # 1. Index relevant course content
         indexer = CourseContentIndexer()
         relevant_content = indexer.retrieve_relevant_content(
-            course_context['courseId'], 
+            course_context['courseId'],
             message
         )
-        
+
         # 2. Build context-aware prompt
         system_prompt, user_prompt = build_course_prompt(
             message, course_context, conversation_history
         )
-        
+
         # 3. Generate response using AI model (OpenAI, Claude, etc.)
         response = await ai_model.generate(
             system_prompt=system_prompt,
@@ -227,20 +239,20 @@ async def generate_course_response(message, course_context, conversation_history
             temperature=0.7,
             max_tokens=500
         )
-        
+
         # 4. Post-process and validate response
         processed_response = post_process_response(response, course_context)
-        
+
         # 5. Generate follow-up suggestions
         suggestions = generate_follow_up_suggestions(message, course_context)
-        
+
         return {
             "response": processed_response,
             "confidence": calculate_confidence(response, relevant_content),
             "sources": extract_sources(relevant_content),
             "suggestions": suggestions
         }
-        
+
     except Exception as e:
         logging.error(f"AI response generation failed: {e}")
         return fallback_response(course_context)
@@ -249,6 +261,7 @@ async def generate_course_response(message, course_context, conversation_history
 ## 📱 Frontend Integration Examples
 
 ### 1. Course Detail Page Integration
+
 ```typescript
 // In your course-detail.tsx
 const [course, setCourse] = useState<any>(null);
@@ -262,23 +275,24 @@ const [course, setCourse] = useState<any>(null);
     outline: course.outline,
     assessment: course.assessment,
     instructor: course.instructor,
-    description: course.description
+    description: course.description,
   }}
-  onMessageSent={(message) => {
+  onMessageSent={message => {
     // Track usage analytics
     analytics.track('course_ai_message_sent', {
       courseId: courseId,
-      messageLength: message.text.length
+      messageLength: message.text.length,
     });
   }}
-  onError={(error) => {
+  onError={error => {
     console.error('Course AI Error:', error);
     Alert.alert('AI Assistant Error', error);
   }}
-/>
+/>;
 ```
 
 ### 2. Enhanced Message Handling
+
 ```typescript
 const handleSend = async () => {
   try {
@@ -288,8 +302,8 @@ const handleSend = async () => {
       context: courseContext,
       conversationHistory: messages.map(msg => ({
         role: msg.isUser ? 'user' : 'assistant',
-        content: msg.text
-      }))
+        content: msg.text,
+      })),
     });
 
     const aiResponse: ChatMessage = {
@@ -302,7 +316,7 @@ const handleSend = async () => {
       }),
       confidence: response.data.confidence,
       sources: response.data.sources,
-      suggestions: response.data.suggestions
+      suggestions: response.data.suggestions,
     };
 
     setMessages(prev => [...prev, aiResponse]);
@@ -316,18 +330,21 @@ const handleSend = async () => {
 ## 🔧 Implementation Steps
 
 ### Phase 1: Basic Course AI Chat
+
 1. ✅ Create CourseAIChat component (done)
 2. ✅ Add AI API endpoints structure (done)
 3. 🔄 Implement backend AI integration
 4. 🔄 Test with course context data
 
 ### Phase 2: Enhanced Features
+
 1. 🔄 Add course content indexing
 2. 🔄 Implement personalized recommendations
 3. 🔄 Add study plan generation
 4. 🔄 Integrate with student progress tracking
 
 ### Phase 3: Advanced Analytics
+
 1. 🔄 Track AI interaction patterns
 2. 🔄 Optimize responses based on usage
 3. 🔄 Add performance monitoring

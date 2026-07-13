@@ -9,8 +9,8 @@ export function useAnswerComments(answerId: string, page = 1, pageSize = 20) {
   const query = useQuery({
     queryKey: ['answer-comments', answerId, page, pageSize],
     queryFn: async () => {
-      const res = await client.getComments({ answerId, page, pageSize });
-      return res.data;
+      const res = await client.getComments(answerId);
+      return (res as any).data;
     },
     enabled: !!answerId,
     staleTime: 30_000,
@@ -19,18 +19,21 @@ export function useAnswerComments(answerId: string, page = 1, pageSize = 20) {
   const qc = useQueryClient();
   const create = useMutation({
     mutationFn: async (payload: { body: string; parentId?: string }) => {
-      const res = await client.createComment({ answerId, ...payload });
-      return res.data as ForumComment;
+      const res = await client.addComment({ answerId, ...payload });
+      return (res as any).data as ForumComment;
     },
-    onSuccess: (created) => {
-      qc.setQueryData<any>(['answer-comments', answerId, page, pageSize], (prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          items: [...prev.items, created],
-          totalCount: (prev.totalCount ?? 0) + 1,
-        };
-      });
+    onSuccess: created => {
+      qc.setQueryData<any>(
+        ['answer-comments', answerId, page, pageSize],
+        (prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            items: [...prev.items, created],
+            totalCount: (prev.totalCount ?? 0) + 1,
+          };
+        }
+      );
     },
   });
 

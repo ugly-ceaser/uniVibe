@@ -10,72 +10,59 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  SafeAreaView,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  Dimensions,
   TextInput,
+  Animated,
+  Platform,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import {
   Plus,
   Search,
-  Heart,
   MessageCircle,
-  Calendar,
-  User,
   BookOpen,
   Code,
   Briefcase,
   Users,
+  Heart,
+  Flag,
+  X,
   HelpCircle,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApi, forumApi, ForumPost } from '../../utils/api';
 
-const { width } = Dimensions.get('window');
-
-// Small type for chips
+// ─── Category config ──────────────────────────────────────────────────────────
 type CategoryChipItem = { id: string; name: string; icon: any; color: string };
 
-// Fixed categories you requested
 const CATEGORY_DEFS: CategoryChipItem[] = [
-  { id: 'all', name: 'All Posts', icon: Users, color: '#667eea' },
+  { id: 'all', name: 'All posts', icon: Users, color: '#7B2FBE' },
   {
     id: 'general-discussion',
-    name: 'General Discussion',
+    name: 'General',
     icon: MessageCircle,
     color: '#8b5cf6',
   },
   {
     id: 'academic-help',
-    name: 'Academic Help',
+    name: 'Academic help',
     icon: BookOpen,
     color: '#10b981',
   },
-  { id: 'student-life', name: 'Student Life', icon: Users, color: '#06b6d4' },
+  { id: 'student-life', name: 'Student life', icon: Users, color: '#06b6d4' },
   {
     id: 'career-internships',
-    name: 'Career & Internships',
+    name: 'Career',
     icon: Briefcase,
     color: '#f59e0b',
   },
-  {
-    id: 'tech-programming',
-    name: 'Tech & Programming',
-    icon: Code,
-    color: '#3b82f6',
-  },
-  {
-    id: 'campus-services',
-    name: 'Campus Services',
-    icon: HelpCircle,
-    color: '#ef4444',
-  },
+  { id: 'tech-programming', name: 'Tech', icon: Code, color: '#3b82f6' },
+  { id: 'campus-services', name: 'Campus', icon: Flag, color: '#ef4444' },
 ];
 
-// Map chip id -> API enum
 const CATEGORY_TO_ENUM: Record<string, string> = {
   'general-discussion': 'GENERAL_DISCUSSION',
   'academic-help': 'ACADEMIC_HELP',
@@ -85,6 +72,39 @@ const CATEGORY_TO_ENUM: Record<string, string> = {
   'campus-services': 'CAMPUS_SERVICES',
 };
 
+// Avatar background colours
+const AVATAR_COLORS = [
+  '#7B2FBE',
+  '#DB2777',
+  '#0EA5E9',
+  '#10B981',
+  '#F59E0B',
+  '#EF4444',
+  '#8B5CF6',
+];
+function avatarColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++)
+    h = (h * 31 + name.charCodeAt(i)) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[h];
+}
+function initials(name: string) {
+  const parts = name.trim().split(' ');
+  return parts.length >= 2
+    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+}
+
+function formatDate(dateString: string) {
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch {
+    return '';
+  }
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForumScreen() {
   const router = useRouter();
   const api = useApi();
@@ -99,48 +119,77 @@ export default function ForumScreen() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [lastFetch, setLastFetch] = useState(0);
-  const lastFetchRef = useRef(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchInput, setShowSearchInput] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [searchResults, setSearchResults] = useState<ForumPost[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [categories, setCategories] = useState<CategoryChipItem[]>(CATEGORY_DEFS);
-  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [categories, setCategories] =
+    useState<CategoryChipItem[]>(CATEGORY_DEFS);
+  const [lovedPosts, setLovedPosts] = useState<Set<string>>(new Set());
+  const [loveCounts, setLoveCounts] = useState<Record<string, number>>({});
+
+  const lastFetchRef = useRef(0);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const categoriesFetchedRef = useRef(false);
-
+  const categoriesFetched = useRef(false);
+  const MIN_FETCH_INTERVAL = 10000;
   const PAGE_SIZE = 20;
-  const MIN_FETCH_INTERVAL = 10000; // Increased to 10 seconds to reduce rate limiting
 
-  // Unified loading state - show single loading indicator when needed
-  const showLoadingBanner = (loading || refreshing) && !loadingMore;
+  // ─── Collapsible header animation ───────────────────────────────────────────
+  const headerAnim = useRef(new Animated.Value(1)).current;
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
 
-  // Helper to get enum for current selection
-  const getSelectedEnum = useCallback(() => {
-    return selectedCategory === 'all'
-      ? undefined
-      : CATEGORY_TO_ENUM[selectedCategory];
-  }, [selectedCategory]);
+  const onListScroll = useCallback(
+    (e: any) => {
+      const y = e.nativeEvent.contentOffset.y;
+      const delta = y - lastScrollY.current;
+      lastScrollY.current = y;
 
-  // Stabilize fetchPosts by removing lastFetch from deps and passing category explicitly
+      if (delta > 8 && headerVisible) {
+        // scrolling DOWN — collapse header
+        setHeaderVisible(false);
+        Animated.timing(headerAnim, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: false,
+        }).start();
+      } else if ((delta < -8 || y <= 10) && !headerVisible) {
+        // scrolling UP / back to top — expand header
+        setHeaderVisible(true);
+        Animated.timing(headerAnim, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: false,
+        }).start();
+      }
+    },
+    [headerAnim, headerVisible]
+  );
+
+  const getSelectedEnum = useCallback(
+    () =>
+      selectedCategory === 'all'
+        ? undefined
+        : CATEGORY_TO_ENUM[selectedCategory],
+    [selectedCategory]
+  );
+
+  // ─── Fetch posts ────────────────────────────────────────────────────────────
   const fetchPosts = useCallback(
     async (
-      pageNum: number = 1,
-      isRefresh: boolean = false,
-      isLoadMore: boolean = false,
+      pageNum = 1,
+      isRefresh = false,
+      isLoadMore = false,
       categoryEnum?: string,
-      retryCount: number = 0
+      retryCount = 0
     ) => {
       const now = Date.now();
       if (
         !isRefresh &&
         !isLoadMore &&
         now - lastFetchRef.current < MIN_FETCH_INTERVAL
-      ) {
-        console.log('⏭️ Skipping fetch - too soon since last request');
+      )
         return;
-      }
 
       try {
         if (isRefresh) setRefreshing(true);
@@ -148,99 +197,67 @@ export default function ForumScreen() {
         else setLoading(true);
         setError(null);
 
-        console.log(
-          `📋 Fetching posts - Page: ${pageNum}, CategoryEnum: ${categoryEnum ?? 'ALL'}`
-        );
-
         const tryProcess = (data: any) => {
           if (data?.questions) {
-            const newBatch: ForumPost[] = data.questions;
-            console.log('🧮 Questions received:', newBatch.length);
-
+            const batch: ForumPost[] = data.questions;
             if (isRefresh || pageNum === 1) {
-              setAllPosts(newBatch);
-              setPosts(newBatch);
+              setAllPosts(batch);
+              setPosts(batch);
               setPage(2);
             } else {
               setAllPosts(prev => {
-                const combined = [...prev, ...newBatch];
-                setPosts(combined);
-                return combined;
+                const c = [...prev, ...batch];
+                setPosts(c);
+                return c;
               });
               setPage(pageNum + 1);
             }
-
             setHasMore(pageNum < (data.totalPages || 1));
             lastFetchRef.current = now;
-            setLastFetch(now);
             return true;
           }
           return false;
         };
 
-        console.log('🌐 Fetching forum questions...');
         const response: any = await forumClient.getQuestions({
           page: pageNum,
           pageSize: PAGE_SIZE,
           refresh: isRefresh,
-          category: categoryEnum, // pass through to backend
+          category: categoryEnum,
         } as any);
-        console.log('📊 Forum API Response:', {
-          hasData: !!response?.data,
-          hasQuestions: !!response?.data?.questions,
-          questionsLength: response?.data?.questions?.length,
-          response: response,
-        });
 
-        let processed = tryProcess(response?.data);
-
-        if (!processed) {
-          console.log('♻️ Retrying with refresh to bypass cache...');
+        let ok = tryProcess(response?.data);
+        if (!ok) {
           const fresh: any = await forumClient.getQuestions({
             page: pageNum,
             pageSize: PAGE_SIZE,
             refresh: true,
             category: categoryEnum,
           } as any);
-          console.log('📊 Forum API Fresh Response:', {
-            hasData: !!fresh?.data,
-            hasQuestions: !!fresh?.data?.questions,
-            questionsLength: fresh?.data?.questions?.length,
-            response: fresh,
-          });
-          processed = tryProcess(fresh?.data);
-        }
-
-        if (!processed) {
-          console.warn(
-            '⚠️ No data returned even after refresh; preserving current list'
-          );
+          tryProcess(fresh?.data);
         }
       } catch (err: any) {
-        console.error('💥 Forum API Error:', {
-          message: err.message,
-          status: err.status,
-          stack: err.stack,
-          name: err.name,
-        });
-
-        // Handle rate limiting with exponential backoff
         if (err.status === 429 && retryCount < 3) {
-          const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-          console.log(`⏰ Rate limited. Retrying in ${delayMs}ms (attempt ${retryCount + 1}/3)`);
-          
-          setTimeout(() => {
-            fetchPosts(pageNum, isRefresh, isLoadMore, categoryEnum, retryCount + 1);
-          }, delayMs);
+          setTimeout(
+            () =>
+              fetchPosts(
+                pageNum,
+                isRefresh,
+                isLoadMore,
+                categoryEnum,
+                retryCount + 1
+              ),
+            Math.pow(2, retryCount) * 1000
+          );
           return;
         }
-
-        const errorMessage = err.status === 429 
-          ? 'Too many requests. Please wait a moment and try again.'
-          : err instanceof Error
+        setError(
+          err.status === 429
+            ? 'Too many requests. Please wait a moment.'
+            : err instanceof Error
             ? err.message
-            : 'Failed to load posts. Please try again.';
-        setError(errorMessage);
+            : 'Failed to load posts.'
+        );
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -250,36 +267,88 @@ export default function ForumScreen() {
     [forumClient]
   );
 
+  // ─── Fetch categories ───────────────────────────────────────────────────────
+  const fetchCategories = useCallback(
+    async (retryCount = 0) => {
+      try {
+        const response = await forumClient.listCategories();
+        const fetched = response?.data || [];
+        if (fetched.length > 0) {
+          const getIcon = (name: string) => {
+            const n = name.toLowerCase();
+            if (n.includes('academic') || n.includes('help')) return BookOpen;
+            if (n.includes('career') || n.includes('intern')) return Briefcase;
+            if (n.includes('tech') || n.includes('program')) return Code;
+            if (n.includes('student') || n.includes('life')) return Users;
+            if (n.includes('campus') || n.includes('service'))
+              return HelpCircle;
+            return MessageCircle;
+          };
+          const getColor = (name: string) => {
+            const n = name.toLowerCase();
+            if (n.includes('academic')) return '#10b981';
+            if (n.includes('career')) return '#f59e0b';
+            if (n.includes('tech')) return '#3b82f6';
+            if (n.includes('student')) return '#06b6d4';
+            if (n.includes('campus')) return '#ef4444';
+            return '#8b5cf6';
+          };
+          setCategories([
+            { id: 'all', name: 'All posts', icon: Users, color: '#7B2FBE' },
+            ...fetched.map((cat: any) => ({
+              id: cat.slug || cat.id,
+              name: cat.name,
+              icon: getIcon(cat.name),
+              color: getColor(cat.name),
+            })),
+          ]);
+        }
+      } catch (error: any) {
+        if (error.status === 429 && retryCount < 2) {
+          setTimeout(
+            () => fetchCategories(retryCount + 1),
+            Math.pow(2, retryCount) * 3000
+          );
+        }
+      }
+    },
+    [forumClient]
+  );
+
+  // ─── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // initial load
     fetchPosts(1, false, false, getSelectedEnum());
   }, []);
-
-  // This useEffect will be moved after fetchCategories is defined
-
-  // Replace client-side filter sync with a simple mirror of server results
   useEffect(() => {
     setPosts(allPosts);
   }, [allPosts]);
-
-  // On category change: reset and fetch from server with that category
   useEffect(() => {
     setAllPosts([]);
     setPosts([]);
     setPage(1);
     setHasMore(true);
     fetchPosts(1, true, false, getSelectedEnum());
-    // NOTE: do NOT include fetchPosts in deps to avoid infinite loop
   }, [selectedCategory]);
+  useEffect(() => {
+    if (!categoriesFetched.current) {
+      categoriesFetched.current = true;
+      fetchCategories();
+    }
+  }, [fetchCategories]);
+  useEffect(
+    () => () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    },
+    []
+  );
 
-  // Remove automatic focus refresh to prevent rate limiting
-  // Categories and posts will only refresh on manual pull-to-refresh
-
-  // onRefresh will be defined after fetchCategories
+  const onRefresh = useCallback(() => {
+    fetchPosts(1, true, false, getSelectedEnum());
+    fetchCategories();
+  }, [getSelectedEnum, fetchPosts, fetchCategories]);
 
   const onLoadMore = useCallback(() => {
     if (!loadingMore && !loading && hasMore && posts.length > 0) {
-      console.log('⬇️ Loading more posts');
       fetchPosts(page, false, true, getSelectedEnum());
     }
   }, [
@@ -292,765 +361,688 @@ export default function ForumScreen() {
     fetchPosts,
   ]);
 
-  // When category changes, filter immediately; no network call needed
-  const handleCategorySelect = useCallback(
-    (categoryId: string) => {
-      if (categoryId === selectedCategory) return;
-      console.log('[Forum] Category selected:', categoryId);
-      setSelectedCategory(categoryId);
-    },
-    [selectedCategory]
-  );
-
-
-
-  const navigateToPost = useCallback(
-    (post: ForumPost) => {
-      router.push(
-        `/post/${post.id}?title=${encodeURIComponent(post.title || 'Untitled')}`
-      );
-    },
-    [router]
-  );
-
-  const handleSearch = useCallback(async (query: string, retryCount: number = 0) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    try {
-      setIsSearching(true);
-      const response = await forumClient.searchQuestions({
-        query: query.trim(),
-        page: 1,
-        pageSize: 20,
-      });
-      
-      const results = response?.data || [];
-      setSearchResults(results);
-    } catch (error: any) {
-      console.error('Search failed:', error);
-      
-      // Handle rate limiting for search
-      if (error.status === 429 && retryCount < 2) {
-        const delayMs = Math.pow(2, retryCount) * 1500; // 1.5s, 3s
-        console.log(`⏰ Search rate limited. Retrying in ${delayMs}ms`);
-        
-        setTimeout(() => {
-          handleSearch(query, retryCount + 1);
-        }, delayMs);
+  const handleSearch = useCallback(
+    async (query: string, retryCount = 0) => {
+      if (!query.trim()) {
+        setSearchResults([]);
+        setIsSearching(false);
         return;
       }
-      
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [forumClient]);
-
-  const toggleSearch = useCallback(() => {
-    setShowSearchInput(!showSearchInput);
-    if (showSearchInput) {
-      // Closing search - clear results
-      setSearchQuery('');
-      setSearchResults([]);
-      setIsSearching(false);
-    }
-  }, [showSearchInput]);
-
-  const fetchCategories = useCallback(async (retryCount: number = 0) => {
-    try {
-      setLoadingCategories(true);
-      const response = await forumClient.listCategories();
-      const fetchedCategories = response?.data || [];
-      
-      // Combine static 'All Posts' with dynamic categories
-      const dynamicCategories: CategoryChipItem[] = [
-        { id: 'all', name: 'All Posts', icon: Users, color: '#667eea' },
-        ...fetchedCategories.map((cat: any) => ({
-          id: cat.slug || cat.id,
-          name: cat.name,
-          icon: getIconForCategory(cat.name),
-          color: getColorForCategory(cat.name)
-        }))
-      ];
-      
-      setCategories(dynamicCategories);
-    } catch (error: any) {
-      console.error('Failed to fetch categories:', error);
-      
-      // Handle rate limiting for categories
-      if (error.status === 429 && retryCount < 2) {
-        const delayMs = Math.pow(2, retryCount) * 3000; // 3s, 6s
-        console.log(`⏰ Categories rate limited. Retrying in ${delayMs}ms (attempt ${retryCount + 1}/2)`);
-        
-        setTimeout(() => {
-          fetchCategories(retryCount + 1);
-        }, delayMs);
-        return;
+      try {
+        setIsSearching(true);
+        const response = await forumClient.searchQuestions({
+          query: query.trim(),
+          page: 1,
+          pageSize: 20,
+        });
+        setSearchResults(response?.data || []);
+      } catch (error: any) {
+        if (error.status === 429 && retryCount < 2) {
+          setTimeout(
+            () => handleSearch(query, retryCount + 1),
+            Math.pow(2, retryCount) * 1500
+          );
+          return;
+        }
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
       }
-      
-      // Keep using static categories on error or max retries reached
-      console.log('🔄 Using static categories due to API issues');
-    } finally {
-      setLoadingCategories(false);
-    }
-  }, [forumClient]);
+    },
+    [forumClient]
+  );
 
-  // onRefresh callback to refresh both posts and categories
-  const onRefresh = useCallback(() => {
-    console.log('🔃 Manual refresh triggered');
-    fetchPosts(1, true, false, getSelectedEnum());
-    // Also refresh categories on manual pull-to-refresh
-    fetchCategories();
-  }, [getSelectedEnum, fetchPosts, fetchCategories]);
+  const displayedPosts = useMemo(
+    () => (showSearch && searchQuery ? searchResults : posts),
+    [showSearch, searchQuery, searchResults, posts]
+  );
 
-  // Fetch categories only once on initial load
-  useEffect(() => {
-    if (!categoriesFetchedRef.current) {
-      categoriesFetchedRef.current = true;
-      fetchCategories();
-    }
-  }, [fetchCategories]);
-
-  const getIconForCategory = (categoryName: string) => {
-    const name = categoryName.toLowerCase();
-    if (name.includes('academic') || name.includes('help')) return BookOpen;
-    if (name.includes('career') || name.includes('internship')) return Briefcase;
-    if (name.includes('tech') || name.includes('programming')) return Code;
-    if (name.includes('student') || name.includes('life')) return Users;
-    if (name.includes('campus') || name.includes('service')) return HelpCircle;
-    return MessageCircle;
-  };
-
-  const getColorForCategory = (categoryName: string) => {
-    const name = categoryName.toLowerCase();
-    if (name.includes('academic')) return '#10b981';
-    if (name.includes('career')) return '#f59e0b';
-    if (name.includes('tech')) return '#3b82f6';
-    if (name.includes('student')) return '#06b6d4';
-    if (name.includes('campus')) return '#ef4444';
-    return '#8b5cf6';
-  };
-
-  // onRefresh and useEffect for categories will be defined after fetchCategories
-
-  // Cleanup search timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffTime = Math.abs(now.getTime() - date.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDays === 1) return 'Today';
-      if (diffDays === 2) return 'Yesterday';
-      if (diffDays <= 7) return `${diffDays - 1} days ago`;
-
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
+  // ─── Render helpers ──────────────────────────────────────────────────────────
+  const toggleLove = useCallback(
+    (postId: string) => {
+      setLovedPosts(prev => {
+        const next = new Set(prev);
+        if (next.has(postId)) {
+          next.delete(postId);
+        } else {
+          next.add(postId);
+        }
+        return next;
       });
-    } catch {
-      return 'Unknown date';
-    }
-  };
-
-  const renderCategoryItem = ({ item }: { item: CategoryChipItem }) => {
-    const Icon = item.icon;
-    const isSelected = selectedCategory === item.id;
-
-    return (
-      <TouchableOpacity
-        style={[styles.categoryCard, isSelected && styles.selectedCategory]}
-        onPress={() => handleCategorySelect(item.id)}
-        activeOpacity={0.7}
-      >
-        <LinearGradient
-          colors={
-            isSelected
-              ? [item.color, item.color + '80']
-              : ['#ffffff', '#f8fafc']
-          }
-          style={styles.categoryGradient}
-        >
-          <Icon size={24} color={isSelected ? '#ffffff' : item.color} />
-          <Text
-            style={[
-              styles.categoryText,
-              isSelected && styles.selectedCategoryText,
-            ]}
-          >
-            {item.name}
-          </Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    );
-  };
+      setLoveCounts(prev => ({
+        ...prev,
+        [postId]: (prev[postId] ?? 0) + (lovedPosts.has(postId) ? -1 : 1),
+      }));
+    },
+    [lovedPosts]
+  );
 
   const renderPost = useCallback(
     ({ item: post }: { item: ForumPost }) => {
       if (!post?.id) return null;
+      const authorName = post.author?.fullname || 'Unknown';
+      const bgColor = avatarColor(authorName);
+      const abbr = initials(authorName);
+      const answerCount = post._count?.answers ?? 0;
+      const isLoved = lovedPosts.has(post.id);
+      const loveCount = loveCounts[post.id] ?? 0;
 
       return (
-        <TouchableOpacity
-          style={styles.postCard}
-          onPress={() => navigateToPost(post)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.postContent}>
-            <View style={styles.postHeader}>
-              <View style={styles.userInfo}>
-                <View style={styles.avatar}>
-                  <User size={16} color='#6b7280' />
-                </View>
-                <View style={styles.userDetails}>
-                  <Text style={styles.username}>
-                    {post.author.fullname || 'Unknown User'}
-                  </Text>
-                  <View style={styles.postMeta}>
-                    <Calendar size={12} color='#9ca3af' />
-                    <Text style={styles.postDate}>
-                      {formatDate(post.createdAt)}
-                    </Text>
-                   
-                  </View>
-                </View>
+        <View style={styles.cardWrapper}>
+          <TouchableOpacity
+            style={styles.postCard}
+            onPress={() =>
+              router.push(
+                `/post/${post.id}?title=${encodeURIComponent(post.title || '')}`
+              )
+            }
+            activeOpacity={0.85}
+          >
+            {/* Author row */}
+            <View style={styles.authorRow}>
+              <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+                <Text style={styles.avatarText}>{abbr}</Text>
+              </View>
+              <View>
+                <Text style={styles.authorName}>{authorName}</Text>
+                <Text style={styles.postDate}>
+                  {formatDate(post.createdAt)}
+                </Text>
               </View>
             </View>
 
+            {/* Title */}
             <Text style={styles.postTitle} numberOfLines={2}>
               {post.title}
             </Text>
 
-            <Text style={styles.postPreview} numberOfLines={3}>
+            {/* Body preview */}
+            <Text style={styles.postBody} numberOfLines={2}>
               {post.body}
             </Text>
 
+            {/* Actions */}
             <View style={styles.postActions}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={e => e.stopPropagation()}
-              >
-                <MessageCircle size={16} color='#9ca3af' />
-                <Text style={styles.actionText}>
-                  {post._count?.answers || 0} answers
+              {/* Answers chip – left */}
+              <View style={styles.actionChip}>
+                <MessageCircle size={13} color='#555' />
+                <Text style={styles.actionChipText}>
+                  {answerCount} answer{answerCount !== 1 ? 's' : ''}
                 </Text>
-              </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity style={styles.actionButton}>
-                <HelpCircle size={16} color='#9ca3af' />
-                <Text style={styles.actionText}>Help</Text>
-              </TouchableOpacity>
+              {/* Right group: Love + Report */}
+              <View style={styles.actionRight}>
+                {/* Love button */}
+                <TouchableOpacity
+                  style={[styles.loveBtn, isLoved && styles.loveBtnActive]}
+                  onPress={e => {
+                    e.stopPropagation?.();
+                    toggleLove(post.id);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Heart
+                    size={14}
+                    color={isLoved ? '#fff' : '#DB2777'}
+                    fill={isLoved ? '#DB2777' : 'transparent'}
+                    strokeWidth={2}
+                  />
+                  {loveCount > 0 && (
+                    <Text
+                      style={[
+                        styles.loveBtnText,
+                        isLoved && styles.loveBtnTextActive,
+                      ]}
+                    >
+                      {loveCount}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Report button */}
+                <TouchableOpacity
+                  style={styles.reportBtn}
+                  onPress={e => {
+                    e.stopPropagation?.();
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Flag size={14} color='#9ca3af' strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
       );
     },
-    [navigateToPost]
+    [router, lovedPosts, loveCounts, toggleLove]
   );
 
-  const renderFooter = useCallback(() => {
-    if (!loadingMore) return null;
+  const renderFooter = useCallback(
+    () =>
+      loadingMore ? (
+        <View style={styles.loadingMore}>
+          <ActivityIndicator size='small' color='#7B2FBE' />
+        </View>
+      ) : null,
+    [loadingMore]
+  );
 
-    return (
-      <View style={styles.loadingMore}>
-        <ActivityIndicator size='small' color='#667eea' />
-        <Text style={styles.loadingMoreText}>Loading more posts...</Text>
-      </View>
-    );
-  }, [loadingMore]);
+  const renderEmpty = useCallback(
+    () =>
+      loading ? null : (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyEmoji}>💬</Text>
+          <Text style={styles.emptyTitle}>No posts yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Be the first to start a discussion!
+          </Text>
+        </View>
+      ),
+    [loading]
+  );
 
-  const renderEmpty = useCallback(() => {
-    if (loading) return null;
-
-    return (
-      <View style={styles.emptyState}>
-        <MessageCircle size={64} color='#d1d5db' />
-        <Text style={styles.emptyTitle}>No Posts Yet</Text>
-        <Text style={styles.emptyDescription}>
-          Be the first to start a discussion in this category!
-        </Text>
-      </View>
-    );
-  }, [loading]);
-
-  // Show full loading screen only on initial load
+  // ─── Full loading state ───────────────────────────────────────────────────────
   if (loading && !refreshing && posts.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-          <View style={styles.headerContent}>
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Student Forum</Text>
-              <Text style={styles.headerSubtitle}>
-                Ask questions and share knowledge with peers
-              </Text>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.heroBannerWrapper}>
+          <LinearGradient
+            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroBanner}
+          >
+            <View style={styles.decorCircle} />
+            <View style={styles.seasonBadge}>
+              <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
             </View>
-            <TouchableOpacity style={styles.searchButton} onPress={toggleSearch}>
-              <Search size={20} color='#ffffff' />
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size='large' color='#667eea' />
-          <Text style={styles.loadingText}>Loading forum...</Text>
+            <Text style={styles.heroHeading}>
+              Spill the tea,{'\n'}ask away 💬
+            </Text>
+            <Text style={styles.heroSubtitle}>
+              Real answers from real students who've been there.
+            </Text>
+          </LinearGradient>
+        </View>
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size='large' color='#7B2FBE' />
+          <Text style={styles.loadingText}>Loading posts…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ─── Main render ─────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Student Forum</Text>
-            <Text style={styles.headerSubtitle}>
-              Ask questions and share knowledge with peers
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* ─── Collapsible header: Hero + Search + Categories ─── */}
+      <Animated.View
+        style={[
+          styles.collapsibleHeader,
+          {
+            opacity: headerAnim,
+            maxHeight: headerAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, 400],
+            }),
+            overflow: 'hidden',
+          },
+        ]}
+      >
+        {/* Hero Banner */}
+        <View
+          style={[
+            styles.heroBannerWrapper,
+            { marginHorizontal: 16, marginTop: 12 },
+          ]}
+        >
+          <LinearGradient
+            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroBanner}
+          >
+            <View style={styles.decorCircle} />
+            <View style={styles.heroBannerTop}>
+              <View style={styles.seasonBadge}>
+                <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.searchIconBtn}
+                onPress={() => setShowSearch(v => !v)}
+              >
+                {showSearch ? (
+                  <X size={18} color='#000' />
+                ) : (
+                  <Search size={18} color='#000' />
+                )}
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.heroHeading}>
+              Spill the tea,{'\n'}ask away 💬
             </Text>
+            <Text style={styles.heroSubtitle}>
+              Real answers from real students who've been there.
+            </Text>
+          </LinearGradient>
+        </View>
+
+        {/* Search Input */}
+        {showSearch && (
+          <View style={styles.searchBar}>
+            <Search size={16} color='#666' />
+            <TextInput
+              style={styles.searchInput}
+              placeholder='Search posts…'
+              placeholderTextColor='#999'
+              value={searchQuery}
+              onChangeText={q => {
+                setSearchQuery(q);
+                if (searchTimeoutRef.current)
+                  clearTimeout(searchTimeoutRef.current);
+                searchTimeoutRef.current = setTimeout(
+                  () => handleSearch(q),
+                  400
+                );
+              }}
+              autoFocus
+            />
+            {isSearching && <ActivityIndicator size='small' color='#7B2FBE' />}
           </View>
-          <TouchableOpacity style={styles.searchButton}>
-            <Search size={20} color='#ffffff' />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
+        )}
 
-      {/* Search Input Section */}
-      {showSearchInput && (
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search questions..."
-            value={searchQuery}
-            onChangeText={(text: string) => {
-              setSearchQuery(text);
-              
-              // Clear previous timeout
-              if (searchTimeoutRef.current) {
-                clearTimeout(searchTimeoutRef.current);
-              }
-              
-              // Debounce search - wait 800ms after user stops typing
-              searchTimeoutRef.current = setTimeout(() => {
-                handleSearch(text);
-              }, 800);
-            }}
-            autoFocus
-          />
-          {isSearching && (
-            <ActivityIndicator size="small" color="#667eea" style={styles.searchSpinner} />
-          )}
-        </View>
-      )}
-
-      {/* Categories Section - Dynamic chips (same screen) */}
-      <View style={styles.categoriesSection}>
+        {/* Category Pills */}
         <FlatList
+          horizontal
           data={categories}
           keyExtractor={item => item.id}
-          renderItem={renderCategoryItem}
-          horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesContainer}
-          extraData={selectedCategory} // ensure chip highlight re-renders
+          contentContainerStyle={styles.filterList}
+          style={styles.filterRow}
+          nestedScrollEnabled
+          renderItem={({ item }) => {
+            const isActive = item.id === selectedCategory;
+            return (
+              <TouchableOpacity
+                style={[styles.filterPill, isActive && styles.filterPillActive]}
+                onPress={() => setSelectedCategory(item.id)}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    isActive && styles.filterPillTextActive,
+                  ]}
+                >
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
         />
-      </View>
+      </Animated.View>
 
-      {/* Unified loading banner - shows for initial load or refresh */}
-      {showLoadingBanner && (
-        <View style={styles.pageLoadingBanner}>
-          <ActivityIndicator size='small' color='#667eea' />
-          <Text style={styles.pageLoadingText}>
-            {refreshing ? 'Refreshing...' : 'Loading posts...'}
-          </Text>
+      {/* ─── Error ─── */}
+      {error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => fetchPosts(1, true, false, getSelectedEnum())}
+          >
+            <Text style={styles.retryBtnText}>Try again</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* Posts List (uses filtered posts state or search results) */}
+      {/* ─── Posts List ─── */}
       <FlatList
-        data={showSearchInput && searchQuery.trim() ? searchResults : posts}
+        data={displayedPosts}
         keyExtractor={item => item.id}
         renderItem={renderPost}
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmpty}
+        onEndReached={onLoadMore}
+        onEndReachedThreshold={0.3}
+        onScroll={onListScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#667eea']}
-            tintColor='#667eea'
+            tintColor='#7B2FBE'
           />
         }
-        onEndReached={onLoadMore}
-        onEndReachedThreshold={0.1}
-        ListFooterComponent={renderFooter}
-        ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.postsContainer}
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={10}
+        contentContainerStyle={styles.listContent}
       />
 
-      {/* Error Banner */}
-      {error && !refreshing && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            onPress={() => fetchPosts(1)}
-            style={styles.retryButton}
-          >
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Post a Question Button (replaces AI chat) */}
+      {/* ─── Floating FAB (bottom-right) ─── */}
       <TouchableOpacity
-        style={styles.postBtn}
+        style={styles.fab}
         onPress={() => router.push('/create-post')}
-        accessibilityRole='button'
-        accessibilityLabel='Post a question'
+        activeOpacity={0.85}
       >
         <LinearGradient
-          colors={['#667eea', '#764ba2']}
-          style={styles.postBtnGradient}
+          colors={['#9333EA', '#DB2777']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={
+            headerVisible ? styles.fabGradientFull : styles.fabGradientCompact
+          }
         >
-          <Plus size={20} color='#ffffff' />
-          <Text style={styles.postBtnText}>Post a Question</Text>
+          <Plus size={16} color='#fff' strokeWidth={2.5} />
+          {headerVisible && <Text style={styles.fabText}>Post a question</Text>}
         </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
+  container: { flex: 1, backgroundColor: '#EBEFFF' },
+
+  // ─── Hero Banner ───
+  heroBannerWrapper: {
+    borderRadius: 24,
+    borderWidth: 2.5,
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
   },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+  heroBanner: {
+    borderRadius: 22,
+    padding: 20,
+    paddingBottom: 24,
+    overflow: 'hidden',
   },
-  headerContent: {
+  decorCircle: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    top: -30,
+    right: -30,
+  },
+  heroBannerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 14,
   },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  searchButton: {
-    width: 40,
-    height: 40,
+  seasonBadge: {
+    backgroundColor: '#C4FF0E',
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1.5,
+    borderColor: '#000',
+  },
+  seasonBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.8,
+  },
+  searchIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#C4FF0E',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  heroHeading: {
+    fontSize: 30,
+    fontWeight: '900',
+    color: '#fff',
+    lineHeight: 36,
+    marginBottom: 10,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
-  },
-
-  // Categories Section (Similar to Guide)
-  categoriesSection: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    position: 'relative', // enable overlay spinner positioning
-  },
-  categoriesContainer: {
-    paddingHorizontal: 16,
-  },
-  categoryCard: {
-    marginRight: 12,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  selectedCategory: {
-    transform: [{ scale: 1.05 }],
-  },
-  categoryGradient: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-    alignItems: 'center',
-    minWidth: 100,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  selectedCategoryText: {
-    color: '#ffffff',
+  heroSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 20,
+    fontWeight: '500',
   },
 
-  // Posts Section
-  postsContainer: {
-    padding: 16,
-    flexGrow: 1,
-  },
-  postCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  postContent: {
-    padding: 16,
-  },
-  postHeader: {
-    marginBottom: 12,
-  },
-  userInfo: {
+  // ─── Search ───
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#000',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginBottom: 12,
   },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0D0D0D',
+    fontWeight: '500',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
+  },
+
+  // ─── Filter Pills ───
+  filterRow: { marginBottom: 12, height: 56, flexShrink: 0 },
+  filterList: {
+    paddingHorizontal: 16,
+    gap: 10,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  filterPill: {
+    borderRadius: 30,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: '#000',
+    backgroundColor: '#fff',
+  },
+  filterPillActive: { backgroundColor: '#0D0D0D' },
+  filterPillText: { fontSize: 13, fontWeight: '700', color: '#0D0D0D' },
+  filterPillTextActive: { color: '#C4FF0E' },
+
+  // ─── Loading ───
+  loadingBox: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: { fontSize: 14, color: '#555', fontWeight: '600' },
+  loadingMore: { paddingVertical: 20, alignItems: 'center' },
+
+  // ─── Error ───
+  errorBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#000',
+    padding: 16,
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: '#C4FF0E',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  retryBtnText: { fontSize: 13, fontWeight: '800', color: '#000' },
+
+  // ─── List ───
+  listContent: { paddingHorizontal: 16, paddingBottom: 80 },
+
+  // ─── Post Card ───
+  cardWrapper: {
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+  postCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#000',
+    padding: 16,
+    gap: 10,
+  },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f3f4f6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
-  userDetails: {
-    flex: 1,
-  },
-  username: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  postMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  postDate: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  statusCleared: {
-    backgroundColor: '#dcfce7',
-  },
-  statusPending: {
-    backgroundColor: '#fef3c7',
-  },
-  statusClosed: {
-    backgroundColor: '#fee2e2',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#374151',
-  },
+  avatarText: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  authorName: { fontSize: 14, fontWeight: '700', color: '#0D0D0D' },
+  postDate: { fontSize: 12, color: '#888', fontWeight: '500' },
   postTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2937',
-    lineHeight: 24,
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0D0D0D',
+    lineHeight: 22,
   },
-  postPreview: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
+  postBody: { fontSize: 13, color: '#555', lineHeight: 19 },
   postActions: {
     flexDirection: 'row',
-    gap: 20,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  actionButton: {
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1.5,
+    borderColor: '#ddd',
+    backgroundColor: '#F5F5F5',
+  },
+  actionChipText: { fontSize: 12, fontWeight: '600', color: '#444' },
+  actionRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  loveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1.5,
+    borderColor: '#DB2777',
+    backgroundColor: '#FFF0F6',
+  },
+  loveBtnActive: { backgroundColor: '#DB2777', borderColor: '#DB2777' },
+  loveBtnText: { fontSize: 12, fontWeight: '700', color: '#DB2777' },
+  loveBtnTextActive: { color: '#fff' },
+  reportBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: '#e5e7eb',
+  },
+
+  // ─── Empty ───
+  emptyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#000',
+    padding: 32,
+    alignItems: 'center',
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0D0D0D',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // ─── Collapsible header ───
+  collapsibleHeader: {},
+
+  // ─── FAB ───
+  fab: {
+    position: 'absolute',
+    bottom: 8, // Pushed down a bit further
+    right: 16,
+    borderRadius: 20, // Smaller border radius
+    borderWidth: 2, // Slimmer border
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 }, // Slimmer shadow
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+    backgroundColor: '#fff',
+  },
+  fabGradientFull: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18, // Matches inner boundary of parent (20 - border)
   },
-  actionText: {
-    fontSize: 13,
-    color: '#9ca3af',
-    fontWeight: '500',
-  },
-
-  // Loading & Empty States
-  loadingMore: {
-    flexDirection: 'row',
+  fabGradientCompact: {
+    width: 42,
+    height: 42,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
+    borderRadius: 18,
   },
-  loadingMoreText: {
-    marginLeft: 8,
-    color: '#6b7280',
-    fontSize: 14,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyDescription: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-
-  // Error & FAB
-  errorBanner: {
-    position: 'absolute',
-    top: 120,
-    left: 16,
-    right: 16,
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  errorText: {
-    flex: 1,
-    color: '#dc2626',
-    fontSize: 14,
-  },
-  retryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#dc2626',
-    borderRadius: 4,
-  },
-  retryText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Replaced FAB styles with a labeled button
-  postBtn: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    borderRadius: 28,
-  },
-  postBtnGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 28,
-  },
-  postBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  
-  // Search styles
-  searchContainer: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#111827',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  searchSpinner: {
-    marginLeft: 12,
-  },
-  pageLoadingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#eef2ff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  pageLoadingText: {
-    color: '#4f46e5',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  fabText: { fontSize: 13, fontWeight: '800', color: '#fff' },
 });

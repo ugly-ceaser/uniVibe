@@ -1,122 +1,178 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight, BookOpen, Users, DollarSign, Shield } from 'lucide-react-native';
+import {
+  BookOpen,
+  Users,
+  DollarSign,
+  Shield,
+  GraduationCap,
+} from 'lucide-react-native';
 import { Guide, Category } from '@/types/guide';
 
 interface GuideCardProps {
   guide: Guide;
   onPress: () => void;
+  isHot?: boolean;
 }
 
-// Map categories → gradient + icon
-const CATEGORY_STYLES: Record<
+const CATEGORY_CONFIG: Record<
   Category,
-  { colors: string[]; icon: React.ReactNode }
+  { iconBg: string; icon: React.ReactNode; badgeLabel: string }
 > = {
   Academics: {
-    colors: ['#667eea', '#764ba2'],
-    icon: <BookOpen size={24} color="#fff" />,
+    iconBg: '#C4FF0E',
+    icon: <GraduationCap size={26} color='#000' />,
+    badgeLabel: 'ACADEMICS',
   },
-  Social: {
-    colors: ['#f093fb', '#f5576c'],
-    icon: <Users size={24} color="#fff" />,
+  'Social Life': {
+    iconBg: '#FF6B9D',
+    icon: <Users size={26} color='#fff' />,
+    badgeLabel: 'SOCIAL',
   },
-  Financial: {
-    colors: ['#4facfe', '#00f2fe'],
-    icon: <DollarSign size={24} color="#fff" />,
+  Budgeting: {
+    iconBg: '#FFD93D',
+    icon: <DollarSign size={26} color='#000' />,
+    badgeLabel: 'FINANCIAL',
   },
   Safety: {
-    colors: ['#43e97b', '#38f9d7'],
-    icon: <Shield size={24} color="#fff" />,
+    iconBg: '#6BCB77',
+    icon: <Shield size={26} color='#fff' />,
+    badgeLabel: 'SAFETY',
   },
 };
 
-export const GuideCard: React.FC<GuideCardProps> = ({ guide, onPress }) => {
-  const { colors, icon } = CATEGORY_STYLES[guide.category] || CATEGORY_STYLES.Academics;
+export const GuideCard: React.FC<GuideCardProps> = ({
+  guide,
+  onPress,
+  isHot = false,
+}) => {
+  const config = CATEGORY_CONFIG[guide.category] || CATEGORY_CONFIG.Academics;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
-      {/* Icon Gradient */}
-      <LinearGradient
-        colors={colors}
-        style={styles.iconWrapper}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <View style={styles.cardShadowWrapper}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={onPress}
+        activeOpacity={0.85}
       >
-        {icon}
-      </LinearGradient>
+        {/* Hot badge */}
+        {isHot && (
+          <View style={styles.hotBadge}>
+            <Text style={styles.hotBadgeText}>🔥 hot</Text>
+          </View>
+        )}
 
-      {/* Text Content */}
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.category}>{guide.category}</Text>
-          <Text style={styles.readTime}>{guide.readTime}</Text>
+        {/* Left icon box */}
+        <View style={[styles.iconBox, { backgroundColor: config.iconBg }]}>
+          {config.icon}
         </View>
-        <Text style={styles.title}>{guide.title}</Text>
-        <Text style={styles.description} numberOfLines={2}>
-          {guide.description}
-        </Text>
-      </View>
 
-      {/* Arrow */}
-      <ChevronRight size={20} color="#9ca3af" style={styles.arrow} />
-    </TouchableOpacity>
+        {/* Content */}
+        <View style={styles.content}>
+          <View style={styles.topRow}>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>{config.badgeLabel}</Text>
+            </View>
+            <Text style={styles.readTime}>{guide.readTime}</Text>
+          </View>
+          <Text style={styles.title} numberOfLines={2}>
+            {guide.title}
+          </Text>
+          <Text style={styles.description} numberOfLines={2}>
+            {guide.description}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  cardShadowWrapper: {
+    marginBottom: 14,
+    // Offset shadow effect
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+  },
   card: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    borderWidth: 2,
+    borderColor: '#000000',
   },
-  iconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
+  hotBadge: {
+    position: 'absolute',
+    top: -10,
+    right: 14,
+    backgroundColor: '#FF3B30',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    zIndex: 10,
+    borderWidth: 1.5,
+    borderColor: '#000',
+  },
+  hotBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  iconBox: {
+    width: 54,
+    height: 54,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
+    borderWidth: 2,
+    borderColor: '#000',
+    flexShrink: 0,
   },
   content: {
     flex: 1,
   },
-  header: {
+  topRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 2,
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
   },
-  category: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#667eea',
-    textTransform: 'uppercase',
+  categoryBadge: {
+    backgroundColor: '#C4FF0E',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1.5,
+    borderColor: '#000',
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.5,
   },
   readTime: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#666',
+    fontWeight: '500',
   },
   title: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  description: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0D0D0D',
+    marginBottom: 3,
     lineHeight: 20,
   },
-  arrow: {
-    marginLeft: 8,
+  description: {
+    fontSize: 13,
+    color: '#555',
+    lineHeight: 18,
   },
 });

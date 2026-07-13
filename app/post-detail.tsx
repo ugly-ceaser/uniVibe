@@ -1,765 +1,1096 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Share,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
-  User,
-  Clock,
-  MessageSquare,
-  Send,
-  Heart,
+  Calendar,
+  ThumbsUp,
+  Bookmark,
+  Share2,
+  Plus,
+  ChevronDown,
+  MoreVertical,
+  Check,
+  MessageCircle,
+  ArrowRight,
+  ChevronUp,
 } from 'lucide-react-native';
 import { useApi } from '@/utils/api';
+import { showMessage } from 'react-native-flash-message';
 
-const categoryColors = {
-  Academic: '#667eea',
-  Social: '#f093fb',
-  General: '#4facfe',
-  Technical: '#43e97b',
+// Helper to determine initials and a color for avatar
+const getAvatarConfig = (name: string) => {
+  const cleanName = name || 'Anonymous';
+  const initial = cleanName.charAt(0).toUpperCase();
+  const colors = [
+    '#8B5CF6',
+    '#EC4899',
+    '#EF4444',
+    '#10B981',
+    '#3B82F6',
+    '#F59E0B',
+  ];
+  const charCodeSum = cleanName
+    .split('')
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const color = colors[charCodeSum % colors.length];
+  return { initial, color };
 };
 
 export default function PostDetailScreen() {
   const router = useRouter();
   const { postId } = useLocalSearchParams();
   const { authGet, authPost } = useApi();
-  
+
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
-  const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [helpful, setHelpful] = useState(false);
+  const [helpfulCount, setHelpfulCount] = useState(0);
 
-  React.useEffect(() => {
-    const fetchPostDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await authGet(`/forum/questions/${postId}`);
+  // Sorting state: 'top' | 'new'
+  const [sortBy, setSortBy] = useState<'top' | 'new'>('top');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+
+  // Fetch post details
+  const fetchPostDetails = async () => {
+    try {
+      setLoading(true);
+      const response = await authGet<any>(`/forum/questions/${postId}`);
+      if (response && response.data) {
         setPost(response.data);
-      } catch (error) {
-        console.error('Error fetching post details:', error);
-        Alert.alert('Error', 'Failed to load post details');
-      } finally {
-        setLoading(false);
+        setHelpfulCount(response.data.likes || 0);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching post details:', error);
+      showMessage({
+        message: 'Error',
+        description: 'Failed to load post details',
+        type: 'danger',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (postId) {
       fetchPostDetails();
     }
-  }, [postId, authGet]);
+  }, [postId]);
 
-  const handleLikePost = async () => {
+  // Handle post helpful (like) toggle
+  const handleHelpfulToggle = async () => {
     try {
-      setPost((prev: any) => ({ ...prev, likes: (prev.likes || 0) + 1 }));
-      await authPost(`/forum/questions/${postId}/like`);
+      const originalHelpful = helpful;
+      const originalCount = helpfulCount;
+
+      setHelpful(!originalHelpful);
+      setHelpfulCount(originalHelpful ? originalCount - 1 : originalCount + 1);
+
+      await authPost<any>(`/forum/questions/${postId}/like`);
     } catch (error) {
       console.error('Error liking post:', error);
-      setPost((prev: any) => ({ ...prev, likes: Math.max((prev.likes || 1) - 1, 0) }));
+      // Revert if API fails
+      setHelpful(helpful);
+      setHelpfulCount(helpfulCount);
     }
   };
 
-  const handleLikeComment = async (commentId: string) => {
+  // Handle share action
+  const handleShare = async () => {
     try {
-      setPost((prev: any) => ({
-        ...prev,
-        comments: prev.comments.map((comment: any) =>
-          comment.id === commentId
-            ? { ...comment, likes: (comment.likes || 0) + 1 }
-            : comment
-        ),
-      }));
-      await authPost(`/forum/comments/${commentId}/like`);
+      await Share.share({
+        message: `Check out this discussion on UniVibe: "${post?.title}"\n\n${
+          post?.body || post?.content || ''
+        }`,
+      });
     } catch (error) {
-      console.error('Error liking comment:', error);
+      console.error('Error sharing post:', error);
     }
   };
 
+  // Handle answer submission
   const handleAddComment = async () => {
     if (!newComment.trim()) {
-      Alert.alert('Error', 'Please enter a comment');
       return;
     }
 
     try {
-      const response = await authPost(`/forum/questions/${postId}/answers`, {
-        body: newComment.trim(),
-      });
-      
-      setPost((prev: any) => ({
-        ...prev,
-        comments: [...(prev.comments || []), response.data],
-      }));
-      
-      setNewComment('');
-      Alert.alert('Success', 'Comment added successfully!');
+      const response = await authPost<any>(
+        `/forum/questions/${postId}/answers`,
+        {
+          body: newComment.trim(),
+        }
+      );
+
+      if (response && response.data) {
+        setPost((prev: any) => ({
+          ...prev,
+          comments: [...(prev.comments || []), response.data],
+          answers: [...(prev.answers || []), response.data],
+        }));
+        setNewComment('');
+        showMessage({
+          message: 'Success',
+          description: 'Answer added successfully!',
+          type: 'success',
+        });
+      }
     } catch (error) {
       console.error('Error adding comment:', error);
-      Alert.alert('Error', 'Failed to add comment');
+      showMessage({
+        message: 'Error',
+        description: 'Failed to add answer',
+        type: 'danger',
+      });
     }
   };
 
-  const handleReplyToComment = async (commentId: string) => {
-    if (!replyText.trim()) {
-      Alert.alert('Error', 'Please enter a reply');
-      return;
-    }
-
+  // Like/upvote a comment (increases count)
+  const handleVoteComment = async (commentId: string, type: 'up' | 'down') => {
     try {
-      const response = await authPost('/forum/comments', {
-        answerId: commentId,
-        text: replyText.trim(),
+      setPost((prev: any) => {
+        const commentsKey = prev.comments ? 'comments' : 'answers';
+        const updatedList = (prev[commentsKey] || []).map((comment: any) => {
+          if (comment.id === commentId) {
+            const currentLikes = comment.likes || 0;
+            return {
+              ...comment,
+              likes:
+                type === 'up'
+                  ? currentLikes + 1
+                  : Math.max(currentLikes - 1, 0),
+            };
+          }
+          return comment;
+        });
+        return { ...prev, [commentsKey]: updatedList };
       });
 
-      setPost((prev: any) => ({
-        ...prev,
-        comments: prev.comments.map((comment: any) =>
-          comment.id === commentId
-            ? {
-                ...comment,
-                replies: [...(comment.replies || []), response.data],
-              }
-            : comment
-        ),
-      }));
-
-      setReplyText('');
-      setReplyingTo(null);
-      Alert.alert('Success', 'Reply added successfully!');
+      // Call backend like
+      await authPost<any>(`/forum/comments/${commentId}/like`);
     } catch (error) {
-      console.error('Error adding reply:', error);
-      Alert.alert('Error', 'Failed to add reply');
+      console.error('Error voting comment:', error);
+    }
+  };
+
+  // Format date nicely
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
     }
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Forum Post</Text>
-        </LinearGradient>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#667eea" />
-          <Text style={styles.loadingText}>Loading post...</Text>
-        </View>
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size='large' color='#7B2FBE' />
+        <Text style={styles.loadingText}>Loading discussion...</Text>
       </SafeAreaView>
     );
   }
 
   if (!post) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.errorContainer}>
         <Text style={styles.errorText}>Post not found</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Go Back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
+  const authorConfig = getAvatarConfig(post.author?.name || post.author || '');
+  const answersList = post.answers || post.comments || [];
+
+  // Sort answers
+  const sortedAnswers = [...answersList].sort((a: any, b: any) => {
+    if (sortBy === 'top') {
+      return (b.likes || 0) - (a.likes || 0);
+    } else {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+  });
+
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        {/* ── Header ── */}
+        <LinearGradient
+          colors={['#3B0F6F', '#7B2FBE', '#C026D3']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
         >
-          <ArrowLeft size={24} color='#ffffff' strokeWidth={2} />
-        </TouchableOpacity>
+          <View style={styles.headerTop}>
+            <TouchableOpacity
+              style={styles.headerBackBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.8}
+            >
+              <ArrowLeft size={20} color='#fff' strokeWidth={2.5} />
+            </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Forum Post</Text>
-      </LinearGradient>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerLabel}>STUDENT FORUM</Text>
+              <Text style={styles.headerTitle}>Discussion</Text>
+            </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Post Content */}
-        <View style={styles.postContainer}>
-          <View style={styles.postHeader}>
-            <View style={styles.authorInfo}>
-              <View style={styles.avatarContainer}>
-                <User size={20} color='#667eea' strokeWidth={2} />
-              </View>
-              <View>
-                <Text style={styles.authorName}>{post.author?.name || post.author}</Text>
-                <View style={styles.postMeta}>
-                  <Clock size={12} color='#9ca3af' strokeWidth={2} />
-                  <Text style={styles.postTime}>{post.createdAt}</Text>
-                </View>
+            <TouchableOpacity style={styles.headerMenuBtn} activeOpacity={0.8}>
+              <MoreVertical size={20} color='#fff' strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Question Card ── */}
+          <View style={styles.questionCard}>
+            {/* Category Badge */}
+            <View style={styles.badgeRow}>
+              <View style={styles.categoryBadge}>
+                <View style={styles.categoryDot} />
+                <Text style={styles.categoryText}>
+                  {(post.category || 'General').toUpperCase().replace('_', ' ')}
+                </Text>
               </View>
             </View>
-            <View
-              style={[
-                styles.categoryBadge,
-                { backgroundColor: categoryColors[post.category] + '20' },
-              ]}
-            >
-              <Text
+
+            {/* Title */}
+            <Text style={styles.questionTitle}>{post.title}</Text>
+
+            {/* Meta (Author, Date) */}
+            <View style={styles.metaRow}>
+              <View
                 style={[
-                  styles.categoryBadgeText,
-                  { color: categoryColors[post.category] },
+                  styles.miniAvatar,
+                  { backgroundColor: authorConfig.color },
                 ]}
               >
-                {post.category}
+                <Text style={styles.miniAvatarText}>
+                  {authorConfig.initial}
+                </Text>
+              </View>
+              <Text style={styles.authorName}>
+                {post.author?.name || post.author || 'Anonymous'}
               </Text>
+
+              <View style={styles.dateBadge}>
+                <Calendar
+                  size={12}
+                  color='#6B7280'
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={styles.dateText}>
+                  {formatDate(post.createdAt)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Body */}
+            <Text style={styles.questionBody}>{post.body || post.content}</Text>
+
+            <View style={styles.divider} />
+
+            {/* Actions */}
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  helpful && styles.actionButtonActive,
+                ]}
+                onPress={handleHelpfulToggle}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.actionIcon}>👍</Text>
+                <Text style={styles.actionButtonText}>
+                  {helpfulCount > 0 ? `Helpful (${helpfulCount})` : 'Helpful'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  saved && styles.actionButtonActive,
+                ]}
+                onPress={() => setSaved(!saved)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.actionIcon}>🔖</Text>
+                <Text style={styles.actionButtonText}>
+                  {saved ? 'Saved' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleShare}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.actionIcon}>🔗</Text>
+                <Text style={styles.actionButtonText}>Share</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          <Text style={styles.postTitle}>{post.title}</Text>
-          <Text style={styles.postContent}>{post.body || post.content}</Text>
-
-          <View style={styles.postActions}>
-            <TouchableOpacity
-              style={styles.likeButton}
-              onPress={handleLikePost}
-            >
-              <Heart size={16} color='#ef4444' strokeWidth={2} />
-              <Text style={styles.likesText}>{post.likes || 0} likes</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Comments Section */}
-        <View style={styles.commentsSection}>
-          <View style={styles.commentsHeader}>
-            <MessageSquare size={20} color='#667eea' strokeWidth={2} />
-            <Text style={styles.commentsTitle}>
-              {post.answers?.length || post.comments?.length || 0}{' '}
-              {(post.answers?.length || post.comments?.length || 0) === 1 ? 'Answer' : 'Answers'}
+          {/* ── Answers Header ── */}
+          <View style={styles.answersHeaderRow}>
+            <Text style={styles.answersCountText}>
+              Answers ({answersList.length})
             </Text>
-          </View>
 
-          {(post.answers || post.comments || []).map((comment: any) => (
-            <View key={comment.id} style={styles.commentCard}>
-              <View style={styles.commentHeader}>
-                <View style={styles.commentAuthorInfo}>
-                  <View style={styles.commentAvatarContainer}>
-                    <User size={16} color='#667eea' strokeWidth={2} />
-                  </View>
-                  <Text style={styles.commentAuthorName}>
-                    {comment.author?.name || comment.author}
-                  </Text>
-                </View>
-                <Text style={styles.commentTime}>{comment.createdAt}</Text>
-              </View>
-              <Text style={styles.commentContent}>{comment.body || comment.content}</Text>
-              
-              <View style={styles.commentActions}>
-                <TouchableOpacity
-                  style={styles.commentLikeButton}
-                  onPress={() => handleLikeComment(comment.id)}
-                >
-                  <Heart size={14} color='#ef4444' strokeWidth={2} />
-                  <Text style={styles.commentLikesText}>{comment.likes || 0}</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={styles.replyButton}
-                  onPress={() => setReplyingTo(comment.id)}
-                >
-                  <Text style={styles.replyButtonText}>Reply</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.answersHeaderRight}>
+              {answersList.length > 0 && (
+                <View style={{ position: 'relative', zIndex: 10 }}>
+                  <TouchableOpacity
+                    style={styles.sortDropdown}
+                    onPress={() => setShowSortMenu(!showSortMenu)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.sortDropdownText}>
+                      {sortBy === 'top' ? 'Top' : 'Newest'}
+                    </Text>
+                    <ChevronDown size={14} color='#7B2FBE' strokeWidth={2.5} />
+                  </TouchableOpacity>
 
-              {/* Reply Input */}
-              {replyingTo === comment.id && (
-                <View style={styles.replyInputContainer}>
-                  <TextInput
-                    style={styles.replyInput}
-                    placeholder='Write a reply...'
-                    value={replyText}
-                    onChangeText={setReplyText}
-                    multiline
-                    maxLength={500}
-                  />
-                  <View style={styles.replyActions}>
-                    <TouchableOpacity
-                      style={styles.cancelReplyButton}
-                      onPress={() => {
-                        setReplyingTo(null);
-                        setReplyText('');
-                      }}
-                    >
-                      <Text style={styles.cancelReplyText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.sendReplyButton,
-                        !replyText.trim() && styles.sendReplyButtonDisabled,
-                      ]}
-                      onPress={() => handleReplyToComment(comment.id)}
-                      disabled={!replyText.trim()}
-                    >
-                      <Text style={styles.sendReplyText}>Reply</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* Nested Replies */}
-              {comment.replies && comment.replies.length > 0 && (
-                <View style={styles.repliesContainer}>
-                  {comment.replies.map((reply: any) => (
-                    <View key={reply.id} style={styles.replyCard}>
-                      <View style={styles.replyHeader}>
-                        <View style={styles.replyAuthorInfo}>
-                          <View style={styles.replyAvatarContainer}>
-                            <User size={14} color='#667eea' strokeWidth={2} />
-                          </View>
-                          <Text style={styles.replyAuthorName}>
-                            {reply.author?.name || reply.author}
-                          </Text>
-                        </View>
-                        <Text style={styles.replyTime}>{reply.createdAt}</Text>
-                      </View>
-                      <Text style={styles.replyContent}>{reply.text || reply.content}</Text>
-                      
+                  {showSortMenu && (
+                    <View style={styles.sortMenu}>
                       <TouchableOpacity
-                        style={styles.replyLikeButton}
-                        onPress={() => handleLikeComment(reply.id)}
+                        style={styles.sortMenuItem}
+                        onPress={() => {
+                          setSortBy('top');
+                          setShowSortMenu(false);
+                        }}
                       >
-                        <Heart size={12} color='#ef4444' strokeWidth={2} />
-                        <Text style={styles.replyLikesText}>{reply.likes || 0}</Text>
+                        <Text
+                          style={[
+                            styles.sortMenuItemText,
+                            sortBy === 'top' && styles.sortMenuItemTextActive,
+                          ]}
+                        >
+                          Top
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.sortMenuItem}
+                        onPress={() => {
+                          setSortBy('new');
+                          setShowSortMenu(false);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.sortMenuItemText,
+                            sortBy === 'new' && styles.sortMenuItemTextActive,
+                          ]}
+                        >
+                          Newest
+                        </Text>
                       </TouchableOpacity>
                     </View>
-                  ))}
+                  )}
                 </View>
               )}
-            </View>
-          ))}
-        </View>
 
-        {/* Add Comment Section */}
-        <View style={styles.addCommentSection}>
-          <Text style={styles.addCommentTitle}>Add an Answer</Text>
-          <View style={styles.commentInputContainer}>
-            <TextInput
-              style={styles.commentInput}
-              placeholder='Share your knowledge or ask a follow-up question...'
-              value={newComment}
-              onChangeText={setNewComment}
-              multiline
-              maxLength={1000}
-            />
-            <TouchableOpacity
-              style={[
-                styles.commentSendButton,
-                !newComment.trim() && styles.commentSendButtonDisabled,
-              ]}
-              onPress={handleAddComment}
-              disabled={!newComment.trim()}
-            >
-              <Send size={20} color='#ffffff' strokeWidth={2} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.inlineAddAnswerBtn}
+                onPress={() =>
+                  showMessage({
+                    message: 'Scroll to the bottom to write an answer!',
+                    type: 'info',
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Plus
+                  size={14}
+                  color='#fff'
+                  strokeWidth={2.5}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={styles.inlineAddAnswerText}>Add answer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {/* ── Empty State / Answers List ── */}
+          {answersList.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconContainer}>
+                <Text style={{ fontSize: 32 }}>🌱</Text>
+              </View>
+              <Text style={styles.emptyTitle}>No answers yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Be the first to help{' '}
+                {post.author?.name || post.author || 'martins'} out — your
+                answer could save someone else the same headache.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.answersList}>
+              {sortedAnswers.map((answer: any, index: number) => {
+                const answerAuthor = getAvatarConfig(
+                  answer.author?.name || answer.author || 'Student'
+                );
+                const isBestAnswer =
+                  sortBy === 'top' && index === 0 && (answer.likes || 0) > 0;
+
+                return (
+                  <View key={answer.id || index} style={styles.answerCard}>
+                    {isBestAnswer && (
+                      <View style={styles.bestAnswerBadge}>
+                        <Check
+                          size={12}
+                          color='#1a1a2e'
+                          strokeWidth={3}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={styles.bestAnswerText}>Best answer</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.answerHeader}>
+                      <View
+                        style={[
+                          styles.miniAvatar,
+                          {
+                            backgroundColor: answerAuthor.color,
+                            width: 32,
+                            height: 32,
+                            borderRadius: 16,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.miniAvatarText, { fontSize: 12 }]}>
+                          {answerAuthor.initial}
+                        </Text>
+                      </View>
+                      <View style={styles.answerHeaderMeta}>
+                        <Text style={styles.answerAuthorName}>
+                          {answer.author?.name || answer.author || 'Student'}
+                        </Text>
+                        <Text style={styles.answerTime}>
+                          Answered {formatDate(answer.createdAt)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.answerContent}>
+                      {answer.body || answer.content}
+                    </Text>
+
+                    <View style={styles.answerActions}>
+                      {/* Up/Down Vote Control */}
+                      <View style={styles.voteControl}>
+                        <TouchableOpacity
+                          style={styles.voteBtn}
+                          onPress={() => handleVoteComment(answer.id, 'up')}
+                          activeOpacity={0.7}
+                        >
+                          <ChevronUp
+                            size={16}
+                            color='#1a1a2e'
+                            strokeWidth={2.5}
+                          />
+                        </TouchableOpacity>
+                        <Text style={styles.voteCount}>
+                          {answer.likes || 0}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.voteBtn}
+                          onPress={() => handleVoteComment(answer.id, 'down')}
+                          activeOpacity={0.7}
+                        >
+                          <ChevronDown
+                            size={16}
+                            color='#1a1a2e'
+                            strokeWidth={2.5}
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.replyActionBtn}
+                        onPress={() =>
+                          showMessage({
+                            message: 'Replies coming soon!',
+                            type: 'info',
+                          })
+                        }
+                        activeOpacity={0.8}
+                      >
+                        <MessageCircle
+                          size={14}
+                          color='#6B7280'
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={styles.replyActionText}>Reply</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={{ height: 120 }} />
+        </ScrollView>
+
+        {/* ── Sticky Bottom Input Bar ── */}
+        <View style={styles.bottomInputBar}>
+          <View
+            style={[
+              styles.miniAvatar,
+              {
+                backgroundColor: '#F43F5E',
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+              },
+            ]}
+          >
+            <Text style={[styles.miniAvatarText, { fontSize: 14 }]}>M</Text>
+          </View>
+
+          <TextInput
+            style={styles.bottomTextInput}
+            placeholder='Write an answer...'
+            placeholderTextColor='#9CA3AF'
+            value={newComment}
+            onChangeText={setNewComment}
+            multiline
+            maxLength={1000}
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.sendBtn,
+              !newComment.trim() && styles.sendBtnDisabled,
+            ]}
+            onPress={handleAddComment}
+            disabled={!newComment.trim()}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#F43F5E', '#9333EA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.sendGradient}
+            >
+              <ArrowRight size={18} color='#fff' strokeWidth={2.5} />
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Poppins-SemiBold',
-    color: '#ffffff',
-  },
-  content: {
-    flex: 1,
-  },
-  postContainer: {
-    backgroundColor: '#ffffff',
-    margin: 20,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  postHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  authorInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  avatarContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  authorName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1f2937',
-  },
-  postMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  postTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9ca3af',
-    marginLeft: 4,
-  },
-  categoryBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  categoryBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    textTransform: 'uppercase',
-  },
-  postTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
-  postContent: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 24,
-  },
-  postActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  likeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#fef2f2',
-    borderRadius: 16,
-  },
-  likesText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#ef4444',
-    marginLeft: 6,
-  },
-  commentsSection: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  commentsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  commentsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1f2937',
-    marginLeft: 8,
-  },
-  commentCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  commentAuthorInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  commentAvatarContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  commentAuthorName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1f2937',
-  },
-  commentTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9ca3af',
-  },
-  commentContent: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  commentActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  commentLikeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#fef2f2',
-    borderRadius: 12,
-  },
-  commentLikesText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#ef4444',
-    marginLeft: 4,
-  },
-  replyButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f0f4ff',
-    borderRadius: 12,
-  },
-  replyButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#667eea',
-  },
-  replyInputContainer: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  replyInput: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    backgroundColor: '#ffffff',
-    marginBottom: 8,
-    maxHeight: 80,
-  },
-  replyActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-  },
-  cancelReplyButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 6,
-  },
-  cancelReplyText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6b7280',
-  },
-  sendReplyButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#667eea',
-    borderRadius: 6,
-  },
-  sendReplyButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendReplyText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#ffffff',
-  },
-  repliesContainer: {
-    marginTop: 12,
-    marginLeft: 16,
-    paddingLeft: 12,
-    borderLeftWidth: 2,
-    borderLeftColor: '#e5e7eb',
-  },
-  replyCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  replyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  replyAuthorInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  replyAvatarContainer: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#f0f4ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 6,
-  },
-  replyAuthorName: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1f2937',
-  },
-  replyTime: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#9ca3af',
-  },
-  replyContent: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  replyLikeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: '#fef2f2',
-    borderRadius: 8,
-  },
-  replyLikesText: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: '#ef4444',
-    marginLeft: 2,
-  },
-  errorText: {
-    fontSize: 18,
-    fontFamily: 'Inter-Regular',
-    color: '#ef4444',
-    textAlign: 'center',
-    marginTop: 50,
-  },
-  addCommentSection: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  addCommentTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
-  commentInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  commentInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    maxHeight: 100,
-    marginRight: 12,
-    backgroundColor: '#f9fafb',
-    textAlignVertical: 'top',
-  },
-  commentSendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#667eea',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  commentSendButtonDisabled: {
-    opacity: 0.5,
-  },
+  safeArea: { flex: 1, backgroundColor: '#EDE9F8' },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#EDE9F8',
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 12,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7B2FBE',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#EDE9F8',
+  },
+  errorText: {
     fontSize: 16,
-    color: '#6b7280',
-    fontFamily: 'Inter-Regular',
+    fontWeight: 'bold',
+    color: '#EF4444',
+    marginBottom: 20,
+  },
+  backBtn: {
+    backgroundColor: '#7B2FBE',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+  },
+
+  // ── Header ──
+  header: {
+    paddingTop: 12,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  headerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#C8F135',
+    letterSpacing: 1.5,
+    marginBottom: 2,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  headerMenuBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ── Scroll Content ──
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
+
+  // ── Question Card ──
+  questionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#1a1a2e',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#C8F135',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+  },
+  categoryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1a1a2e',
+    marginRight: 6,
+  },
+  categoryText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1a1a2e',
+  },
+  questionTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1a1a2e',
+    lineHeight: 26,
+    marginBottom: 12,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  miniAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  miniAvatarText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  authorName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginRight: 10,
+  },
+  dateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  dateText: {
+    fontSize: 11,
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+  questionBody: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    borderStyle: 'dashed',
+    borderWidth: 0.5,
+    borderRadius: 1,
+    marginBottom: 14,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+    borderRadius: 20,
+    paddingVertical: 8,
+  },
+  actionButtonActive: {
+    backgroundColor: '#F3E8FF',
+    borderColor: '#7B2FBE',
+  },
+  actionIcon: {
+    marginRight: 4,
+    fontSize: 14,
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
+
+  // ── Answers Header ──
+  answersHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  answersCountText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1a1a2e',
+  },
+  answersHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sortDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 4,
+  },
+  sortDropdownText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
+  sortMenu: {
+    position: 'absolute',
+    top: 32,
+    right: 0,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+    borderRadius: 10,
+    padding: 4,
+    width: 90,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sortMenuItem: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  sortMenuItemText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  sortMenuItemTextActive: {
+    color: '#7B2FBE',
+    fontWeight: '800',
+  },
+  inlineAddAnswerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7B2FBE',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+  },
+  inlineAddAnswerText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#fff',
+  },
+
+  // ── Empty State ──
+  emptyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
+    padding: 24,
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#1a1a2e',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  emptyIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#A7F3D0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1a1a2e',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  // ── Answers List & Cards ──
+  answersList: {
+    gap: 12,
+  },
+  answerCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
+    padding: 16,
+    position: 'relative',
+    shadowColor: '#1a1a2e',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  bestAnswerBadge: {
+    position: 'absolute',
+    top: -12,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#C8F135',
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  bestAnswerText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#1a1a2e',
+  },
+  answerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  answerHeaderMeta: {
+    marginLeft: 8,
+  },
+  answerAuthorName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1a1a2e',
+  },
+  answerTime: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  answerContent: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  answerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  voteControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EDE9F8',
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+    borderRadius: 18,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 6,
+  },
+  voteBtn: {
+    padding: 2,
+  },
+  voteCount: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1a1a2e',
+  },
+  replyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  replyActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+
+  // ── Bottom Input Bar ──
+  bottomInputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderTopWidth: 2,
+    borderTopColor: '#1a1a2e',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  bottomTextInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    color: '#1a1a2e',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#1a1a2e',
+    shadowColor: '#1a1a2e',
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 2,
+  },
+  sendBtnDisabled: {
+    opacity: 0.5,
+  },
+  sendGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

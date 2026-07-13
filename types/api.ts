@@ -8,9 +8,21 @@ export interface ApiInstance {
   patch: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
   delete: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
   authGet: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
-  authPost: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  authPut: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
-  authPatch: <T>(endpoint: string, data?: any, options?: RequestInit) => Promise<T>;
+  authPost: <T>(
+    endpoint: string,
+    data?: any,
+    options?: RequestInit
+  ) => Promise<T>;
+  authPut: <T>(
+    endpoint: string,
+    data?: any,
+    options?: RequestInit
+  ) => Promise<T>;
+  authPatch: <T>(
+    endpoint: string,
+    data?: any,
+    options?: RequestInit
+  ) => Promise<T>;
   authDelete: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
 }
 
@@ -27,7 +39,5 @@ export interface GuideResponse extends ApiResponse<Guide> {
 export const profileApi = (api: ApiInstance) => ({
   updateProfile: (data: ProfileUpdateData): Promise<ApiResponse<Profile>> => {
     return api.authPut('/profile', data);
-  }
+  },
 });
-
-export type { Guide };

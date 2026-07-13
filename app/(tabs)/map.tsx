@@ -1,9 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
@@ -11,611 +16,673 @@ import {
   Linking,
   Alert,
   Platform,
+  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Navigation, ExternalLink, Filter, Plus } from 'lucide-react-native';
+import { MapPin, Navigation, ExternalLink, Plus } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApi, mapApi } from '@/utils/api';
 import { useFocusEffect } from '@react-navigation/native';
 
-// Types for your map locations
 interface MapLocation {
   id: string;
   name: string;
-  coordinates: {
-    latitude: number;
-    longitude: number;
-  };
+  coordinates: { latitude: number; longitude: number };
   description?: string;
   category?: string;
   status: string;
   createdAt: string;
 }
 
+// Icon box colours per category
+const CATEGORY_COLORS: Record<string, string> = {
+  General: '#C4FF0E',
+  'Lecture Hall': '#FFD93D',
+  Library: '#6BCB77',
+  Hostel: '#FF6B9D',
+  Cafeteria: '#FF9F45',
+  Admin: '#4D96FF',
+};
+
+function getCategoryColor(cat?: string) {
+  return CATEGORY_COLORS[cat ?? 'General'] ?? '#C4FF0E';
+}
+
+function getCategoryEmoji(cat?: string) {
+  const map: Record<string, string> = {
+    General: '🏛',
+    'Lecture Hall': '📚',
+    Library: '📖',
+    Hostel: '🏠',
+    Cafeteria: '🍽',
+    Admin: '🏢',
+  };
+  return map[cat ?? 'General'] ?? '📍';
+}
+
 export default function MapScreen() {
   const api = useApi();
-  const apiClient = React.useMemo(() => mapApi(api), [api]);
+  const apiClient = useMemo(() => mapApi(api), [api]);
 
   const [locations, setLocations] = useState<MapLocation[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  
-  // Track if we've made the initial request
+
   const hasInitialLoaded = useRef(false);
   const isMountedRef = useRef(true);
 
-  // Fetch locations from API
-  const fetchLocations = useCallback(async (isRefresh = false) => {
-    // If not a refresh and we already loaded, don't fetch again
-    if (!isRefresh && hasInitialLoaded.current) {
-      console.log('⏭️ Skipping fetch - already loaded');
-      return;
-    }
-
-    if (!apiClient?.getAll) {
-      setError('API not available');
-      if (!hasInitialLoaded.current) {
+  // ─── Data fetching ───────────────────────────────────────────────────────────
+  const fetchLocations = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh && hasInitialLoaded.current) return;
+      if (!apiClient?.getAll) {
+        setError('API not available');
         setLoading(false);
         hasInitialLoaded.current = true;
+        return;
       }
-      return;
-    }
+      try {
+        isRefresh ? setRefreshing(true) : setLoading(true);
+        setError(null);
 
-    try {
-      if (isRefresh) {
-        console.log('🔄 Refreshing locations...');
-        setRefreshing(true);
-      } else {
-        console.log('📱 Initial loading of locations...');
-        setLoading(true);
-      }
-      setError(null);
+        const response = await apiClient.getAll();
+        if (!isMountedRef.current) return;
 
-      const response = await apiClient.getAll();
-
-      // Only update state if component is still mounted
-      if (!isMountedRef.current) return;
-
-      console.log('📍 Map API Response:', response?.data?.length || 0, 'locations');
-
-      if (response?.data && Array.isArray(response.data)) {
-        const transformedLocations: MapLocation[] = response.data.map((item: any) => ({
-          id: item.id || item._id,
-          name: item.name || 'Unnamed Location',
-          coordinates: {
-            latitude: parseFloat(item.coordinates?.latitude) || parseFloat(item.latitude) || 0,
-            longitude: parseFloat(item.coordinates?.longitude) || parseFloat(item.longitude) || 0,
-          },
-          description: item.description || 'Campus location',
-          category: item.category || 'General',
-          status: item.status || 'active',
-          createdAt: item.createdAt || new Date().toISOString(),
-        }));
-
-        setLocations(transformedLocations);
-        console.log('✅ Loaded', transformedLocations.length, 'map locations');
-        
-        if (transformedLocations.length === 0) {
-          console.log('📍 Database is empty - no locations found');
+        if (response?.data && Array.isArray(response.data)) {
+          setLocations(
+            response.data.map((item: any) => ({
+              id: item.id || item._id,
+              name: item.name || 'Unnamed Location',
+              coordinates: {
+                latitude: parseFloat(item.coordinates?.latitude) || 0,
+                longitude: parseFloat(item.coordinates?.longitude) || 0,
+              },
+              description: item.description || 'Campus location',
+              category: item.category || 'General',
+              status: item.status || 'active',
+              createdAt: item.createdAt || new Date().toISOString(),
+            }))
+          );
+        } else {
+          setLocations([]);
         }
-      } else {
+        hasInitialLoaded.current = true;
+      } catch (err) {
+        if (!isMountedRef.current) return;
+        setError(
+          err instanceof Error ? err.message : 'Failed to load locations'
+        );
         setLocations([]);
-        console.log('📍 No map locations found or invalid response format');
-      }
-
-      // Mark as initially loaded
-      if (!hasInitialLoaded.current) {
         hasInitialLoaded.current = true;
+      } finally {
+        if (isMountedRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
+    },
+    [apiClient]
+  );
 
-    } catch (err) {
-      if (!isMountedRef.current) return;
+  const handleRefresh = useCallback(
+    () => fetchLocations(true),
+    [fetchLocations]
+  );
 
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load locations';
-      setError(errorMessage);
-      console.error('💥 Error fetching locations:', err);
-      setLocations([]);
-      
-      // Still mark as loaded even if there's an error to prevent retries
-      if (!hasInitialLoaded.current) {
-        hasInitialLoaded.current = true;
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }, [apiClient]);
-
-  // Handle manual refresh (pull to refresh)
-  const handleRefresh = useCallback(() => {
-    console.log('👆 User triggered refresh');
-    fetchLocations(true);
-  }, [fetchLocations]);
-
-  // Load data only once on mount
   useEffect(() => {
-    if (!hasInitialLoaded.current) {
-      fetchLocations(false);
-    }
+    if (!hasInitialLoaded.current) fetchLocations(false);
   }, [fetchLocations]);
 
-  // Focus effect to prevent unnecessary reloads when navigating between tabs
   useFocusEffect(
     useCallback(() => {
-      console.log('🎯 Map screen focused');
-      // Only load if we haven't loaded yet
-      if (!hasInitialLoaded.current) {
-        fetchLocations(false);
-      }
+      if (!hasInitialLoaded.current) fetchLocations(false);
     }, [fetchLocations])
   );
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
     };
   }, []);
 
-  // Open location in Google Maps
+  // ─── Maps helpers ─────────────────────────────────────────────────────────────
   const openInMaps = async (location: MapLocation) => {
     const { latitude, longitude } = location.coordinates;
-    
-    const googleMapsUrl = Platform.select({
+    const url = Platform.select({
       ios: `maps://maps.google.com/?q=${latitude},${longitude}`,
-      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encodeURIComponent(location.name)})`,
+      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encodeURIComponent(
+        location.name
+      )})`,
       web: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
     });
-
-    const fallbackUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-
+    const fallback = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
     try {
-      if (googleMapsUrl) {
-        const canOpen = await Linking.canOpenURL(googleMapsUrl);
-        if (canOpen) {
-          await Linking.openURL(googleMapsUrl);
-        } else {
-          await Linking.openURL(fallbackUrl);
-        }
-      } else {
-        await Linking.openURL(fallbackUrl);
-      }
-    } catch (error) {
-      console.error('Error opening maps:', error);
+      if (url && (await Linking.canOpenURL(url))) await Linking.openURL(url);
+      else await Linking.openURL(fallback);
+    } catch {
       Alert.alert('Error', 'Could not open maps');
     }
   };
 
-  // Get directions to location
   const getDirections = async (location: MapLocation) => {
     const { latitude, longitude } = location.coordinates;
-    
-    const directionsUrl = Platform.select({
+    const url = Platform.select({
       ios: `maps://maps.google.com/?daddr=${latitude},${longitude}&directionsmode=walking`,
       android: `google.navigation:q=${latitude},${longitude}&mode=w`,
       web: `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=walking`,
     });
-
-    const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=walking`;
-
+    const fallback = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=walking`;
     try {
-      if (directionsUrl) {
-        const canOpen = await Linking.canOpenURL(directionsUrl);
-        if (canOpen) {
-          await Linking.openURL(directionsUrl);
-        } else {
-          await Linking.openURL(fallbackUrl);
-        }
-      } else {
-        await Linking.openURL(fallbackUrl);
-      }
-    } catch (error) {
-      console.error('Error opening directions:', error);
+      if (url && (await Linking.canOpenURL(url))) await Linking.openURL(url);
+      else await Linking.openURL(fallback);
+    } catch {
       Alert.alert('Error', 'Could not open directions');
     }
   };
 
-  // Handle location press
-  const handleLocationPress = (location: MapLocation) => {
-    Alert.alert(
-      location.name,
-      location.description || 'Campus location',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'View on Map', onPress: () => openInMaps(location) },
-        { text: 'Get Directions', onPress: () => getDirections(location) },
-      ]
-    );
-  };
-
-  // Add sample location (for testing) - this will trigger a refresh
   const addSampleLocation = () => {
     Alert.alert(
       'Add Sample Location',
-      'This will help you test the map functionality with sample data.',
+      'Add a sample location to test the map?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Add Sample', onPress: createSampleLocation },
+        {
+          text: 'Add Sample',
+          onPress: async () => {
+            if (!apiClient?.create) {
+              Alert.alert('Error', 'API not available');
+              return;
+            }
+            try {
+              await apiClient.create({
+                name: `Sample Location ${Date.now()}`,
+                coordinates: { latitude: 40.7589, longitude: -73.9851 },
+                description: 'Sample campus location for testing',
+                category: 'Recreation',
+              });
+              Alert.alert('Success', 'Sample location added!');
+              handleRefresh();
+            } catch {
+              Alert.alert('Error', 'Failed to create sample location');
+            }
+          },
+        },
       ]
     );
   };
 
-  const createSampleLocation = async () => {
-    if (!apiClient?.create) {
-      Alert.alert('Error', 'Cannot create location - API not available');
-      return;
-    }
+  // ─── Derived data ─────────────────────────────────────────────────────────────
+  const categories = useMemo(
+    () => [
+      ...new Set(locations.map(l => l.category).filter(Boolean) as string[]),
+    ],
+    [locations]
+  );
 
-    try {
-      const sampleLocation = {
-        name: `Sample Location ${Date.now()}`, // Make it unique
-        coordinates: {
-          latitude: 40.7589,
-          longitude: -73.9851,
-        },
-        description: 'Sample campus location for testing',
-        category: 'Lecture Hall' as const,
-      };
+  const filteredLocations = useMemo(
+    () =>
+      selectedCategory
+        ? locations.filter(l => l.category === selectedCategory)
+        : locations,
+    [locations, selectedCategory]
+  );
 
-      console.log('Creating sample location:', sampleLocation);
-      await apiClient.create(sampleLocation);
-      
-      Alert.alert('Success', 'Sample location added!');
-      // Trigger a refresh to show the new location
-      handleRefresh();
-    } catch (error) {
-      console.error('Error creating sample location:', error);
-      Alert.alert('Error', 'Failed to create sample location');
-    }
-  };
-
-  // Filter locations by category
-  const filteredLocations = selectedCategory 
-    ? locations.filter(loc => loc.category === selectedCategory)
-    : locations;
-
-  // Get unique categories
-  const categories = [...new Set(locations.map(loc => loc.category).filter((cat): cat is string => Boolean(cat)))];
-
-  // Initial loading state (only on first load)
+  // ─── Loading state ────────────────────────────────────────────────────────────
   if (loading && !hasInitialLoaded.current) {
     return (
-      <SafeAreaView style={styles.container}>
-        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-          <Text style={styles.headerTitle}>Campus Map</Text>
-          <Text style={styles.headerSubtitle}>Find and navigate to places around campus</Text>
-        </LinearGradient>
-        
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#667eea" />
-          <Text style={styles.loadingText}>Loading locations...</Text>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.heroBannerWrapper}>
+          <LinearGradient
+            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroBanner}
+          >
+            <View style={styles.decorCircle} />
+            <View style={styles.seasonBadge}>
+              <Text style={styles.seasonBadgeText}>WAYFINDING</Text>
+            </View>
+            <Text style={styles.heroHeading}>Where to{'\n'}next? 📍</Text>
+            <Text style={styles.heroSubtitle}>
+              Every building, office, and hangout spot on campus.
+            </Text>
+          </LinearGradient>
+        </View>
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size='large' color='#7B2FBE' />
+          <Text style={styles.loadingText}>Loading locations…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ─── Render ───────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <Text style={styles.headerTitle}>Campus Map</Text>
-        <Text style={styles.headerSubtitle}>
-          Find and navigate to places around campus
-        </Text>
-      </LinearGradient>
-
-      {/* Category Filter */}
-      {categories.length > 0 && (
-        <View style={styles.filterContainer}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScrollContent}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor='#7B2FBE'
+          />
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* ─── Hero Banner ─── */}
+        <View style={styles.heroBannerWrapper}>
+          <LinearGradient
+            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroBanner}
           >
-            <TouchableOpacity 
-              style={[styles.filterButton, !selectedCategory && styles.filterButtonActive]}
-              onPress={() => setSelectedCategory(null)}
-            >
-              <Text style={[styles.filterText, !selectedCategory && styles.filterTextActive]}>
-                All ({locations.length})
-              </Text>
-            </TouchableOpacity>
-            
-            {categories.map((category) => {
-              const count = locations.filter(loc => loc.category === category).length;
+            <View style={styles.decorCircle} />
+            <View style={styles.seasonBadge}>
+              <Text style={styles.seasonBadgeText}>WAYFINDING</Text>
+            </View>
+            <Text style={styles.heroHeading}>Where to{'\n'}next? 📍</Text>
+            <Text style={styles.heroSubtitle}>
+              Every building, office, and hangout spot on campus.
+            </Text>
+          </LinearGradient>
+        </View>
+
+        {/* ─── Filter Pills ─── */}
+        {(categories.length > 0 || locations.length > 0) && (
+          <FlatList
+            horizontal
+            data={[
+              { key: null, label: `All · ${locations.length}` },
+              ...categories.map(c => ({
+                key: c,
+                label: `${c} · ${
+                  locations.filter(l => l.category === c).length
+                }`,
+              })),
+            ]}
+            keyExtractor={item => item.key ?? '__all__'}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterList}
+            style={styles.filterRow}
+            renderItem={({ item }) => {
+              const isActive = item.key === selectedCategory;
               return (
                 <TouchableOpacity
-                  key={category}
-                  style={[styles.filterButton, selectedCategory === category && styles.filterButtonActive]}
-                  onPress={() => setSelectedCategory(selectedCategory === category ? null : category)}
+                  style={[
+                    styles.filterPill,
+                    isActive && styles.filterPillActive,
+                  ]}
+                  onPress={() => setSelectedCategory(item.key)}
+                  activeOpacity={0.75}
                 >
-                  <Text style={[styles.filterText, selectedCategory === category && styles.filterTextActive]}>
-                    {category} ({count})
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      isActive && styles.filterPillTextActive,
+                    ]}
+                  >
+                    {item.label}
                   </Text>
                 </TouchableOpacity>
               );
-            })}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Locations List */}
-      <ScrollView 
-        style={styles.locationsContainer}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={handleRefresh}
-            colors={['#667eea']} // Android
-            tintColor="#667eea" // iOS
+            }}
           />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {locations.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <MapPin size={64} color="#9ca3af" />
-            <Text style={styles.emptyTitle}>No Campus Locations Yet</Text>
-            <Text style={styles.emptyText}>
-              Looks like no locations have been added to the database yet.{'\n\n'}
-              Pull down to refresh or add a sample location to test the functionality.
+        )}
+
+        {/* ─── Error ─── */}
+        {error && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => fetchLocations(true)}
+            >
+              <Text style={styles.retryButtonText}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ─── Empty ─── */}
+        {!error && locations.length === 0 && (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyEmoji}>🗺️</Text>
+            <Text style={styles.emptyTitle}>No locations yet</Text>
+            <Text style={styles.emptySubtitle}>
+              No campus spots have been added.{'\n'}Pull down to refresh or add
+              a sample.
             </Text>
-            
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.sampleButton}
               onPress={addSampleLocation}
             >
-              <Plus size={20} color="#ffffff" />
+              <Plus size={16} color='#000' />
               <Text style={styles.sampleButtonText}>Add Sample Location</Text>
             </TouchableOpacity>
           </View>
-        ) : filteredLocations.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Filter size={48} color="#9ca3af" />
-            <Text style={styles.emptyTitle}>No Locations in {selectedCategory}</Text>
-            <Text style={styles.emptyText}>
-              No locations found in the {selectedCategory} category.{'\n'}
-              Try selecting a different category or view all locations.
-            </Text>
-          </View>
-        ) : (
+        )}
+
+        {/* ─── Location Cards ─── */}
+        {!error && filteredLocations.length > 0 && (
           <View style={styles.locationsList}>
-            {filteredLocations.map((location) => (
-              <TouchableOpacity
-                key={location.id}
-                style={styles.locationCard}
-                onPress={() => handleLocationPress(location)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.locationContent}>
-                  <View style={styles.locationHeader}>
-                    <View style={styles.locationIcon}>
-                      <MapPin size={20} color="#667eea" />
+            {filteredLocations.map(location => (
+              <View key={location.id} style={styles.cardWrapper}>
+                <TouchableOpacity
+                  style={styles.card}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    Alert.alert(location.name, location.description, [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'View on Map',
+                        onPress: () => openInMaps(location),
+                      },
+                      {
+                        text: 'Directions',
+                        onPress: () => getDirections(location),
+                      },
+                    ])
+                  }
+                >
+                  {/* Top row */}
+                  <View style={styles.cardHeader}>
+                    {/* Icon box */}
+                    <View
+                      style={[
+                        styles.iconBox,
+                        {
+                          backgroundColor: getCategoryColor(location.category),
+                        },
+                      ]}
+                    >
+                      <Text style={styles.iconEmoji}>
+                        {getCategoryEmoji(location.category)}
+                      </Text>
                     </View>
-                    <View style={styles.locationInfo}>
-                      <Text style={styles.locationName}>{location.name}</Text>
+
+                    {/* Name + category */}
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.locationName} numberOfLines={1}>
+                        {location.name}
+                      </Text>
                       {location.category && (
-                        <Text style={styles.locationCategory}>{location.category}</Text>
+                        <Text style={styles.locationCategory}>
+                          {location.category.toUpperCase()}
+                        </Text>
                       )}
                     </View>
-                    <ExternalLink size={20} color="#9ca3af" />
+
+                    {/* External link icon */}
+                    <TouchableOpacity
+                      style={styles.externalBtn}
+                      onPress={() => openInMaps(location)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <ExternalLink size={14} color='#666' />
+                    </TouchableOpacity>
                   </View>
-                  
-                  {location.description && (
-                    <Text style={styles.locationDescription}>
+
+                  {/* Description */}
+                  {location.description ? (
+                    <Text style={styles.locationDesc} numberOfLines={2}>
                       {location.description}
                     </Text>
-                  )}
-                  
-                  <View style={styles.locationActions}>
+                  ) : null}
+
+                  {/* Action buttons */}
+                  <View style={styles.actionRow}>
                     <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        openInMaps(location);
-                      }}
+                      style={styles.actionBtn}
+                      onPress={() => openInMaps(location)}
                     >
-                      <MapPin size={14} color="#667eea" />
-                      <Text style={styles.actionButtonText}>View on Map</Text>
+                      <MapPin size={13} color='#000' />
+                      <Text style={styles.actionBtnText}>View on map</Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        getDirections(location);
-                      }}
+                      style={[styles.actionBtn, styles.actionBtnSecondary]}
+                      onPress={() => getDirections(location)}
                     >
-                      <Navigation size={14} color="#667eea" />
-                      <Text style={styles.actionButtonText}>Directions</Text>
+                      <Navigation size={13} color='#000' />
+                      <Text style={styles.actionBtnText}>Directions</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
-        
-        <View style={styles.bottomPadding} />
+
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  filterContainer: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    paddingVertical: 12,
-  },
-  filterScrollContent: {
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  filterButtonActive: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  filterTextActive: {
-    color: '#ffffff',
-  },
-  locationsContainer: {
-    flex: 1,
-  },
-  locationsList: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 12,
-  },
-  locationCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+  container: { flex: 1, backgroundColor: '#EBEFFF' },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
+
+  // ─── Hero Banner ───
+  heroBannerWrapper: {
+    borderRadius: 24,
+    borderWidth: 2.5,
+    borderColor: '#000',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+    marginBottom: 20,
+    overflow: 'hidden',
   },
-  locationContent: {
-    gap: 12,
+  heroBanner: {
+    borderRadius: 22,
+    padding: 20,
+    paddingBottom: 24,
+    overflow: 'hidden',
   },
-  locationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  decorCircle: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    top: -30,
+    right: -30,
   },
-  locationIcon: {
-    width: 40,
-    height: 40,
+  seasonBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#C4FF0E',
     borderRadius: 20,
-    backgroundColor: '#f0f4ff',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1.5,
+    borderColor: '#000',
+    marginBottom: 14,
+  },
+  seasonBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.8,
+  },
+  heroHeading: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#fff',
+    lineHeight: 38,
+    marginBottom: 10,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+
+  // ─── Filter Pills ───
+  filterRow: { marginBottom: 20 },
+  filterList: { gap: 10, paddingVertical: 2 },
+  filterPill: {
+    borderRadius: 30,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderWidth: 2,
+    borderColor: '#000',
+    backgroundColor: '#fff',
+  },
+  filterPillActive: { backgroundColor: '#0D0D0D' },
+  filterPillText: { fontSize: 13, fontWeight: '700', color: '#0D0D0D' },
+  filterPillTextActive: { color: '#C4FF0E' },
+
+  // ─── Loading ───
+  loadingBox: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  locationName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginBottom: 2,
-  },
-  locationCategory: {
-    fontSize: 14,
-    color: '#667eea',
-    fontWeight: '600',
-  },
-  locationDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-  },
-  locationActions: {
-    flexDirection: 'row',
     gap: 12,
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  loadingText: { fontSize: 14, color: '#555', fontWeight: '600' },
+
+  // ─── Error ───
+  errorBox: {
+    backgroundColor: '#fff',
     borderRadius: 16,
-    backgroundColor: '#f0f4ff',
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-  },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#667eea',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+    padding: 20,
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 80,
+    marginBottom: 16,
   },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginTop: 20,
+  errorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    fontWeight: '600',
     marginBottom: 12,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#6b7280',
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
+  },
+  retryButton: {
+    backgroundColor: '#C4FF0E',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  retryButtonText: { fontSize: 13, fontWeight: '800', color: '#000' },
+
+  // ─── Empty ───
+  emptyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#000',
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0D0D0D',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
   },
   sampleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#667eea',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    backgroundColor: '#C4FF0E',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  sampleButtonText: { fontSize: 13, fontWeight: '800', color: '#000' },
+
+  // ─── Location Cards ───
+  locationsList: { gap: 0 },
+  cardWrapper: {
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#000',
+    padding: 16,
+    gap: 12,
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+    flexShrink: 0,
+  },
+  iconEmoji: { fontSize: 22 },
+  cardInfo: { flex: 1 },
+  locationName: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0D0D0D',
+    marginBottom: 2,
+  },
+  locationCategory: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#7B2FBE',
+    letterSpacing: 0.6,
+  },
+  externalBtn: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#ccc',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sampleButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 16,
+  locationDesc: { fontSize: 13, color: '#555', lineHeight: 19 },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: '#000',
+    backgroundColor: '#fff',
   },
-  bottomPadding: {
-    height: 20,
-  },
+  actionBtnSecondary: { backgroundColor: '#F5F5F5' },
+  actionBtnText: { fontSize: 12, fontWeight: '700', color: '#0D0D0D' },
 });

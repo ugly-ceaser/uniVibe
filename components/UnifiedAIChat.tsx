@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import {
   View,
   Text,
@@ -13,21 +19,40 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MessageCircle, X, Send, Bot, BookOpen, Lightbulb, User, BarChart } from 'lucide-react-native';
+import {
+  MessageCircle,
+  X,
+  Send,
+  Bot,
+  BookOpen,
+  Lightbulb,
+  User,
+  BarChart,
+} from 'lucide-react-native';
 import { ChatMessage } from '@/types';
 import { validateChatMessage } from '@/utils/validation';
 import { gradients, shadows } from '@/constants/theme';
-import { useApi, aiApi } from '@/utils/api';
+import {
+  useApi,
+  aiApi,
+  AIChatRequest,
+  GeneralChatRequest,
+  AcademicChatRequest,
+} from '@/utils/api';
 
 // Unified AI context types
-export type AIContextType = 'course' | 'general' | 'academic-progress' | 'campus-life';
+export type AIContextType =
+  | 'course'
+  | 'general'
+  | 'academic-progress'
+  | 'campus-life';
 
 interface CourseContext {
   courseId: string;
   courseCode: string;
   courseName: string;
   outline?: string[];
-  assessment?: Array<{type: string; percentage: number}>;
+  assessment?: Array<{ type: string; percentage: number }>;
   instructor?: string;
   description?: string;
 }
@@ -45,17 +70,17 @@ interface StudentContext {
 interface UnifiedAIChatProps {
   // Context determines AI behavior
   contextType: AIContextType;
-  
+
   // Course-specific context (when contextType is 'course')
   courseContext?: CourseContext;
-  
+
   // Student-specific context (for broader conversations)
   studentContext?: StudentContext;
-  
+
   // Button appearance
   buttonPosition?: 'floating' | 'inline';
   buttonSize?: 'small' | 'medium' | 'large';
-  
+
   // Callbacks
   onMessageSent?: (message: ChatMessage, context: AIContextType) => void;
   onError?: (error: string) => void;
@@ -64,8 +89,8 @@ interface UnifiedAIChatProps {
 
 // Context-specific greetings and capabilities
 const getContextualGreeting = (
-  contextType: AIContextType, 
-  courseContext?: CourseContext, 
+  contextType: AIContextType,
+  courseContext?: CourseContext,
   studentContext?: StudentContext
 ): ChatMessage => {
   const timestamp = new Date().toLocaleTimeString([], {
@@ -144,152 +169,6 @@ How can I assist you with your university experience today?`,
   }
 };
 
-// Context-specific response generation
-const generateContextualResponse = (
-  message: string,
-  contextType: AIContextType,
-  courseContext?: CourseContext,
-  studentContext?: StudentContext
-): string => {
-  const userMessage = message.toLowerCase();
-
-  switch (contextType) {
-    case 'course':
-      return generateCourseResponse(userMessage, courseContext!);
-    
-    case 'academic-progress':
-      return generateAcademicProgressResponse(userMessage, studentContext!);
-    
-    case 'campus-life':
-      return generateCampusLifeResponse(userMessage);
-    
-    default:
-      return generateGeneralResponse(userMessage);
-  }
-};
-
-// Course-specific responses (moved from CourseAIChat)
-const generateCourseResponse = (userMessage: string, context: CourseContext): string => {
-  // Course outline related
-  if (userMessage.includes('outline') || userMessage.includes('topics') || userMessage.includes('syllabus')) {
-    if (context.outline && context.outline.length > 0) {
-      return `Here's the course outline for ${context.courseCode}:
-
-${context.outline.map((topic, index) => `${index + 1}. ${topic}`).join('\n')}
-
-Would you like me to explain any specific topic in detail?`;
-    }
-    return `The course outline for ${context.courseCode} covers various important topics. You can find the detailed syllabus in your course materials or ask your instructor ${context.instructor || 'your course coordinator'} for more information.`;
-  }
-  
-  // Assessment related
-  if (userMessage.includes('assessment') || userMessage.includes('exam') || userMessage.includes('assignment')) {
-    if (context.assessment && context.assessment.length > 0) {
-      return `Here's the assessment breakdown for ${context.courseCode}:
-
-${context.assessment.map(a => `• ${a.type}: ${a.percentage}%`).join('\n')}
-
-Remember to prepare well for each component as they all contribute to your final grade!`;
-    }
-    return `For detailed assessment information in ${context.courseCode}, please refer to your course handbook or contact ${context.instructor || 'your instructor'}.`;
-  }
-
-  return `That's a great question about ${context.courseCode}! Based on the course content, I'd recommend focusing on the key concepts and practical applications. Would you like me to break down any specific topic?`;
-};
-
-// Academic progress responses
-const generateAcademicProgressResponse = (userMessage: string, context: StudentContext): string => {
-  if (userMessage.includes('gpa') || userMessage.includes('grade') || userMessage.includes('performance')) {
-    return `Based on your current academic standing${context.currentGPA ? ` (GPA: ${context.currentGPA})` : ''}, here are some insights:
-
-📊 **Performance Analysis:**
-${context.currentGPA && context.currentGPA >= 3.5 ? 
-  '• You\'re performing excellently! Keep up the great work.' : 
-  '• There\'s room for improvement. Let\'s work on study strategies.'
-}
-
-🎯 **Recommendations:**
-• Review your study methods for struggling subjects
-• Consider forming study groups for challenging courses
-• Utilize office hours and tutoring resources
-
-Would you like specific advice for any particular subject?`;
-  }
-
-  if (userMessage.includes('study') || userMessage.includes('time management')) {
-    return `Here's a personalized study plan based on your activity:
-
-⏰ **Time Management:**
-${context.studyHours ? 
-  `• Current study time: ${context.studyHours} hours/week
-• Recommended: ${Math.max(context.studyHours + 5, 25)} hours/week for optimal performance` :
-  '• Aim for 25-30 hours of focused study per week'
-}
-
-📚 **Study Strategy:**
-• Break study sessions into 25-50 minute focused blocks
-• Prioritize challenging subjects during peak energy hours
-${context.strugglingSubjects ? 
-  `• Extra attention needed for: ${context.strugglingSubjects.join(', ')}` : 
-  ''
-}
-
-Need help with specific study techniques?`;
-  }
-
-  return `I can help you optimize your academic performance! Whether it's study strategies, time management, or course planning, I'm here to provide personalized guidance based on your academic journey.`;
-};
-
-// Campus life responses
-const generateCampusLifeResponse = (userMessage: string): string => {
-  if (userMessage.includes('food') || userMessage.includes('dining') || userMessage.includes('eat')) {
-    return `🍕 **Dining Options on Campus:**
-
-• **Main Cafeteria**: All-you-can-eat meals, great variety
-• **Food Court**: Quick options between classes
-• **Coffee Shops**: Perfect for study breaks
-• **Late Night Snacks**: Available until 11 PM
-
-💰 **Budget Tips:**
-• Meal plans offer better value than individual purchases
-• Happy hour specials 3-5 PM
-• Student discounts available with ID
-
-What type of food are you in the mood for?`;
-  }
-
-  if (userMessage.includes('event') || userMessage.includes('activity') || userMessage.includes('club')) {
-    return `🎉 **Campus Events & Activities:**
-
-📅 **This Week:**
-• Study groups and tutoring sessions
-• Intramural sports registration
-• Career fair preparation workshops
-• Cultural events and performances
-
-🤝 **Getting Involved:**
-• Join clubs related to your interests
-• Volunteer opportunities available
-• Leadership development programs
-• Peer mentoring programs
-
-Would you like information about specific types of activities?`;
-  }
-
-  return `Campus life has so much to offer! From dining and recreation to events and social opportunities, I can help you make the most of your university experience. What would you like to explore?`;
-};
-
-// General responses
-const generateGeneralResponse = (userMessage: string): string => {
-  const responses = [
-    `That's a great question! Let me help you with that. Based on your university experience, here's what I recommend...`,
-    `I understand you're looking for guidance. As your AI assistant, I can provide personalized advice for your academic journey.`,
-    `Excellent question! This is something many students ask about. Here's how I can help you navigate this...`,
-  ];
-  
-  return responses[Math.floor(Math.random() * responses.length)];
-};
-
 export default function UnifiedAIChat({
   contextType,
   courseContext,
@@ -301,15 +180,48 @@ export default function UnifiedAIChat({
   maxMessages = 50,
 }: UnifiedAIChatProps): React.JSX.Element {
   const api = useApi();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [showCursor, setShowCursor] = useState(true);
+  const typingTimeoutRef = useRef<number | null>(null);
+  const cursorIntervalRef = useRef<number | null>(null);
 
   // Initialize with context-specific greeting
   useEffect(() => {
-    setMessages([getContextualGreeting(contextType, courseContext, studentContext)]);
+    setMessages([
+      getContextualGreeting(contextType, courseContext, studentContext),
+    ]);
   }, [contextType, courseContext, studentContext]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollViewRef.current && messages.length > 0) {
+      // Small delay to ensure the message is rendered before scrolling
+      const timeoutId = setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, isLoading]);
+
+  // Auto-scroll when modal opens
+  useEffect(() => {
+    if (isVisible && scrollViewRef.current && messages.length > 0) {
+      // Delay to ensure modal animation completes
+      const timeoutId = setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isVisible]);
 
   const handleSend = useCallback(async (): Promise<void> => {
     try {
@@ -334,20 +246,29 @@ export default function UnifiedAIChat({
       }
 
       if (messages.length >= maxMessages) {
-        const errorMessage = 'Maximum message limit reached. Please start a new conversation.';
+        const errorMessage =
+          'Maximum message limit reached. Please start a new conversation.';
         onError?.(errorMessage);
         Alert.alert('Message Limit', errorMessage);
         return;
       }
 
       setMessages(prev => [...prev, userMessage]);
-      setInputText('');
       setIsLoading(true);
       onMessageSent?.(userMessage, contextType);
+
+      // Store the original input text to restore if needed
+      const originalInputText = inputText.trim();
+      setInputText(''); // Clear input optimistically
 
       // API call based on context
       try {
         let response;
+        const conversationHistory = messages.slice(1).map(msg => ({
+          role: msg.isUser ? ('user' as const) : ('assistant' as const),
+          content: msg.text,
+        }));
+
         if (contextType === 'course' && courseContext) {
           response = await aiApi(api).courseChat({
             message: userMessage.text,
@@ -358,60 +279,96 @@ export default function UnifiedAIChat({
               outline: courseContext.outline,
               assessment: courseContext.assessment,
               instructor: courseContext.instructor,
-              description: courseContext.description
+              description: courseContext.description,
             },
-            conversationHistory: messages.slice(1).map(msg => ({
-              role: msg.isUser ? 'user' : 'assistant',
-              content: msg.text
-            }))
+            conversationHistory,
+            userMode: 'balanced',
+          });
+        } else if (contextType === 'academic-progress' && studentContext) {
+          response = await aiApi(api).academicChat({
+            message: userMessage.text,
+            studentContext: {
+              studentId: studentContext.studentId,
+              currentGPA: studentContext.currentGPA,
+              enrolledCourses: studentContext.enrolledCourses,
+              completedCourses: studentContext.completedCourses,
+              strugglingSubjects: studentContext.strugglingSubjects,
+              studyHours: studentContext.studyHours,
+              activeForumPosts: studentContext.activeForumPosts,
+            },
+            conversationHistory,
+            userMode: 'smart',
           });
         } else {
-          response = await aiApi(api).generalChat(
-            userMessage.text,
-            messages.slice(1).map(msg => ({
-              role: msg.isUser ? 'user' : 'assistant',
-              content: msg.text
-            }))
-          );
+          response = await aiApi(api).generalChat({
+            message: userMessage.text,
+            conversationHistory,
+            userMode: 'balanced',
+          });
         }
 
+        const aiResponseId = (Date.now() + 1).toString();
         const aiResponse: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          text: response.data.response,
+          id: aiResponseId,
+          text: '', // Start with empty text for typing effect
           isUser: false,
           timestamp: new Date().toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
           }),
         };
+
+        // Add empty AI message first
         setMessages(prev => [...prev, aiResponse]);
+        setFailedMessage(null); // Clear any previous failed message
+
+        // Start typing animation
+        setTypingMessageId(aiResponseId);
+        setShowCursor(true);
+        animateTyping(aiResponseId, response.data.response);
       } catch (apiError) {
-        // Fallback to context-based mock responses
-        console.warn('AI API failed, using contextual mock response:', apiError);
-        setTimeout(() => {
-          const aiResponse: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            text: generateContextualResponse(userMessage.text, contextType, courseContext, studentContext),
-            isUser: false,
-            timestamp: new Date().toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          };
-          setMessages(prev => [...prev, aiResponse]);
-          setIsLoading(false);
-        }, 1500);
+        console.error('AI API failed:', apiError);
+        // Restore the original input text on failure
+        setInputText(originalInputText);
+        setFailedMessage(originalInputText);
+        // Remove the user message that was optimistically added
+        setMessages(prev => prev.slice(0, -1));
+
+        const errorMessage =
+          apiError instanceof Error
+            ? apiError.message
+            : 'AI service is currently unavailable';
+        onError?.(errorMessage);
+        Alert.alert(
+          'Message Failed to Send',
+          "Your message couldn't be sent. It has been restored to the input field so you can try again.",
+          [{ text: 'OK' }]
+        );
+        setIsLoading(false);
         return;
       }
 
       setIsLoading(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+      // If we haven't cleared the input yet, we don't need to restore it
+      // This handles validation errors and early returns
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to send message';
       onError?.(errorMessage);
       Alert.alert('Error', errorMessage);
       setIsLoading(false);
     }
-  }, [inputText, messages.length, maxMessages, onMessageSent, onError, contextType, courseContext, studentContext, api]);
+  }, [
+    inputText,
+    messages.length,
+    maxMessages,
+    onMessageSent,
+    onError,
+    contextType,
+    courseContext,
+    studentContext,
+    api,
+  ]);
 
   const handleClose = useCallback((): void => {
     setIsVisible(false);
@@ -424,15 +381,108 @@ export default function UnifiedAIChat({
     }
   }, []);
 
+  // Handle scroll position to show/hide scroll-to-bottom button
+  const handleScroll = useCallback(
+    (event: any) => {
+      const { contentOffset, contentSize, layoutMeasurement } =
+        event.nativeEvent;
+      const isNearBottom =
+        contentOffset.y + layoutMeasurement.height >= contentSize.height - 100;
+      setShowScrollButton(!isNearBottom && messages.length > 3);
+    },
+    [messages.length]
+  );
+
+  // Scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+    setShowScrollButton(false);
+  }, []);
+
+  // Typewriter effect function
+  const animateTyping = useCallback(
+    (messageId: string, fullText: string, currentIndex: number = 0) => {
+      if (currentIndex < fullText.length) {
+        const displayText = fullText.substring(0, currentIndex + 1);
+
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId
+              ? { ...msg, text: displayText + (showCursor ? '|' : '') }
+              : msg
+          )
+        );
+
+        // Variable typing speed for more natural feel
+        const char = fullText[currentIndex];
+        let delay = 50; // Base delay
+
+        if (char === ' ') delay = 80; // Slower for spaces
+        else if (char === '.' || char === '!' || char === '?')
+          delay = 300; // Pause at sentence endings
+        else if (char === ',' || char === ';')
+          delay = 150; // Short pause at commas
+        else if (char === '\n') delay = 200; // Pause at line breaks
+
+        typingTimeoutRef.current = setTimeout(() => {
+          animateTyping(messageId, fullText, currentIndex + 1);
+        }, delay) as unknown as number;
+      } else {
+        // Typing complete - remove cursor and clean up
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, text: fullText } : msg
+          )
+        );
+        setTypingMessageId(null);
+        setIsLoading(false);
+        if (cursorIntervalRef.current) {
+          clearInterval(cursorIntervalRef.current);
+          cursorIntervalRef.current = null;
+        }
+      }
+    },
+    [showCursor]
+  );
+
+  // Cursor blinking effect
+  useEffect(() => {
+    if (typingMessageId) {
+      cursorIntervalRef.current = setInterval(() => {
+        setShowCursor(prev => !prev);
+      }, 500) as unknown as number;
+    } else {
+      if (cursorIntervalRef.current) {
+        clearInterval(cursorIntervalRef.current);
+        cursorIntervalRef.current = null;
+      }
+      setShowCursor(true);
+    }
+  }, [typingMessageId]);
+
+  // Cleanup typing animation on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (cursorIntervalRef.current) {
+        clearInterval(cursorIntervalRef.current);
+      }
+    };
+  }, []);
+
   const isInputValid = useMemo((): boolean => {
     return inputText.trim().length > 0 && !isLoading;
   }, [inputText, isLoading]);
 
   // Dynamic button styles based on props
   const getButtonStyles = () => {
-    const baseSize = buttonSize === 'small' ? 40 : buttonSize === 'large' ? 56 : 44;
-    const iconSize = buttonSize === 'small' ? 16 : buttonSize === 'large' ? 24 : 20;
-    
+    const baseSize =
+      buttonSize === 'small' ? 40 : buttonSize === 'large' ? 56 : 44;
+    const iconSize =
+      buttonSize === 'small' ? 16 : buttonSize === 'large' ? 24 : 20;
+
     return {
       buttonStyles: {
         ...styles.floatingButton,
@@ -474,7 +524,9 @@ export default function UnifiedAIChat({
       default:
         return {
           colors: ['#667eea', '#764ba2'],
-          icon: <MessageCircle size={iconSize} color='#ffffff' strokeWidth={2} />,
+          icon: (
+            <MessageCircle size={iconSize} color='#ffffff' strokeWidth={2} />
+          ),
           label: 'AI Assistant',
         };
     }
@@ -490,9 +542,16 @@ export default function UnifiedAIChat({
         activeOpacity={0.8}
         accessibilityRole='button'
         accessibilityLabel={`Open ${label}`}
-        accessibilityHint={`Get AI assistance for ${contextType === 'course' ? 'course-specific questions' : 'university life'}`}
+        accessibilityHint={`Get AI assistance for ${
+          contextType === 'course'
+            ? 'course-specific questions'
+            : 'university life'
+        }`}
       >
-        <LinearGradient colors={colors as [string, string]} style={styles.buttonGradient}>
+        <LinearGradient
+          colors={colors as [string, string]}
+          style={styles.buttonGradient}
+        >
           {icon}
         </LinearGradient>
       </TouchableOpacity>
@@ -523,7 +582,9 @@ export default function UnifiedAIChat({
               <View style={styles.headerTextContainer}>
                 <Text style={styles.chatHeaderTitle}>{label}</Text>
                 {contextType === 'course' && courseContext && (
-                  <Text style={styles.chatHeaderSubtitle}>{courseContext.courseName}</Text>
+                  <Text style={styles.chatHeaderSubtitle}>
+                    {courseContext.courseName}
+                  </Text>
                 )}
               </View>
             </View>
@@ -540,76 +601,125 @@ export default function UnifiedAIChat({
           {/* Context-specific quick actions */}
           {contextType === 'course' && (
             <View style={styles.quickActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.quickActionButton}
                 onPress={() => setInputText('Show me the course outline')}
               >
                 <BookOpen size={14} color={colors[0]} />
-                <Text style={[styles.quickActionText, { color: colors[0] }]}>Outline</Text>
+                <Text style={[styles.quickActionText, { color: colors[0] }]}>
+                  Outline
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => setInputText('What are the assessment components?')}
+                onPress={() =>
+                  setInputText('What are the assessment components?')
+                }
               >
                 <BarChart size={14} color={colors[0]} />
-                <Text style={[styles.quickActionText, { color: colors[0] }]}>Assessment</Text>
+                <Text style={[styles.quickActionText, { color: colors[0] }]}>
+                  Assessment
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.quickActionButton}
-                onPress={() => setInputText('Give me study tips for this course')}
+                onPress={() =>
+                  setInputText('Give me study tips for this course')
+                }
               >
                 <Lightbulb size={14} color={colors[0]} />
-                <Text style={[styles.quickActionText, { color: colors[0] }]}>Study Tips</Text>
+                <Text style={[styles.quickActionText, { color: colors[0] }]}>
+                  Study Tips
+                </Text>
               </TouchableOpacity>
             </View>
           )}
 
-          <ScrollView
-            style={styles.chatContent}
-            showsVerticalScrollIndicator={false}
-            accessibilityLabel='Chat messages'
-          >
-            {messages.map(message => (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageContainer,
-                  message.isUser ? styles.userMessage : styles.aiMessage,
-                ]}
-                accessibilityRole='text'
-                accessibilityLabel={`${message.isUser ? 'You' : 'AI Assistant'}: ${message.text}`}
+          <View style={{ flex: 1, position: 'relative' }}>
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.chatContent}
+              showsVerticalScrollIndicator={false}
+              accessibilityLabel='Chat messages'
+              contentContainerStyle={{ paddingBottom: 10 }}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+            >
+              {messages.map(message => (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.messageContainer,
+                    message.isUser ? styles.userMessage : styles.aiMessage,
+                  ]}
+                  accessibilityRole='text'
+                  accessibilityLabel={`${
+                    message.isUser ? 'You' : 'AI Assistant'
+                  }: ${message.text}`}
+                >
+                  <Text
+                    style={[
+                      styles.messageText,
+                      message.isUser
+                        ? styles.userMessageText
+                        : styles.aiMessageText,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.messageTime,
+                      message.isUser
+                        ? styles.userMessageTime
+                        : styles.aiMessageTime,
+                    ]}
+                  >
+                    {message.timestamp}
+                  </Text>
+                </View>
+              ))}
+              {isLoading && !typingMessageId && (
+                <View style={[styles.messageContainer, styles.aiMessage]}>
+                  <ActivityIndicator size='small' color={colors[0]} />
+                  <Text style={styles.aiMessageText}>
+                    AI is analyzing your question...
+                  </Text>
+                </View>
+              )}
+              {typingMessageId && (
+                <View style={[styles.messageContainer, styles.aiMessage]}>
+                  <View style={styles.typingIndicator}>
+                    <ActivityIndicator size='small' color={colors[0]} />
+                    <Text style={styles.aiMessageText}>AI is typing...</Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Scroll to bottom button */}
+            {showScrollButton && (
+              <TouchableOpacity
+                style={styles.scrollToBottomButton}
+                onPress={scrollToBottom}
+                activeOpacity={0.8}
+                accessibilityLabel='Scroll to bottom'
               >
-                <Text
-                  style={[
-                    styles.messageText,
-                    message.isUser ? styles.userMessageText : styles.aiMessageText,
-                  ]}
-                >
-                  {message.text}
-                </Text>
-                <Text
-                  style={[
-                    styles.messageTime,
-                    message.isUser ? styles.userMessageTime : styles.aiMessageTime,
-                  ]}
-                >
-                  {message.timestamp}
-                </Text>
-              </View>
-            ))}
-            {isLoading && (
-              <View style={[styles.messageContainer, styles.aiMessage]}>
-                <ActivityIndicator size="small" color={colors[0]} />
-                <Text style={styles.aiMessageText}>AI is analyzing your question...</Text>
-              </View>
+                <Text style={styles.scrollToBottomText}>↓</Text>
+              </TouchableOpacity>
             )}
-          </ScrollView>
+          </View>
 
           <View style={styles.chatInputContainer}>
             <TextInput
-              style={styles.chatInput}
+              style={[
+                styles.chatInput,
+                failedMessage &&
+                  failedMessage === inputText &&
+                  styles.chatInputError,
+              ]}
               placeholder={
-                contextType === 'course' 
+                contextType === 'course'
                   ? `Ask about ${courseContext?.courseCode || 'this course'}...`
                   : contextType === 'academic-progress'
                   ? 'Ask about your academic progress...'
@@ -619,7 +729,13 @@ export default function UnifiedAIChat({
               }
               placeholderTextColor='#9ca3af'
               value={inputText}
-              onChangeText={handleInputChange}
+              onChangeText={text => {
+                handleInputChange(text);
+                // Clear failed message state when user starts typing new content
+                if (failedMessage && text !== failedMessage) {
+                  setFailedMessage(null);
+                }
+              }}
               multiline
               maxLength={500}
               editable={!isLoading}
@@ -808,5 +924,37 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     paddingBottom: 10,
     fontFamily: 'Inter-Regular',
+  },
+  scrollToBottomButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#667eea',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    zIndex: 10,
+  },
+  scrollToBottomText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  chatInputError: {
+    borderColor: '#ef4444',
+    borderWidth: 2,
+    backgroundColor: '#fef2f2',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });

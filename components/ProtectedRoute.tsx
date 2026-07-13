@@ -1,7 +1,37 @@
 import React, { ReactNode } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { hasRole, canPerformAction } from '@/utils/api';
+const ROLE_HIERARCHY: Record<string, number> = {
+  GUEST: 0,
+  STUDENT: 1,
+  ADMIN: 2,
+};
+
+export const hasRole = (
+  userRole: string | undefined,
+  requiredRole: string
+): boolean => {
+  const userRoleNormalized = (userRole || 'GUEST').toUpperCase();
+  const requiredRoleNormalized = requiredRole.toUpperCase();
+
+  const userLevel = ROLE_HIERARCHY[userRoleNormalized] ?? 0;
+  const requiredLevel = ROLE_HIERARCHY[requiredRoleNormalized] ?? 0;
+
+  return userLevel >= requiredLevel;
+};
+
+export const canPerformAction = (
+  userRole: string | undefined,
+  action: string
+): boolean => {
+  const userRoleNormalized = (userRole || 'GUEST').toUpperCase();
+
+  if (userRoleNormalized === 'ADMIN') return true;
+  if (userRoleNormalized === 'STUDENT') {
+    return ['view', 'create', 'edit'].includes(action);
+  }
+  return action === 'view';
+};
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -87,7 +117,9 @@ export const withProtection = <P extends object>(
     </ProtectedRoute>
   );
 
-  ProtectedComponent.displayName = `withProtection(${Component.displayName || Component.name})`;
+  ProtectedComponent.displayName = `withProtection(${
+    Component.displayName || Component.name
+  })`;
   return ProtectedComponent;
 };
 
