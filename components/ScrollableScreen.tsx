@@ -113,23 +113,24 @@ function ScrollableScreenInner<T>(
   const clearance = useTabBarClearance(extraBottomPadding);
 
   /**
-   * Two-element header array so stickyHeaderIndices can target index 1.
-   * Index 0 = hero (+ optional section label) — scrolls away.
-   * Index 1 = chip row — sticks once hero is off-screen.
+   * Header container rendering hero, optional section label, and filter chips.
+   * Scrolls naturally with the list content for smooth UX.
    */
   const ListHeaderComponent = (
-    <>
-      {/* ── [0] Hero + optional section label ── */}
+    <View style={styles.headerContainer}>
+      {/* ── Hero + optional section label ── */}
       <View style={styles.heroBlock}>
         {hero}
         {sectionHeader ?? null}
       </View>
 
-      {/* ── [1] Sticky chip row ── */}
-      <View style={[styles.chipRow, { backgroundColor: chipRowBackground }]}>
-        {filterChips}
-      </View>
-    </>
+      {/* ── Filter chip row ── */}
+      {filterChips ? (
+        <View style={[styles.chipRow, { backgroundColor: chipRowBackground }]}>
+          {filterChips}
+        </View>
+      ) : null}
+    </View>
   );
 
   return (
@@ -142,8 +143,6 @@ function ScrollableScreenInner<T>(
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListHeaderComponent={ListHeaderComponent}
-        // Pin the chip row (header child index 1) to the top
-        stickyHeaderIndices={stickyChips ? [1] : []}
         ListEmptyComponent={ListEmptyComponent ?? null}
         ListFooterComponent={ListFooterComponent ?? null}
         onEndReached={onEndReached}
@@ -179,6 +178,9 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: lightTheme.spacing.md,
     paddingTop: 12,
+  },
+  headerContainer: {
+    // Header wraps hero, section label, and filter chips
   },
   heroBlock: {
     // No extra padding — hero already has its own margins
