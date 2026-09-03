@@ -9,6 +9,7 @@ import {
   GraduationCap,
 } from 'lucide-react-native';
 import { Guide, Category } from '@/types/guide';
+import { lightTheme } from '@/constants/theme';
 
 interface GuideCardProps {
   guide: Guide;
@@ -90,7 +91,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({
 
 const styles = StyleSheet.create({
   cardShadowWrapper: {
-    marginBottom: 14,
+    marginBottom: lightTheme.spacing.md,
     // Offset shadow effect
     shadowColor: '#000',
     shadowOffset: { width: 4, height: 4 },

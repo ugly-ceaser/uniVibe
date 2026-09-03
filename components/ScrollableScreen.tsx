@@ -29,6 +29,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTabBarClearance } from '@/hooks/useTabBarClearance';
+import { lightTheme } from '@/constants/theme';
 
 interface ScrollableScreenProps<T> {
   /** The hero banner card (rendered above chips, scrolls away). */
@@ -176,14 +177,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: lightTheme.spacing.md,
     paddingTop: 12,
   },
   heroBlock: {
     // No extra padding — hero already has its own margins
   },
   chipRow: {
-    paddingVertical: 8,
-    marginHorizontal: -16,
+    paddingVertical: lightTheme.spacing.sm,
+    marginHorizontal: -lightTheme.spacing.md,
   },
 });

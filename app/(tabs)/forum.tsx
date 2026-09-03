@@ -16,6 +16,7 @@ import {
   TextInput,
   Animated,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -26,14 +27,19 @@ import {
   Code,
   Briefcase,
   Users,
-  Heart,
   Flag,
+  Trash2,
   X,
   HelpCircle,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useApi, forumApi, ForumPost } from '../../utils/api';
+import { useApi, forumApi, ForumPost } from '@/utils/api';
+import { useTabBarClearance } from '@/hooks/useTabBarClearance';
+import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
+import { useAuth } from '@/contexts/AuthContext';
+import { canManageForumContent } from '@/utils/forum';
+import { lightTheme } from '@/constants/theme';
 
 // ─── Category config ──────────────────────────────────────────────────────────
 type CategoryChipItem = { id: string; name: string; icon: any; color: string };
@@ -108,7 +114,10 @@ function formatDate(dateString: string) {
 export default function ForumScreen() {
   const router = useRouter();
   const api = useApi();
-  const forumClient = forumApi(api);
+  const { user } = useAuth();
+  const forumClient = useMemo(() => forumApi(api), [api]);
+  const clearance = useTabBarClearance(64); // Clearance for floating FAB
+  const fabBottom = useTabBarClearance(16); // 16px above the tab bar
 
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [allPosts, setAllPosts] = useState<ForumPost[]>([]);
@@ -117,7 +126,7 @@ export default function ForumScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -125,14 +134,23 @@ export default function ForumScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [categories, setCategories] =
     useState<CategoryChipItem[]>(CATEGORY_DEFS);
-  const [lovedPosts, setLovedPosts] = useState<Set<string>>(new Set());
-  const [loveCounts, setLoveCounts] = useState<Record<string, number>>({});
-
   const lastFetchRef = useRef(0);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(
+    new Set()
+  );
+  const searchGenerationRef = useRef(0);
   const categoriesFetched = useRef(false);
   const MIN_FETCH_INTERVAL = 10000;
   const PAGE_SIZE = 20;
+
+  const scheduleRetry = useCallback((callback: () => void, delay: number) => {
+    const timeout = setTimeout(() => {
+      retryTimeoutsRef.current.delete(timeout);
+      callback();
+    }, delay);
+    retryTimeoutsRef.current.add(timeout);
+  }, []);
 
   // ─── Collapsible header animation ───────────────────────────────────────────
   const headerAnim = useRef(new Animated.Value(1)).current;
@@ -177,7 +195,7 @@ export default function ForumScreen() {
   // ─── Fetch posts ────────────────────────────────────────────────────────────
   const fetchPosts = useCallback(
     async (
-      pageNum = 1,
+      cursorStr?: string | null,
       isRefresh = false,
       isLoadMore = false,
       categoryEnum?: string,
@@ -200,19 +218,29 @@ export default function ForumScreen() {
         const tryProcess = (data: any) => {
           if (data?.questions) {
             const batch: ForumPost[] = data.questions;
-            if (isRefresh || pageNum === 1) {
+            const fetchedCursor: string | null = data.nextCursor || null;
+
+            if (isRefresh || !cursorStr) {
               setAllPosts(batch);
               setPosts(batch);
-              setPage(2);
+              setNextCursor(fetchedCursor);
             } else {
               setAllPosts(prev => {
-                const c = [...prev, ...batch];
-                setPosts(c);
-                return c;
+                const combined = [...prev, ...batch];
+                // Deduplicate by ID
+                // Note: The appended diversity post from page 1 may naturally reappear in page 2
+                // due to its organic score. Client-side ID deduplication prevents this duplicate
+                // from rendering in the list without corrupting the pagination cursor.
+                const unique = combined.filter(
+                  (post, index, self) =>
+                    self.findIndex(p => p.id === post.id) === index
+                );
+                setPosts(unique);
+                return unique;
               });
-              setPage(pageNum + 1);
+              setNextCursor(fetchedCursor);
             }
-            setHasMore(pageNum < (data.totalPages || 1));
+            setHasMore(!!fetchedCursor);
             lastFetchRef.current = now;
             return true;
           }
@@ -220,28 +248,30 @@ export default function ForumScreen() {
         };
 
         const response: any = await forumClient.getQuestions({
-          page: pageNum,
+          page: 1, // dummy fallback
           pageSize: PAGE_SIZE,
           refresh: isRefresh,
           category: categoryEnum,
+          cursor: cursorStr || undefined,
         } as any);
 
         let ok = tryProcess(response?.data);
         if (!ok) {
           const fresh: any = await forumClient.getQuestions({
-            page: pageNum,
+            page: 1,
             pageSize: PAGE_SIZE,
             refresh: true,
             category: categoryEnum,
+            cursor: cursorStr || undefined,
           } as any);
           tryProcess(fresh?.data);
         }
       } catch (err: any) {
         if (err.status === 429 && retryCount < 3) {
-          setTimeout(
+          scheduleRetry(
             () =>
               fetchPosts(
-                pageNum,
+                cursorStr,
                 isRefresh,
                 isLoadMore,
                 categoryEnum,
@@ -264,7 +294,7 @@ export default function ForumScreen() {
         setLoadingMore(false);
       }
     },
-    [forumClient]
+    [forumClient, scheduleRetry]
   );
 
   // ─── Fetch categories ───────────────────────────────────────────────────────
@@ -305,30 +335,27 @@ export default function ForumScreen() {
         }
       } catch (error: any) {
         if (error.status === 429 && retryCount < 2) {
-          setTimeout(
+          scheduleRetry(
             () => fetchCategories(retryCount + 1),
             Math.pow(2, retryCount) * 3000
           );
         }
       }
     },
-    [forumClient]
+    [forumClient, scheduleRetry]
   );
 
   // ─── Effects ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    fetchPosts(1, false, false, getSelectedEnum());
-  }, []);
   useEffect(() => {
     setPosts(allPosts);
   }, [allPosts]);
   useEffect(() => {
     setAllPosts([]);
     setPosts([]);
-    setPage(1);
+    setNextCursor(null);
     setHasMore(true);
-    fetchPosts(1, true, false, getSelectedEnum());
-  }, [selectedCategory]);
+    fetchPosts(null, true, false, getSelectedEnum());
+  }, [fetchPosts, getSelectedEnum, selectedCategory]);
   useEffect(() => {
     if (!categoriesFetched.current) {
       categoriesFetched.current = true;
@@ -338,21 +365,24 @@ export default function ForumScreen() {
   useEffect(
     () => () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      retryTimeoutsRef.current.forEach(clearTimeout);
+      retryTimeoutsRef.current.clear();
+      searchGenerationRef.current += 1;
     },
     []
   );
 
   const onRefresh = useCallback(() => {
-    fetchPosts(1, true, false, getSelectedEnum());
+    fetchPosts(null, true, false, getSelectedEnum());
     fetchCategories();
   }, [getSelectedEnum, fetchPosts, fetchCategories]);
 
   const onLoadMore = useCallback(() => {
     if (!loadingMore && !loading && hasMore && posts.length > 0) {
-      fetchPosts(page, false, true, getSelectedEnum());
+      fetchPosts(nextCursor, false, true, getSelectedEnum());
     }
   }, [
-    page,
+    nextCursor,
     loadingMore,
     loading,
     hasMore,
@@ -362,34 +392,47 @@ export default function ForumScreen() {
   ]);
 
   const handleSearch = useCallback(
-    async (query: string, retryCount = 0) => {
+    async (
+      query: string,
+      retryCount = 0,
+      generation = searchGenerationRef.current
+    ) => {
       if (!query.trim()) {
-        setSearchResults([]);
-        setIsSearching(false);
+        if (generation === searchGenerationRef.current) {
+          setSearchResults([]);
+          setIsSearching(false);
+        }
         return;
       }
       try {
+        if (generation !== searchGenerationRef.current) return;
         setIsSearching(true);
         const response = await forumClient.searchQuestions({
           query: query.trim(),
           page: 1,
           pageSize: 20,
         });
-        setSearchResults(response?.data || []);
+        if (generation === searchGenerationRef.current) {
+          setSearchResults(response?.data || []);
+        }
       } catch (error: any) {
         if (error.status === 429 && retryCount < 2) {
-          setTimeout(
-            () => handleSearch(query, retryCount + 1),
+          scheduleRetry(
+            () => handleSearch(query, retryCount + 1, generation),
             Math.pow(2, retryCount) * 1500
           );
           return;
         }
-        setSearchResults([]);
+        if (generation === searchGenerationRef.current) {
+          setSearchResults([]);
+        }
       } finally {
-        setIsSearching(false);
+        if (generation === searchGenerationRef.current) {
+          setIsSearching(false);
+        }
       }
     },
-    [forumClient]
+    [forumClient, scheduleRetry]
   );
 
   const displayedPosts = useMemo(
@@ -398,23 +441,42 @@ export default function ForumScreen() {
   );
 
   // ─── Render helpers ──────────────────────────────────────────────────────────
-  const toggleLove = useCallback(
-    (postId: string) => {
-      setLovedPosts(prev => {
-        const next = new Set(prev);
-        if (next.has(postId)) {
-          next.delete(postId);
-        } else {
-          next.add(postId);
-        }
-        return next;
-      });
-      setLoveCounts(prev => ({
-        ...prev,
-        [postId]: (prev[postId] ?? 0) + (lovedPosts.has(postId) ? -1 : 1),
-      }));
+  const handleDelete = useCallback(
+    async (postId: string) => {
+      try {
+        await forumClient.deleteQuestion(postId);
+        Alert.alert('Success', 'Question deleted successfully');
+
+        // Remove from local state immediately
+        setAllPosts(prev => prev.filter(p => p.id !== postId));
+        setPosts(prev => prev.filter(p => p.id !== postId));
+      } catch (err: any) {
+        Alert.alert('Error', err?.message || 'Failed to delete question');
+      }
     },
-    [lovedPosts]
+    [forumClient]
+  );
+
+  const handleReport = useCallback(
+    async (postId: string, reason: string) => {
+      try {
+        const response = await forumClient.reportQuestion(postId, reason);
+        if (response?.data?.statusUpdated) {
+          // Filter it out locally if hidden
+          setAllPosts(prev => prev.filter(p => p.id !== postId));
+          setPosts(prev => prev.filter(p => p.id !== postId));
+          Alert.alert(
+            'Report Received',
+            'This post has been hidden for review due to multiple reports.'
+          );
+        } else {
+          Alert.alert('Report Received', 'Thank you for reporting this post.');
+        }
+      } catch (err: any) {
+        Alert.alert('Error', err?.message || 'Failed to report question');
+      }
+    },
+    [forumClient]
   );
 
   const renderPost = useCallback(
@@ -424,45 +486,48 @@ export default function ForumScreen() {
       const bgColor = avatarColor(authorName);
       const abbr = initials(authorName);
       const answerCount = post._count?.answers ?? 0;
-      const isLoved = lovedPosts.has(post.id);
-      const loveCount = loveCounts[post.id] ?? 0;
+      const canManage = canManageForumContent(user, post.authorId);
 
       return (
         <View style={styles.cardWrapper}>
-          <TouchableOpacity
-            style={styles.postCard}
-            onPress={() =>
-              router.push(
-                `/post/${post.id}?title=${encodeURIComponent(post.title || '')}`
-              )
-            }
-            activeOpacity={0.85}
-          >
-            {/* Author row */}
-            <View style={styles.authorRow}>
-              <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-                <Text style={styles.avatarText}>{abbr}</Text>
+          <View style={styles.postCard}>
+            <TouchableOpacity
+              onPress={() =>
+                router.push(
+                  `/post/${post.id}?title=${encodeURIComponent(
+                    post.title || ''
+                  )}`
+                )
+              }
+              activeOpacity={0.85}
+              style={{ gap: 10 }}
+            >
+              {/* Author row */}
+              <View style={styles.authorRow}>
+                <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+                  <Text style={styles.avatarText}>{abbr}</Text>
+                </View>
+                <View>
+                  <Text style={styles.authorName}>{authorName}</Text>
+                  <Text style={styles.postDate}>
+                    {formatDate(post.createdAt)}
+                  </Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.authorName}>{authorName}</Text>
-                <Text style={styles.postDate}>
-                  {formatDate(post.createdAt)}
-                </Text>
-              </View>
-            </View>
 
-            {/* Title */}
-            <Text style={styles.postTitle} numberOfLines={2}>
-              {post.title}
-            </Text>
+              {/* Title */}
+              <Text style={styles.postTitle} numberOfLines={2}>
+                {post.title}
+              </Text>
 
-            {/* Body preview */}
-            <Text style={styles.postBody} numberOfLines={2}>
-              {post.body}
-            </Text>
+              {/* Body preview */}
+              <Text style={styles.postBody} numberOfLines={2}>
+                {post.body}
+              </Text>
+            </TouchableOpacity>
 
             {/* Actions */}
-            <View style={styles.postActions}>
+            <View style={[styles.postActions, { marginTop: 10 }]}>
               {/* Answers chip – left */}
               <View style={styles.actionChip}>
                 <MessageCircle size={13} color='#555' />
@@ -471,52 +536,67 @@ export default function ForumScreen() {
                 </Text>
               </View>
 
-              {/* Right group: Love + Report */}
+              {/* Ownership-aware moderation action */}
               <View style={styles.actionRight}>
-                {/* Love button */}
-                <TouchableOpacity
-                  style={[styles.loveBtn, isLoved && styles.loveBtnActive]}
-                  onPress={e => {
-                    e.stopPropagation?.();
-                    toggleLove(post.id);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Heart
-                    size={14}
-                    color={isLoved ? '#fff' : '#DB2777'}
-                    fill={isLoved ? '#DB2777' : 'transparent'}
-                    strokeWidth={2}
-                  />
-                  {loveCount > 0 && (
-                    <Text
-                      style={[
-                        styles.loveBtnText,
-                        isLoved && styles.loveBtnTextActive,
-                      ]}
-                    >
-                      {loveCount}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                {/* Report button */}
-                <TouchableOpacity
-                  style={styles.reportBtn}
-                  onPress={e => {
-                    e.stopPropagation?.();
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Flag size={14} color='#9ca3af' strokeWidth={2} />
-                </TouchableOpacity>
+                {/* Trash/Report button */}
+                {canManage ? (
+                  <TouchableOpacity
+                    style={styles.reportBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Post',
+                        'Are you sure you want to delete this question? This action cannot be undone.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Delete',
+                            style: 'destructive',
+                            onPress: () => handleDelete(post.id),
+                          },
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Trash2 size={14} color='#ef4444' strokeWidth={2} />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.reportBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        'Report Post',
+                        'Why are you reporting this post?',
+                        [
+                          {
+                            text: 'Spam',
+                            onPress: () => handleReport(post.id, 'Spam'),
+                          },
+                          {
+                            text: 'Abuse / Harassment',
+                            onPress: () => handleReport(post.id, 'Abuse'),
+                          },
+                          { text: 'Cancel', style: 'cancel' },
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Flag size={14} color='#9ca3af' strokeWidth={2} />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
-          </TouchableOpacity>
+          </View>
         </View>
       );
     },
-    [router, lovedPosts, loveCounts, toggleLove]
+    [
+      router,
+      user,
+      handleDelete,
+      handleReport,
+    ]
   );
 
   const renderFooter = useCallback(
@@ -546,198 +626,215 @@ export default function ForumScreen() {
   // ─── Full loading state ───────────────────────────────────────────────────────
   if (loading && !refreshing && posts.length === 0) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.heroBannerWrapper}>
-          <LinearGradient
-            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBanner}
-          >
-            <View style={styles.decorCircle} />
-            <View style={styles.seasonBadge}>
-              <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
-            </View>
-            <Text style={styles.heroHeading}>
-              Spill the tea,{'\n'}ask away 💬
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              Real answers from real students who've been there.
-            </Text>
-          </LinearGradient>
-        </View>
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size='large' color='#7B2FBE' />
-          <Text style={styles.loadingText}>Loading posts…</Text>
-        </View>
-      </SafeAreaView>
+      <TabTransitionWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.heroBannerWrapper}>
+            <LinearGradient
+              colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroBanner}
+            >
+              <View style={styles.decorCircle} />
+              <View style={styles.seasonBadge}>
+                <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
+              </View>
+              <Text style={styles.heroHeading}>
+                Spill the tea,{'\n'}ask away 💬
+              </Text>
+              <Text style={styles.heroSubtitle}>
+                Real answers from real students who've been there.
+              </Text>
+            </LinearGradient>
+          </View>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size='large' color='#7B2FBE' />
+            <Text style={styles.loadingText}>Loading posts…</Text>
+          </View>
+        </SafeAreaView>
+      </TabTransitionWrapper>
     );
   }
 
   // ─── Main render ─────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ─── Collapsible header: Hero + Search + Categories ─── */}
-      <Animated.View
-        style={[
-          styles.collapsibleHeader,
-          {
-            opacity: headerAnim,
-            maxHeight: headerAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, 400],
-            }),
-            overflow: 'hidden',
-          },
-        ]}
-      >
-        {/* Hero Banner */}
-        <View
+    <TabTransitionWrapper>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {/* ─── Collapsible header: Hero + Search + Categories ─── */}
+        <Animated.View
           style={[
-            styles.heroBannerWrapper,
-            { marginHorizontal: 16, marginTop: 12 },
+            styles.collapsibleHeader,
+            {
+              opacity: headerAnim,
+              maxHeight: headerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 400],
+              }),
+              overflow: 'hidden',
+            },
           ]}
         >
-          <LinearGradient
-            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBanner}
+          {/* Hero Banner */}
+          <View
+            style={[
+              styles.heroBannerWrapper,
+              { marginHorizontal: lightTheme.spacing.md, marginTop: 12 },
+            ]}
           >
-            <View style={styles.decorCircle} />
-            <View style={styles.heroBannerTop}>
-              <View style={styles.seasonBadge}>
-                <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
+            <LinearGradient
+              colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroBanner}
+            >
+              <View style={styles.decorCircle} />
+              <View style={styles.heroBannerTop}>
+                <View style={styles.seasonBadge}>
+                  <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.searchIconBtn}
+                  onPress={() => setShowSearch(v => !v)}
+                >
+                  {showSearch ? (
+                    <X size={18} color='#000' />
+                  ) : (
+                    <Search size={18} color='#000' />
+                  )}
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.searchIconBtn}
-                onPress={() => setShowSearch(v => !v)}
-              >
-                {showSearch ? (
-                  <X size={18} color='#000' />
-                ) : (
-                  <Search size={18} color='#000' />
-                )}
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.heroHeading}>
-              Spill the tea,{'\n'}ask away 💬
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              Real answers from real students who've been there.
-            </Text>
-          </LinearGradient>
-        </View>
+              <Text style={styles.heroHeading}>
+                Spill the tea,{'\n'}ask away 💬
+              </Text>
+              <Text style={styles.heroSubtitle}>
+                Real answers from real students who've been there.
+              </Text>
+            </LinearGradient>
+          </View>
 
-        {/* Search Input */}
-        {showSearch && (
-          <View style={styles.searchBar}>
-            <Search size={16} color='#666' />
-            <TextInput
-              style={styles.searchInput}
-              placeholder='Search posts…'
-              placeholderTextColor='#999'
-              value={searchQuery}
-              onChangeText={q => {
-                setSearchQuery(q);
-                if (searchTimeoutRef.current)
-                  clearTimeout(searchTimeoutRef.current);
-                searchTimeoutRef.current = setTimeout(
-                  () => handleSearch(q),
-                  400
-                );
-              }}
-              autoFocus
-            />
-            {isSearching && <ActivityIndicator size='small' color='#7B2FBE' />}
+          {/* Search Input */}
+          {showSearch && (
+            <View style={styles.searchBar}>
+              <Search size={16} color='#666' />
+              <TextInput
+                style={styles.searchInput}
+                placeholder='Search posts…'
+                placeholderTextColor='#999'
+                value={searchQuery}
+                onChangeText={q => {
+                  setSearchQuery(q);
+                  searchGenerationRef.current += 1;
+                  const generation = searchGenerationRef.current;
+                  if (searchTimeoutRef.current) {
+                    clearTimeout(searchTimeoutRef.current);
+                  }
+                  searchTimeoutRef.current = setTimeout(
+                    () => handleSearch(q, 0, generation),
+                    400
+                  );
+                }}
+                autoFocus
+              />
+              {isSearching && (
+                <ActivityIndicator size='small' color='#7B2FBE' />
+              )}
+            </View>
+          )}
+
+          {/* Category Pills */}
+          <FlatList
+            horizontal
+            data={categories}
+            keyExtractor={item => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterList}
+            style={styles.filterRow}
+            nestedScrollEnabled
+            renderItem={({ item }) => {
+              const isActive = item.id === selectedCategory;
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.filterPill,
+                    isActive && styles.filterPillActive,
+                  ]}
+                  onPress={() => setSelectedCategory(item.id)}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[
+                      styles.filterPillText,
+                      isActive && styles.filterPillTextActive,
+                    ]}
+                  >
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </Animated.View>
+
+        {/* ─── Error ─── */}
+        {error && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => fetchPosts(null, true, false, getSelectedEnum())}
+            >
+              <Text style={styles.retryBtnText}>Try again</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Category Pills */}
+        {/* ─── Posts List ─── */}
         <FlatList
-          horizontal
-          data={categories}
+          data={displayedPosts}
           keyExtractor={item => item.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterList}
-          style={styles.filterRow}
-          nestedScrollEnabled
-          renderItem={({ item }) => {
-            const isActive = item.id === selectedCategory;
-            return (
-              <TouchableOpacity
-                style={[styles.filterPill, isActive && styles.filterPillActive]}
-                onPress={() => setSelectedCategory(item.id)}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    isActive && styles.filterPillTextActive,
-                  ]}
-                >
-                  {item.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
-      </Animated.View>
-
-      {/* ─── Error ─── */}
-      {error && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryBtn}
-            onPress={() => fetchPosts(1, true, false, getSelectedEnum())}
-          >
-            <Text style={styles.retryBtnText}>Try again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ─── Posts List ─── */}
-      <FlatList
-        data={displayedPosts}
-        keyExtractor={item => item.id}
-        renderItem={renderPost}
-        ListFooterComponent={renderFooter}
-        ListEmptyComponent={renderEmpty}
-        onEndReached={onLoadMore}
-        onEndReachedThreshold={0.3}
-        onScroll={onListScroll}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor='#7B2FBE'
-          />
-        }
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      />
-
-      {/* ─── Floating FAB (bottom-right) ─── */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push('/create-post')}
-        activeOpacity={0.85}
-      >
-        <LinearGradient
-          colors={['#9333EA', '#DB2777']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={
-            headerVisible ? styles.fabGradientFull : styles.fabGradientCompact
+          renderItem={renderPost}
+          ListFooterComponent={renderFooter}
+          ListEmptyComponent={renderEmpty}
+          onEndReached={onLoadMore}
+          onEndReachedThreshold={0.3}
+          onScroll={onListScroll}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor='#7B2FBE'
+            />
           }
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: clearance },
+          ]}
+        />
+
+        {/* ─── Floating FAB (bottom-right) ─── */}
+        <TouchableOpacity
+          style={[styles.fab, { bottom: fabBottom }]}
+          onPress={() => router.push('/create-post')}
+          activeOpacity={0.85}
         >
-          <Plus size={16} color='#fff' strokeWidth={2.5} />
-          {headerVisible && <Text style={styles.fabText}>Post a question</Text>}
-        </LinearGradient>
-      </TouchableOpacity>
-    </SafeAreaView>
+          <LinearGradient
+            colors={['#9333EA', '#DB2777']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={
+              headerVisible ? styles.fabGradientFull : styles.fabGradientCompact
+            }
+          >
+            <Plus size={16} color='#fff' strokeWidth={2.5} />
+            {headerVisible && (
+              <Text style={styles.fabText}>Post a question</Text>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+      </SafeAreaView>
+    </TabTransitionWrapper>
   );
 }
 
@@ -755,13 +852,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 8,
-    marginBottom: 16,
+    marginBottom: lightTheme.spacing.md,
     overflow: 'hidden',
   },
   heroBanner: {
     borderRadius: 22,
     padding: 20,
-    paddingBottom: 24,
+    paddingBottom: lightTheme.spacing.lg,
     overflow: 'hidden',
   },
   decorCircle: {
@@ -828,7 +925,7 @@ const styles = StyleSheet.create({
     borderColor: '#000',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginHorizontal: 16,
+    marginHorizontal: lightTheme.spacing.md,
     marginBottom: 12,
   },
   searchInput: {
@@ -846,7 +943,7 @@ const styles = StyleSheet.create({
   // ─── Filter Pills ───
   filterRow: { marginBottom: 12, height: 56, flexShrink: 0 },
   filterList: {
-    paddingHorizontal: 16,
+    paddingHorizontal: lightTheme.spacing.md,
     gap: 10,
     alignItems: 'center',
     paddingVertical: 6,
@@ -879,9 +976,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 2,
     borderColor: '#000',
-    padding: 16,
+    padding: lightTheme.spacing.md,
     alignItems: 'center',
-    marginHorizontal: 16,
+    marginHorizontal: lightTheme.spacing.md,
     marginBottom: 12,
   },
   errorText: {
@@ -902,11 +999,11 @@ const styles = StyleSheet.create({
   retryBtnText: { fontSize: 13, fontWeight: '800', color: '#000' },
 
   // ─── List ───
-  listContent: { paddingHorizontal: 16, paddingBottom: 80 },
+  listContent: { paddingHorizontal: lightTheme.spacing.md },
 
   // ─── Post Card ───
   cardWrapper: {
-    marginBottom: 14,
+    marginBottom: lightTheme.spacing.md,
     shadowColor: '#000',
     shadowOffset: { width: 4, height: 4 },
     shadowOpacity: 1,
@@ -918,7 +1015,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2,
     borderColor: '#000',
-    padding: 16,
+    padding: lightTheme.spacing.md,
     gap: 10,
   },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -1009,6 +1106,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 20,
   },
 
   // ─── Collapsible header ───
@@ -1017,13 +1115,13 @@ const styles = StyleSheet.create({
   // ─── FAB ───
   fab: {
     position: 'absolute',
-    bottom: 8, // Pushed down a bit further
-    right: 16,
-    borderRadius: 20, // Smaller border radius
-    borderWidth: 2, // Slimmer border
+    bottom: lightTheme.spacing.sm,
+    right: lightTheme.spacing.md,
+    borderRadius: 20,
+    borderWidth: 2,
     borderColor: '#000',
     shadowColor: '#000',
-    shadowOffset: { width: 3, height: 3 }, // Slimmer shadow
+    shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1,
     shadowRadius: 0,
     elevation: 6,
@@ -1035,7 +1133,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 18, // Matches inner boundary of parent (20 - border)
+    borderRadius: 18,
   },
   fabGradientCompact: {
     width: 42,
