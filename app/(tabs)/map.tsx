@@ -16,13 +16,13 @@ import {
   Linking,
   Alert,
   Platform,
-  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MapPin, Navigation, ExternalLink, Plus } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApi, mapApi } from '@/utils/api';
 import { useFocusEffect } from '@react-navigation/native';
+import { ScrollableScreen } from '@/components/ScrollableScreen';
+import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 
 interface MapLocation {
   id: string;
@@ -229,41 +229,196 @@ export default function MapScreen() {
     [locations, selectedCategory]
   );
 
-  // ─── Loading state ────────────────────────────────────────────────────────────
-  if (loading && !hasInitialLoaded.current) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.heroBannerWrapper}>
-          <LinearGradient
-            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBanner}
-          >
-            <View style={styles.decorCircle} />
-            <View style={styles.seasonBadge}>
-              <Text style={styles.seasonBadgeText}>WAYFINDING</Text>
-            </View>
-            <Text style={styles.heroHeading}>Where to{'\n'}next? 📍</Text>
-            <Text style={styles.heroSubtitle}>
-              Every building, office, and hangout spot on campus.
-            </Text>
-          </LinearGradient>
+  // ── Hero banner ──────────────────────────────────────────────────────────────
+  const hero = (
+    <View style={styles.heroBannerWrapper}>
+      <LinearGradient
+        colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroBanner}
+      >
+        <View style={styles.decorCircle} />
+        <View style={styles.seasonBadge}>
+          <Text style={styles.seasonBadgeText}>WAYFINDING</Text>
         </View>
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size='large' color='#7B2FBE' />
-          <Text style={styles.loadingText}>Loading locations…</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+        <Text style={styles.heroHeading}>Where to{'\n'}next? 📍</Text>
+        <Text style={styles.heroSubtitle}>
+          Every building, office, and hangout spot on campus.
+        </Text>
+      </LinearGradient>
+    </View>
+  );
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+  // ── Filter chip row ──────────────────────────────────────────────────────────
+  const chipItems = useMemo(
+    () => [
+      { key: null, label: `All · ${locations.length}` },
+      ...categories.map(c => ({
+        key: c,
+        label: `${c} · ${locations.filter(l => l.category === c).length}`,
+      })),
+    ],
+    [categories, locations]
+  );
+
+  const filterChips =
+    categories.length > 0 || locations.length > 0 ? (
       <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterList}
+      >
+        {chipItems.map(item => {
+          const isActive = item.key === selectedCategory;
+          return (
+            <TouchableOpacity
+              key={item.key ?? '__all__'}
+              style={[styles.filterPill, isActive && styles.filterPillActive]}
+              onPress={() => setSelectedCategory(item.key)}
+              activeOpacity={0.75}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  isActive && styles.filterPillTextActive,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    ) : null;
+
+  // ── Empty / error state ───────────────────────────────────────────────────────
+  const emptyComponent = loading ? (
+    <View style={styles.loadingBox}>
+      <ActivityIndicator size='large' color='#7B2FBE' />
+      <Text style={styles.loadingText}>Loading locations…</Text>
+    </View>
+  ) : error ? (
+    <View style={styles.errorBox}>
+      <Text style={styles.errorText}>{error}</Text>
+      <TouchableOpacity
+        style={styles.retryButton}
+        onPress={() => fetchLocations(true)}
+      >
+        <Text style={styles.retryButtonText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <View style={styles.emptyCard}>
+      <Text style={styles.emptyEmoji}>🗺️</Text>
+      <Text style={styles.emptyTitle}>No locations yet</Text>
+      <Text style={styles.emptySubtitle}>
+        No campus spots have been added.{'\n'}Pull down to refresh or add a
+        sample.
+      </Text>
+      <TouchableOpacity
+        style={styles.sampleButton}
+        onPress={addSampleLocation}
+      >
+        <Plus size={16} color='#000' />
+        <Text style={styles.sampleButtonText}>Add Sample Location</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ── renderItem ───────────────────────────────────────────────────────────────
+  const renderItem = useCallback(
+    ({ item: location }: { item: MapLocation }) => (
+      <View style={styles.cardWrapper}>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.85}
+          onPress={() =>
+            Alert.alert(location.name, location.description, [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'View on Map', onPress: () => openInMaps(location) },
+              { text: 'Directions', onPress: () => getDirections(location) },
+            ])
+          }
+        >
+          {/* Top row */}
+          <View style={styles.cardHeader}>
+            {/* Icon box */}
+            <View
+              style={[
+                styles.iconBox,
+                { backgroundColor: getCategoryColor(location.category) },
+              ]}
+            >
+              <Text style={styles.iconEmoji}>
+                {getCategoryEmoji(location.category)}
+              </Text>
+            </View>
+
+            {/* Name + category */}
+            <View style={styles.cardInfo}>
+              <Text style={styles.locationName} numberOfLines={1}>
+                {location.name}
+              </Text>
+              {location.category && (
+                <Text style={styles.locationCategory}>
+                  {location.category.toUpperCase()}
+                </Text>
+              )}
+            </View>
+
+            {/* External link icon */}
+            <TouchableOpacity
+              style={styles.externalBtn}
+              onPress={() => openInMaps(location)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <ExternalLink size={14} color='#666' />
+            </TouchableOpacity>
+          </View>
+
+          {/* Description */}
+          {location.description ? (
+            <Text style={styles.locationDesc} numberOfLines={2}>
+              {location.description}
+            </Text>
+          ) : null}
+
+          {/* Action buttons */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => openInMaps(location)}
+            >
+              <MapPin size={13} color='#000' />
+              <Text style={styles.actionBtnText}>View on map</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => getDirections(location)}
+            >
+              <Navigation size={13} color='#000' />
+              <Text style={styles.actionBtnText}>Directions</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </View>
+    ),
+    // openInMaps / getDirections are stable (no deps change)
+    []
+  );
+
+  return (
+    <TabTransitionWrapper>
+      <ScrollableScreen
+        hero={hero}
+        filterChips={filterChips ?? <View />}
+        stickyChips={chipItems.length > 1}
+        data={filteredLocations}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
+        ListEmptyComponent={emptyComponent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -271,203 +426,12 @@ export default function MapScreen() {
             tintColor='#7B2FBE'
           />
         }
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* ─── Hero Banner ─── */}
-        <View style={styles.heroBannerWrapper}>
-          <LinearGradient
-            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBanner}
-          >
-            <View style={styles.decorCircle} />
-            <View style={styles.seasonBadge}>
-              <Text style={styles.seasonBadgeText}>WAYFINDING</Text>
-            </View>
-            <Text style={styles.heroHeading}>Where to{'\n'}next? 📍</Text>
-            <Text style={styles.heroSubtitle}>
-              Every building, office, and hangout spot on campus.
-            </Text>
-          </LinearGradient>
-        </View>
-
-        {/* ─── Filter Pills ─── */}
-        {(categories.length > 0 || locations.length > 0) && (
-          <FlatList
-            horizontal
-            data={[
-              { key: null, label: `All · ${locations.length}` },
-              ...categories.map(c => ({
-                key: c,
-                label: `${c} · ${
-                  locations.filter(l => l.category === c).length
-                }`,
-              })),
-            ]}
-            keyExtractor={item => item.key ?? '__all__'}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterList}
-            style={styles.filterRow}
-            renderItem={({ item }) => {
-              const isActive = item.key === selectedCategory;
-              return (
-                <TouchableOpacity
-                  style={[
-                    styles.filterPill,
-                    isActive && styles.filterPillActive,
-                  ]}
-                  onPress={() => setSelectedCategory(item.key)}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={[
-                      styles.filterPillText,
-                      isActive && styles.filterPillTextActive,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }}
-          />
-        )}
-
-        {/* ─── Error ─── */}
-        {error && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => fetchLocations(true)}
-            >
-              <Text style={styles.retryButtonText}>Try again</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ─── Empty ─── */}
-        {!error && locations.length === 0 && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>🗺️</Text>
-            <Text style={styles.emptyTitle}>No locations yet</Text>
-            <Text style={styles.emptySubtitle}>
-              No campus spots have been added.{'\n'}Pull down to refresh or add
-              a sample.
-            </Text>
-            <TouchableOpacity
-              style={styles.sampleButton}
-              onPress={addSampleLocation}
-            >
-              <Plus size={16} color='#000' />
-              <Text style={styles.sampleButtonText}>Add Sample Location</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ─── Location Cards ─── */}
-        {!error && filteredLocations.length > 0 && (
-          <View style={styles.locationsList}>
-            {filteredLocations.map(location => (
-              <View key={location.id} style={styles.cardWrapper}>
-                <TouchableOpacity
-                  style={styles.card}
-                  activeOpacity={0.85}
-                  onPress={() =>
-                    Alert.alert(location.name, location.description, [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'View on Map',
-                        onPress: () => openInMaps(location),
-                      },
-                      {
-                        text: 'Directions',
-                        onPress: () => getDirections(location),
-                      },
-                    ])
-                  }
-                >
-                  {/* Top row */}
-                  <View style={styles.cardHeader}>
-                    {/* Icon box */}
-                    <View
-                      style={[
-                        styles.iconBox,
-                        {
-                          backgroundColor: getCategoryColor(location.category),
-                        },
-                      ]}
-                    >
-                      <Text style={styles.iconEmoji}>
-                        {getCategoryEmoji(location.category)}
-                      </Text>
-                    </View>
-
-                    {/* Name + category */}
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.locationName} numberOfLines={1}>
-                        {location.name}
-                      </Text>
-                      {location.category && (
-                        <Text style={styles.locationCategory}>
-                          {location.category.toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
-
-                    {/* External link icon */}
-                    <TouchableOpacity
-                      style={styles.externalBtn}
-                      onPress={() => openInMaps(location)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <ExternalLink size={14} color='#666' />
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Description */}
-                  {location.description ? (
-                    <Text style={styles.locationDesc} numberOfLines={2}>
-                      {location.description}
-                    </Text>
-                  ) : null}
-
-                  {/* Action buttons */}
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => openInMaps(location)}
-                    >
-                      <MapPin size={13} color='#000' />
-                      <Text style={styles.actionBtnText}>View on map</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.actionBtnSecondary]}
-                      onPress={() => getDirections(location)}
-                    >
-                      <Navigation size={13} color='#000' />
-                      <Text style={styles.actionBtnText}>Directions</Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
-    </SafeAreaView>
+      />
+    </TabTransitionWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EBEFFF' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
-
   // ─── Hero Banner ───
   heroBannerWrapper: {
     borderRadius: 24,
@@ -527,8 +491,7 @@ const styles = StyleSheet.create({
   },
 
   // ─── Filter Pills ───
-  filterRow: { marginBottom: 20 },
-  filterList: { gap: 10, paddingVertical: 2 },
+  filterList: { gap: 10, paddingHorizontal: 16, paddingVertical: 2 },
   filterPill: {
     borderRadius: 30,
     paddingHorizontal: 18,
@@ -547,6 +510,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 12,
+    paddingTop: 40,
   },
   loadingText: { fontSize: 14, color: '#555', fontWeight: '600' },
 
@@ -619,7 +583,6 @@ const styles = StyleSheet.create({
   sampleButtonText: { fontSize: 13, fontWeight: '800', color: '#000' },
 
   // ─── Location Cards ───
-  locationsList: { gap: 0 },
   cardWrapper: {
     marginBottom: 16,
     shadowColor: '#000',

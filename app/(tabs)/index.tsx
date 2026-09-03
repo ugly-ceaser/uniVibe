@@ -6,26 +6,24 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
-  FlatList,
-  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { BookOpen, Sparkles } from 'lucide-react-native';
+import { BookOpen } from 'lucide-react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { LoadingState } from '@/components/LoadingState';
 import { GuideCard } from '@/components/GuideCard';
+import { ScrollableScreen } from '@/components/ScrollableScreen';
+import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import { guideApi, useApi } from '@/utils/api';
-import { Category, Guide } from '@/types';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Guide } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { useScrollHeader } from '@/hooks/useScrollHeader';
 
 const FILTER_CATEGORIES: Array<{ key: string; label: string }> = [
   { key: 'all', label: 'For you' },
   { key: 'Academics', label: 'Academics' },
-  { key: 'Social', label: 'Campus' },
-  { key: 'Financial', label: 'Finance' },
+  { key: 'Social Life', label: 'Campus' },
+  { key: 'Budgeting', label: 'Finance' },
   { key: 'Safety', label: 'Safety' },
 ];
 
@@ -41,7 +39,6 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   const guideClient = useMemo(() => guideApi(api), [api]);
-  const { headerAnim, onScroll, headerMaxHeight } = useScrollHeader();
 
   const fetchGuides = useCallback(
     async (isRefresh = false) => {
@@ -55,26 +52,10 @@ export default function HomeScreen() {
         else setLoading(true);
         setError(null);
 
-        const response: any = await guideClient.getAll();
+        const response = await guideClient.getAll();
 
         if (response?.data && Array.isArray(response.data)) {
-          const transformed = response.data.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            content: item.content,
-            description:
-              item.content?.substring(0, 120) + '...' ||
-              'No description available',
-            category: 'Academics' as Category,
-            readTime: `${Math.ceil(
-              (item.content?.split(' ').length || 0) / 200
-            )} min read`,
-            likes: item.likesCount || 0,
-            author: 'UniVibe Team',
-            createdAt: item.createdAt,
-            status: item.status,
-          }));
-          setGuides(transformed);
+          setGuides(response.data);
         } else {
           setGuides([]);
         }
@@ -112,13 +93,112 @@ export default function HomeScreen() {
     return <LoadingState title='Loading guides...' />;
   }
 
+  // ── Hero banner ──────────────────────────────────────────────────────────────
+  const hero = (
+    <>
+      {/* Hero Banner Card */}
+      <View style={styles.heroBannerWrapper}>
+        <LinearGradient
+          colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroBanner}
+        >
+          <View style={styles.decorCircle} />
+          <View style={styles.heroBannerTop}>
+            <View style={styles.seasonBadge}>
+              <Text style={styles.seasonBadgeText}>CAMPUS SEASON</Text>
+            </View>
+            <View style={styles.sparkleButton}>
+              <Text style={styles.sparkleButtonText}>✶</Text>
+            </View>
+          </View>
+          <Text style={styles.heroHeading}>
+            Hey {firstName},{'\n'}let's vibe check{'\n'}your semester
+          </Text>
+          <Text style={styles.heroEmoji}>✶✧</Text>
+          <Text style={styles.heroSubtitle}>
+            Fresh guides, drops, and hacks to make uni actually make sense.
+          </Text>
+        </LinearGradient>
+      </View>
+
+      {/* Section label */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Latest guides</Text>
+        {selectedCategory !== 'all' ? (
+          <TouchableOpacity onPress={() => setSelectedCategory('all')}>
+            <Text style={styles.sectionSeeAll}>See all →</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </>
+  );
+
+  // ── Horizontal filter chip row ───────────────────────────────────────────────
+  const filterChips = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.filterList}
+    >
+      {FILTER_CATEGORIES.map(item => {
+        const isActive = item.key === selectedCategory;
+        return (
+          <TouchableOpacity
+            key={item.key}
+            style={[styles.filterPill, isActive && styles.filterPillActive]}
+            onPress={() => setSelectedCategory(item.key)}
+            activeOpacity={0.75}
+          >
+            <Text
+              style={[
+                styles.filterPillText,
+                isActive && styles.filterPillTextActive,
+              ]}
+            >
+              {item.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+
+  // ── Error state (shown as empty component) ────────────────────────────────────
+  const emptyOrError = error ? (
+    <View style={styles.errorBox}>
+      <Text style={styles.errorText}>{error}</Text>
+      <TouchableOpacity
+        style={styles.retryButton}
+        onPress={() => fetchGuides()}
+      >
+        <Text style={styles.retryButtonText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <EmptyState
+      icon={<BookOpen size={56} color='#9ca3af' strokeWidth={1.5} />}
+      title='No Guides Yet'
+      subtitle='Pull down to refresh and check back soon.'
+    />
+  );
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
+    <TabTransitionWrapper>
+      <ScrollableScreen
+        hero={hero}
+        filterChips={filterChips}
+        data={filteredGuides}
+        keyExtractor={item => item.id}
+        renderItem={({ item, index }) => (
+          <GuideCard
+            guide={item}
+            isHot={item.isFeatured}
+            onPress={() => handleGuidePress(item.id)}
+          />
+        )}
+        ListEmptyComponent={emptyOrError}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -126,144 +206,17 @@ export default function HomeScreen() {
             tintColor='#7B2FBE'
           />
         }
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* ─── Collapsible: Hero Banner + Filter Pills ─── */}
-        <Animated.View
-          style={{
-            opacity: headerAnim,
-            maxHeight: headerMaxHeight(390),
-            overflow: 'hidden',
-          }}
-        >
-          {/* Hero Banner Card */}
-          <View style={styles.heroBannerWrapper}>
-            <LinearGradient
-              colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroBanner}
-            >
-              <View style={styles.decorCircle} />
-              <View style={styles.heroBannerTop}>
-                <View style={styles.seasonBadge}>
-                  <Text style={styles.seasonBadgeText}>CAMPUS SEASON</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.sparkleButton}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.sparkleButtonText}>✶</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.heroHeading}>
-                Hey {firstName},{'\n'}let's vibe check{'\n'}your semester
-              </Text>
-              <Text style={styles.heroEmoji}>✶✧</Text>
-              <Text style={styles.heroSubtitle}>
-                Fresh guides, drops, and hacks to make uni actually make sense.
-              </Text>
-            </LinearGradient>
-          </View>
-
-          {/* Filter Category Pills */}
-          <View style={styles.filterSection}>
-            <FlatList
-              horizontal
-              data={FILTER_CATEGORIES}
-              keyExtractor={item => item.key}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterList}
-              renderItem={({ item }) => {
-                const isActive = item.key === selectedCategory;
-                return (
-                  <TouchableOpacity
-                    style={[
-                      styles.filterPill,
-                      isActive && styles.filterPillActive,
-                    ]}
-                    onPress={() => setSelectedCategory(item.key)}
-                    activeOpacity={0.75}
-                  >
-                    <Text
-                      style={[
-                        styles.filterPillText,
-                        isActive && styles.filterPillTextActive,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </View>
-        </Animated.View>
-
-        {/* ─── Trending Section ─── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Trending rn</Text>
-          <TouchableOpacity>
-            <Text style={styles.sectionSeeAll}>See all →</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ─── Guide Cards ─── */}
-        {error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => fetchGuides()}
-            >
-              <Text style={styles.retryButtonText}>Try again</Text>
-            </TouchableOpacity>
-          </View>
-        ) : filteredGuides.length === 0 ? (
-          <EmptyState
-            icon={<BookOpen size={56} color='#9ca3af' strokeWidth={1.5} />}
-            title='No Guides Yet'
-            subtitle='Pull down to refresh and check back soon.'
-          />
-        ) : (
-          <View style={styles.guidesContainer}>
-            {filteredGuides.map((guide, index) => (
-              <GuideCard
-                key={guide.id}
-                guide={guide}
-                isHot={index < 2}
-                onPress={() => handleGuidePress(guide.id)}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Bottom padding for tab bar */}
-        <View style={{ height: 90 }} />
-      </ScrollView>
-    </SafeAreaView>
+      />
+    </TabTransitionWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#EBEFFF',
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-
   // ─── Hero Banner ───
   heroBannerWrapper: {
     borderRadius: 24,
     borderWidth: 2.5,
     borderColor: '#000',
-    // Offset shadow
     shadowColor: '#000',
     shadowOffset: { width: 5, height: 5 },
     shadowOpacity: 1,
@@ -341,10 +294,8 @@ const styles = StyleSheet.create({
   },
 
   // ─── Filter Pills ───
-  filterSection: {
-    marginBottom: 22,
-  },
   filterList: {
+    paddingHorizontal: 16,
     paddingVertical: 4,
     gap: 10,
   },
@@ -374,6 +325,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14,
+    marginTop: 4,
   },
   sectionTitle: {
     fontSize: 20,
@@ -384,11 +336,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#7B2FBE',
-  },
-
-  // ─── Guides ───
-  guidesContainer: {
-    paddingTop: 6,
   },
 
   // ─── Error State ───
