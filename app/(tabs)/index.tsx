@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { LoadingState } from '@/components/LoadingState';
 import { GuideCard } from '@/components/GuideCard';
 import { HeroBanner } from '@/components/HeroBanner';
+import { FilterPill } from '@/components/FilterPill';
 import { ScrollableScreen } from '@/components/ScrollableScreen';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import { guideApi, useApi } from '@/utils/api';
@@ -128,26 +129,14 @@ export default function HomeScreen() {
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.filterList}
     >
-      {FILTER_CATEGORIES.map(item => {
-        const isActive = item.key === selectedCategory;
-        return (
-          <TouchableOpacity
-            key={item.key}
-            style={[styles.filterPill, isActive && styles.filterPillActive]}
-            onPress={() => setSelectedCategory(item.key)}
-            activeOpacity={0.75}
-          >
-            <Text
-              style={[
-                styles.filterPillText,
-                isActive && styles.filterPillTextActive,
-              ]}
-            >
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+      {FILTER_CATEGORIES.map(item => (
+        <FilterPill
+          key={item.key}
+          label={item.label}
+          isActive={item.key === selectedCategory}
+          onPress={() => setSelectedCategory(item.key)}
+        />
+      ))}
     </ScrollView>
   );
 
@@ -219,25 +208,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 4,
     gap: 10,
-  },
-  filterPill: {
-    borderRadius: 30,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderWidth: 2,
-    borderColor: '#000',
-    backgroundColor: '#FFFFFF',
-  },
-  filterPillActive: {
-    backgroundColor: '#0D0D0D',
-  },
-  filterPillText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0D0D0D',
-  },
-  filterPillTextActive: {
-    color: '#C4FF0E',
   },
 
   // ─── Section Header ───

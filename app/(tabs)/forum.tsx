@@ -38,6 +38,7 @@ import { useApi, forumApi, ForumPost } from '@/utils/api';
 import { useTabBarClearance } from '@/hooks/useTabBarClearance';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import { HeroBanner } from '@/components/HeroBanner';
+import { FilterPill } from '@/components/FilterPill';
 import { useAuth } from '@/contexts/AuthContext';
 import { canManageForumContent } from '@/utils/forum';
 import { lightTheme } from '@/constants/theme';
@@ -720,28 +721,13 @@ export default function ForumScreen() {
             contentContainerStyle={styles.filterList}
             style={styles.filterRow}
             nestedScrollEnabled
-            renderItem={({ item }) => {
-              const isActive = item.id === selectedCategory;
-              return (
-                <TouchableOpacity
-                  style={[
-                    styles.filterPill,
-                    isActive && styles.filterPillActive,
-                  ]}
-                  onPress={() => setSelectedCategory(item.id)}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={[
-                      styles.filterPillText,
-                      isActive && styles.filterPillTextActive,
-                    ]}
-                  >
-                    {item.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }}
+            renderItem={({ item }) => (
+              <FilterPill
+                label={item.name}
+                isActive={item.id === selectedCategory}
+                onPress={() => setSelectedCategory(item.id)}
+              />
+            )}
           />
         </Animated.View>
 
@@ -857,17 +843,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
   },
-  filterPill: {
-    borderRadius: 30,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 2,
-    borderColor: '#000',
-    backgroundColor: '#fff',
-  },
-  filterPillActive: { backgroundColor: '#0D0D0D' },
-  filterPillText: { fontSize: 13, fontWeight: '700', color: '#0D0D0D' },
-  filterPillTextActive: { color: '#C4FF0E' },
 
   // ─── Loading ───
   loadingBox: {

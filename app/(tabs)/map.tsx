@@ -22,6 +22,7 @@ import { MapPin, Navigation, ExternalLink, Plus } from 'lucide-react-native';
 import { useApi, mapApi } from '@/utils/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { HeroBanner } from '@/components/HeroBanner';
+import { FilterPill } from '@/components/FilterPill';
 import { ScrollableScreen } from '@/components/ScrollableScreen';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 
@@ -258,26 +259,14 @@ export default function MapScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterList}
       >
-        {chipItems.map(item => {
-          const isActive = item.key === selectedCategory;
-          return (
-            <TouchableOpacity
-              key={item.key ?? '__all__'}
-              style={[styles.filterPill, isActive && styles.filterPillActive]}
-              onPress={() => setSelectedCategory(item.key)}
-              activeOpacity={0.75}
-            >
-              <Text
-                style={[
-                  styles.filterPillText,
-                  isActive && styles.filterPillTextActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {chipItems.map(item => (
+          <FilterPill
+            key={item.key ?? '__all__'}
+            label={item.label}
+            isActive={item.key === selectedCategory}
+            onPress={() => setSelectedCategory(item.key)}
+          />
+        ))}
       </ScrollView>
     ) : null;
 
@@ -423,17 +412,6 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   // ─── Filter Pills ───
   filterList: { gap: 10, paddingHorizontal: 16, paddingVertical: 2 },
-  filterPill: {
-    borderRadius: 30,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderWidth: 2,
-    borderColor: '#000',
-    backgroundColor: '#fff',
-  },
-  filterPillActive: { backgroundColor: '#0D0D0D' },
-  filterPillText: { fontSize: 13, fontWeight: '700', color: '#0D0D0D' },
-  filterPillTextActive: { color: '#C4FF0E' },
 
   // ─── Loading ───
   loadingBox: {
