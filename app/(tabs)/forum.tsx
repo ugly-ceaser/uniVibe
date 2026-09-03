@@ -9,12 +9,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
   TextInput,
-  Animated,
   Platform,
   Alert,
 } from 'react-native';
@@ -33,12 +32,12 @@ import {
   HelpCircle,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApi, forumApi, ForumPost } from '@/utils/api';
 import { useTabBarClearance } from '@/hooks/useTabBarClearance';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import { HeroBanner } from '@/components/HeroBanner';
 import { FilterPill } from '@/components/FilterPill';
+import { ScrollableScreen } from '@/components/ScrollableScreen';
 import { useAuth } from '@/contexts/AuthContext';
 import { canManageForumContent } from '@/utils/forum';
 import { lightTheme } from '@/constants/theme';
@@ -154,8 +153,7 @@ export default function ForumScreen() {
     retryTimeoutsRef.current.add(timeout);
   }, []);
 
-  // ─── Collapsible header animation ───────────────────────────────────────────
-  const headerAnim = useRef(new Animated.Value(1)).current;
+  // ─── FAB collapse on scroll ──────────────────────────────────────────────────
   const [headerVisible, setHeaderVisible] = useState(true);
   const lastScrollY = useRef(0);
 
@@ -166,24 +164,12 @@ export default function ForumScreen() {
       lastScrollY.current = y;
 
       if (delta > 8 && headerVisible) {
-        // scrolling DOWN — collapse header
         setHeaderVisible(false);
-        Animated.timing(headerAnim, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: false,
-        }).start();
       } else if ((delta < -8 || y <= 10) && !headerVisible) {
-        // scrolling UP / back to top — expand header
         setHeaderVisible(true);
-        Animated.timing(headerAnim, {
-          toValue: 1,
-          duration: 220,
-          useNativeDriver: false,
-        }).start();
       }
     },
-    [headerAnim, headerVisible]
+    [headerVisible]
   );
 
   const getSelectedEnum = useCallback(
@@ -625,136 +611,108 @@ export default function ForumScreen() {
     [loading]
   );
 
-  // ─── Full loading state ───────────────────────────────────────────────────────
-  if (loading && !refreshing && posts.length === 0) {
-    return (
-      <TabTransitionWrapper>
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <HeroBanner
-            badgeText="PEER TO PEER"
-            title={'Spill the tea,\nask away 💬'}
-            subtitle="Real answers from real students who've been there."
-            style={{ marginHorizontal: lightTheme.spacing.md, marginTop: 12 }}
+  // ─── Hero & Search ─────────────────────────────────────────────────────────
+  const hero = (
+    <>
+      <HeroBanner
+        badgeText="PEER TO PEER"
+        title={'Spill the tea,\nask away 💬'}
+        subtitle="Real answers from real students who've been there."
+        rightAction={
+          <TouchableOpacity
+            style={styles.searchIconBtn}
+            onPress={() => setShowSearch(v => !v)}
+          >
+            {showSearch ? (
+              <X size={18} color='#000' />
+            ) : (
+              <Search size={18} color='#000' />
+            )}
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Search Input */}
+      {showSearch && (
+        <View style={styles.searchBar}>
+          <Search size={16} color='#666' />
+          <TextInput
+            style={styles.searchInput}
+            placeholder='Search posts…'
+            placeholderTextColor='#999'
+            value={searchQuery}
+            onChangeText={q => {
+              setSearchQuery(q);
+              searchGenerationRef.current += 1;
+              const generation = searchGenerationRef.current;
+              if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+              }
+              searchTimeoutRef.current = setTimeout(
+                () => handleSearch(q, 0, generation),
+                400
+              );
+            }}
+            autoFocus
           />
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size='large' color='#7B2FBE' />
-            <Text style={styles.loadingText}>Loading posts…</Text>
-          </View>
-        </SafeAreaView>
-      </TabTransitionWrapper>
-    );
-  }
+          {isSearching && (
+            <ActivityIndicator size='small' color='#7B2FBE' />
+          )}
+        </View>
+      )}
+    </>
+  );
+
+  // ─── Filter Chips ───────────────────────────────────────────────────────────
+  const filterChips = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.filterList}
+    >
+      {categories.map(item => (
+        <FilterPill
+          key={item.id}
+          label={item.name}
+          isActive={item.id === selectedCategory}
+          onPress={() => setSelectedCategory(item.id)}
+        />
+      ))}
+    </ScrollView>
+  );
+
+  // ─── Empty or Error Component ───────────────────────────────────────────────
+  const emptyOrError = error ? (
+    <View style={styles.errorBox}>
+      <Text style={styles.errorText}>{error}</Text>
+      <TouchableOpacity
+        style={styles.retryBtn}
+        onPress={() => fetchPosts(null, true, false, getSelectedEnum())}
+      >
+        <Text style={styles.retryBtnText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    renderEmpty()
+  );
 
   // ─── Main render ─────────────────────────────────────────────────────────────
   return (
     <TabTransitionWrapper>
-      <SafeAreaView style={styles.container} edges={['top']}>
-        {/* ─── Collapsible header: Hero + Search + Categories ─── */}
-        <Animated.View
-          style={[
-            styles.collapsibleHeader,
-            {
-              opacity: headerAnim,
-              maxHeight: headerAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 400],
-              }),
-              overflow: 'hidden',
-            },
-          ]}
-        >
-          {/* Hero Banner */}
-          <HeroBanner
-            badgeText="PEER TO PEER"
-            title={'Spill the tea,\nask away 💬'}
-            subtitle="Real answers from real students who've been there."
-            style={{ marginHorizontal: lightTheme.spacing.md, marginTop: 12 }}
-            rightAction={
-              <TouchableOpacity
-                style={styles.searchIconBtn}
-                onPress={() => setShowSearch(v => !v)}
-              >
-                {showSearch ? (
-                  <X size={18} color='#000' />
-                ) : (
-                  <Search size={18} color='#000' />
-                )}
-              </TouchableOpacity>
-            }
-          />
-
-          {/* Search Input */}
-          {showSearch && (
-            <View style={styles.searchBar}>
-              <Search size={16} color='#666' />
-              <TextInput
-                style={styles.searchInput}
-                placeholder='Search posts…'
-                placeholderTextColor='#999'
-                value={searchQuery}
-                onChangeText={q => {
-                  setSearchQuery(q);
-                  searchGenerationRef.current += 1;
-                  const generation = searchGenerationRef.current;
-                  if (searchTimeoutRef.current) {
-                    clearTimeout(searchTimeoutRef.current);
-                  }
-                  searchTimeoutRef.current = setTimeout(
-                    () => handleSearch(q, 0, generation),
-                    400
-                  );
-                }}
-                autoFocus
-              />
-              {isSearching && (
-                <ActivityIndicator size='small' color='#7B2FBE' />
-              )}
-            </View>
-          )}
-
-          {/* Category Pills */}
-          <FlatList
-            horizontal
-            data={categories}
-            keyExtractor={item => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterList}
-            style={styles.filterRow}
-            nestedScrollEnabled
-            renderItem={({ item }) => (
-              <FilterPill
-                label={item.name}
-                isActive={item.id === selectedCategory}
-                onPress={() => setSelectedCategory(item.id)}
-              />
-            )}
-          />
-        </Animated.View>
-
-        {/* ─── Error ─── */}
-        {error && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={() => fetchPosts(null, true, false, getSelectedEnum())}
-            >
-              <Text style={styles.retryBtnText}>Try again</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ─── Posts List ─── */}
-        <FlatList
+      <View style={styles.container}>
+        <ScrollableScreen
+          hero={hero}
+          filterChips={filterChips}
           data={displayedPosts}
           keyExtractor={item => item.id}
           renderItem={renderPost}
           ListFooterComponent={renderFooter}
-          ListEmptyComponent={renderEmpty}
+          ListEmptyComponent={emptyOrError}
           onEndReached={onLoadMore}
           onEndReachedThreshold={0.3}
           onScroll={onListScroll}
           scrollEventThrottle={16}
+          extraBottomPadding={64}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -762,11 +720,6 @@ export default function ForumScreen() {
               tintColor='#7B2FBE'
             />
           }
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: clearance },
-          ]}
         />
 
         {/* ─── Floating FAB (bottom-right) ─── */}
@@ -789,7 +742,7 @@ export default function ForumScreen() {
             )}
           </LinearGradient>
         </TouchableOpacity>
-      </SafeAreaView>
+      </View>
     </TabTransitionWrapper>
   );
 }
@@ -820,7 +773,6 @@ const styles = StyleSheet.create({
     borderColor: '#000',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginHorizontal: lightTheme.spacing.md,
     marginBottom: 12,
   },
   searchInput: {
@@ -836,7 +788,6 @@ const styles = StyleSheet.create({
   },
 
   // ─── Filter Pills ───
-  filterRow: { marginBottom: 12, height: 56, flexShrink: 0 },
   filterList: {
     paddingHorizontal: lightTheme.spacing.md,
     gap: 10,
@@ -862,7 +813,6 @@ const styles = StyleSheet.create({
     borderColor: '#000',
     padding: lightTheme.spacing.md,
     alignItems: 'center',
-    marginHorizontal: lightTheme.spacing.md,
     marginBottom: 12,
   },
   errorText: {
@@ -881,9 +831,6 @@ const styles = StyleSheet.create({
     borderColor: '#000',
   },
   retryBtnText: { fontSize: 13, fontWeight: '800', color: '#000' },
-
-  // ─── List ───
-  listContent: { paddingHorizontal: lightTheme.spacing.md },
 
   // ─── Post Card ───
   cardWrapper: {
@@ -992,9 +939,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 20,
   },
-
-  // ─── Collapsible header ───
-  collapsibleHeader: {},
 
   // ─── FAB ───
   fab: {
