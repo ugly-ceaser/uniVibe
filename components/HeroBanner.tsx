@@ -46,18 +46,22 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
           {rightAction ? <View>{rightAction}</View> : null}
         </View>
 
-        {/* Title */}
-        {typeof title === 'string' ? (
-          <Text style={styles.heroHeading}>{title}</Text>
-        ) : (
-          title
-        )}
+        {/* Bottom content block */}
+        <View style={styles.heroBannerContent}>
+          {typeof title === 'string' ? (
+            <Text style={styles.heroHeading} numberOfLines={2}>
+              {title}
+            </Text>
+          ) : (
+            title
+          )}
 
-        {/* Optional emoji / decorative string */}
-        {emoji ? <Text style={styles.heroEmoji}>{emoji}</Text> : null}
+          {emoji ? <Text style={styles.heroEmoji}>{emoji}</Text> : null}
 
-        {/* Subtitle */}
-        <Text style={styles.heroSubtitle}>{subtitle}</Text>
+          <Text style={styles.heroSubtitle} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        </View>
       </LinearGradient>
     </View>
   );
@@ -65,6 +69,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
 const styles = StyleSheet.create({
   heroBannerWrapper: {
+    width: '100%',
     borderRadius: 24,
     borderWidth: 2.5,
     borderColor: '#000',
@@ -77,9 +82,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heroBanner: {
-    borderRadius: 22,
-    padding: 20,
-    paddingBottom: lightTheme.spacing.lg,
+    minHeight: 205,
+    borderRadius: 21.5,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 20,
+    justifyContent: 'space-between',
     overflow: 'hidden',
   },
   decorCircle: {
@@ -95,7 +103,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    minHeight: 38,
   },
   seasonBadge: {
     backgroundColor: '#C4FF0E',
@@ -104,6 +112,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderWidth: 1.5,
     borderColor: '#000',
+    alignSelf: 'flex-start',
   },
   seasonBadgeText: {
     fontSize: 11,
@@ -111,21 +120,24 @@ const styles = StyleSheet.create({
     color: '#000',
     letterSpacing: 0.8,
   },
+  heroBannerContent: {
+    justifyContent: 'flex-end',
+  },
   heroHeading: {
-    fontSize: 30,
+    fontSize: 27,
     fontWeight: '900',
     color: '#FFFFFF',
-    lineHeight: 36,
-    marginBottom: 8,
+    lineHeight: 33,
+    marginBottom: 6,
   },
   heroEmoji: {
-    fontSize: 22,
-    marginBottom: 10,
+    fontSize: 20,
+    marginBottom: 6,
   },
   heroSubtitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: 'rgba(255,255,255,0.85)',
-    lineHeight: 20,
+    lineHeight: 19,
     fontWeight: '500',
   },
 });

@@ -100,9 +100,8 @@ export default function HomeScreen() {
     <>
       <HeroBanner
         badgeText="CAMPUS SEASON"
-        title={`Hey ${firstName},\nlet's vibe check\nyour semester`}
+        title={`Hey ${firstName},\nlet's vibe check ✨`}
         subtitle="Fresh guides, drops, and hacks to make uni actually make sense."
-        emoji="✶✧"
         rightAction={
           <View style={styles.sparkleButton}>
             <Text style={styles.sparkleButtonText}>✶</Text>

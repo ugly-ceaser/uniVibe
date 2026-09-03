@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
-  Switch,
   RefreshControl,
   Modal,
   FlatList,
@@ -26,128 +25,25 @@ import {
   Calendar,
   LogOut,
   ChevronRight,
+  Phone,
+  BookOpen,
+  ShieldCheck,
 } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { HeroBanner } from '@/components/HeroBanner';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useApi, profileApi } from '../../utils/api';
+import { coursesApi, useApi, profileApi } from '../../utils/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import {
-  UserProfile,
-  UpdateProfileRequest,
-  VerifyFieldsRequest,
-} from '../../utils/types';
+  useProfileHierarchy,
+  normalizeSemester,
+} from '@/hooks/useProfileHierarchy';
+import type { UserProfile, UpdateProfileRequest } from '../../utils/types';
 
-// ─── University Data ────────────────────────────────────────────────────────
-const UNIVERSITIES = [
-  'University of Nigeria, Nsukka (UNN)',
-  'University of Nigeria, Enugu Campus (UNEC)',
-  'Enugu State University of Science and Technology (ESUT)',
-  'Godfrey Okoye University (GOUNI)',
-  'Caritas University',
-  'Renaissance University',
-  'Coal City University',
-  'Peaceland University',
-  'Maduka University',
-  'Federal University of Allied Health Sciences, Enugu (FUAHSE)',
-  'State University of Medical and Applied Sciences (SUMAS)',
-];
-
-const UNIVERSITY_DATA: Record<string, Record<string, string[]>> = {
-  'Godfrey Okoye University (GOUNI)': {
-    'College of Medicine': ['Medicine & Surgery (MBBS)'],
-    'Faculty of Allied Health Sciences': ['Nursing Science'],
-    'Faculty of Computing and Information Technology (FACIT)': [
-      'Computer Science',
-      'Software Engineering',
-      'Cybersecurity',
-      'Data Science',
-    ],
-    'Faculty of Law': [
-      'Jurisprudence & International Law',
-      'Public Law',
-      'Private & Business Law',
-    ],
-    'Faculty of Arts': [
-      'English & Literary Studies',
-      'History & International Studies',
-      'Music',
-      'Philosophy',
-    ],
-    'Faculty of Management & Social Sciences': [
-      'Accounting',
-      'Management',
-      'Public Administration',
-      'Economics',
-      'Political Science',
-      'International Relations',
-      'Mass Communication',
-      'Psychology',
-      'Religious Studies',
-      'Sociology',
-    ],
-    'Faculty of Natural Sciences & Environmental Studies': [
-      'Applied Biology',
-      'Biotechnology',
-      'Microbiology',
-      'Biochemistry',
-      'Chemistry',
-      'Industrial Chemistry',
-      'Mathematics',
-      'Physics',
-      'Architecture',
-    ],
-    'Faculty of Education': [
-      'Biology Education',
-      'Chemistry Education',
-      'Mathematics Education',
-      'Physics Education',
-      'English & Literary Studies Education',
-      'History & International Studies Education',
-      'Economics Education',
-      'Political Science & Government Education',
-      'Social Studies Education',
-      'Business Education',
-      'Computer Science Education',
-    ],
-  },
-  'Caritas University': {
-    'Faculty of Engineering': [
-      'Chemical Engineering',
-      'Computer Engineering',
-      'Electrical/Electronic Engineering',
-      'Mechanical Engineering',
-    ],
-    'Faculty of Environmental Sciences': [
-      'Architecture',
-      'Estate Management',
-      'Urban & Regional Planning',
-    ],
-    'Faculty of Health Sciences': [
-      'Nursing Science',
-      'Medical Laboratory Science',
-      'Radiography & Radiation Science',
-    ],
-    'Faculty of Natural Sciences': [
-      'Computer Science',
-      'Biochemistry',
-      'Microbiology',
-      'Industrial Chemistry',
-      'Mathematics & Statistics',
-    ],
-    'Faculty of Management & Social Sciences': [
-      'Accounting',
-      'Banking & Finance',
-      'Business Administration',
-      'Economics',
-      'English',
-      'Industrial Relations & Personnel Management (IRPM)',
-      'Marketing',
-      'Mass Communication',
-      'Political Science',
-      'Psychology',
-      'Public Administration',
-      'Sociology',
-    ],
-  },
+type PickerOption = {
+  id: string;
+  label: string;
+  sublabel?: string;
 };
 
 // ─── Icon box colours ─────────────────────────────────────────────────────────
@@ -210,72 +106,85 @@ function InfoRow({
   );
 }
 
+function VerificationBadge({ verified }: { verified: boolean }) {
+  return (
+    <View
+      style={[
+        styles.verificationBadge,
+        verified
+          ? styles.verificationBadgeVerified
+          : styles.verificationBadgePending,
+      ]}
+    >
+      <ShieldCheck size={13} color={verified ? '#166534' : '#92400E'} />
+      <Text
+        style={[
+          styles.verificationBadgeText,
+          verified
+            ? styles.verificationTextVerified
+            : styles.verificationTextPending,
+        ]}
+      >
+        {verified ? 'Verified' : 'Not verified'}
+      </Text>
+    </View>
+  );
+}
+
+const profileToEditForm = (profile: UserProfile): UpdateProfileRequest => ({
+  fullName: profile.fullname || '',
+  phone: profile.phone || '',
+  regNumber: profile.regNumber || '',
+  nin: profile.nin || '',
+});
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const router = useRouter();
+  const { logout, updateUser } = useAuth();
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const api = useApi();
   const profileClient = React.useMemo(() => profileApi(api), [api]);
-
-  React.useEffect(() => {
-    if (edit === 'true') {
-      setEditing(true);
-    }
-  }, [edit]);
+  const hierarchyClient = React.useMemo(() => coursesApi(api), [api]);
+  const hierarchy = useProfileHierarchy(hierarchyClient);
+  const handledEditParam = React.useRef(false);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [pickerModal, setPickerModal] = useState<{
     visible: boolean;
     title: string;
-    options: string[];
-    onSelect: (val: string) => void;
+    options: PickerOption[];
+    onSelect: (id: string) => void;
   }>({ visible: false, title: '', options: [], onSelect: () => {} });
 
   const [editForm, setEditForm] = useState<UpdateProfileRequest>({
     fullName: '',
     phone: '',
-    department: '',
-    faculty: '',
-    level: 100,
-    semester: 'First',
     regNumber: '',
     nin: '',
-    university: '',
   });
-  const [verificationFields, setVerificationFields] =
-    useState<VerifyFieldsRequest>({});
 
   // ─── Data fetch ─────────────────────────────────────────────────────────────
   const fetchProfile = useCallback(
     async (isRefresh = false) => {
       try {
-        isRefresh ? setRefreshing(true) : setLoading(true);
+        if (isRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
         setError(null);
         const response = await profileClient.getProfile();
         if (response?.data) {
           setProfile(response.data);
-          setEditForm({
-            fullName: response.data.fullname || '',
-            phone: response.data.phone || '',
-            department: response.data.department || '',
-            faculty: response.data.faculty || '',
-            level: response.data.level || 100,
-            semester:
-              response.data.semester === 'First' ||
-              response.data.semester === 'Second'
-                ? response.data.semester
-                : 'First',
-            regNumber: response.data.regNumber || '',
-            nin: response.data.nin || '',
-            university: response.data.university || '',
-          });
+          setEditForm(profileToEditForm(response.data));
+          await updateUser(response.data);
         }
       } catch {
         setError('Failed to load profile. Please try again.');
@@ -284,7 +193,7 @@ export default function ProfileScreen() {
         setRefreshing(false);
       }
     },
-    [profileClient]
+    [profileClient, updateUser]
   );
 
   React.useEffect(() => {
@@ -293,13 +202,86 @@ export default function ProfileScreen() {
 
   const onRefresh = useCallback(() => fetchProfile(true), [fetchProfile]);
 
+  const beginEditing = useCallback(() => {
+    if (!profile) {
+      return;
+    }
+    setEditForm(profileToEditForm(profile));
+    setEditing(true);
+    void hierarchy.hydrate(profile);
+  }, [hierarchy, profile]);
+
+  const cancelEditing = useCallback(() => {
+    if (profile) {
+      setEditForm(profileToEditForm(profile));
+    }
+    setEditing(false);
+  }, [profile]);
+
+  React.useEffect(() => {
+    if (edit === 'true' && profile && !handledEditParam.current) {
+      handledEditParam.current = true;
+      beginEditing();
+      router.setParams({ edit: undefined });
+    } else if (edit !== 'true') {
+      handledEditParam.current = false;
+    }
+  }, [beginEditing, edit, profile, router]);
+
+  const showPicker = useCallback(
+    (
+      title: string,
+      options: PickerOption[],
+      onSelect: (id: string) => void
+    ) => {
+      setPickerModal({ visible: true, title, options, onSelect });
+    },
+    []
+  );
+
   const handleUpdateProfile = useCallback(async () => {
-    if (!profile) return;
+    if (!profile) {
+      return;
+    }
+
+    const { university, faculty, department, programme, level, semester } =
+      hierarchy.selection;
+    const normalizedSemester = normalizeSemester(semester?.name);
+    if (
+      !university ||
+      !faculty ||
+      !department ||
+      !programme ||
+      !level ||
+      !normalizedSemester
+    ) {
+      Alert.alert(
+        'Complete your academic profile',
+        'Select a university, faculty, department, programme, level, and semester.'
+      );
+      return;
+    }
+
+    if (!editForm.fullName?.trim()) {
+      Alert.alert('Full name required', 'Enter your full name before saving.');
+      return;
+    }
+
     try {
       setUpdating(true);
-      const response = await profileClient.updateProfile(editForm);
+      const response = await profileClient.updateProfile({
+        ...editForm,
+        university: university.name,
+        faculty: faculty.name,
+        department: department.name,
+        programme: programme.name,
+        level: level.level,
+        semester: normalizedSemester,
+      });
       if (response?.data) {
         setProfile(response.data);
+        setEditForm(profileToEditForm(response.data));
+        await updateUser(response.data);
         setEditing(false);
         Alert.alert('Success', response.message || 'Profile updated!');
       }
@@ -308,22 +290,7 @@ export default function ProfileScreen() {
     } finally {
       setUpdating(false);
     }
-  }, [profile, editForm, profileClient]);
-
-  const handleVerifyFields = useCallback(async () => {
-    try {
-      setVerifying(true);
-      const response = await profileClient.verifyFields(verificationFields);
-      if (response?.data) {
-        setProfile(response.data);
-        Alert.alert('Success', response.message || 'Verification updated!');
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to update verification status.');
-    } finally {
-      setVerifying(false);
-    }
-  }, [verificationFields, profileClient]);
+  }, [profile, editForm, hierarchy.selection, profileClient, updateUser]);
 
   const handleLogout = useCallback(() => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -331,37 +298,30 @@ export default function ProfileScreen() {
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: () => router.replace('/login'),
+        onPress: async () => {
+          await logout();
+          router.replace('/login');
+        },
       },
     ]);
-  }, [router]);
+  }, [logout, router]);
 
   // ─── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.heroBannerWrapper}>
-          <LinearGradient
-            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBanner}
-          >
-            <View style={styles.decorCircle} />
-            <View style={styles.seasonBadge}>
-              <Text style={styles.seasonBadgeText}>YOUR CORNER</Text>
-            </View>
-            <Text style={styles.heroHeading}>That's you ✦</Text>
-            <Text style={styles.heroSubtitle}>
-              Your academic profile and details.
-            </Text>
-          </LinearGradient>
-        </View>
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size='large' color='#7B2FBE' />
-          <Text style={styles.loadingText}>Loading profile…</Text>
-        </View>
-      </SafeAreaView>
+      <TabTransitionWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <HeroBanner
+            badgeText="YOUR CORNER"
+            title="That's you ✦"
+            subtitle="Your academic profile and details."
+          />
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size='large' color='#7B2FBE' />
+            <Text style={styles.loadingText}>Loading profile…</Text>
+          </View>
+        </SafeAreaView>
+      </TabTransitionWrapper>
     );
   }
 
@@ -371,34 +331,28 @@ export default function ProfileScreen() {
 
   // ─── Main Render ──────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor='#7B2FBE'
-          />
-        }
-      >
-        {/* ─── Hero Banner ─── */}
-        <View style={styles.heroBannerWrapper}>
-          <LinearGradient
-            colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBanner}
-          >
-            <View style={styles.decorCircle} />
-            <View style={styles.heroBannerTop}>
-              <View style={styles.seasonBadge}>
-                <Text style={styles.seasonBadgeText}>YOUR CORNER</Text>
-              </View>
+    <TabTransitionWrapper>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor='#7B2FBE'
+            />
+          }
+        >
+          {/* ─── Hero Banner ─── */}
+          <HeroBanner
+            badgeText="YOUR CORNER"
+            title={`That's you,\n${firstName} ✦`}
+            subtitle="Your academic profile and details."
+            rightAction={
               <TouchableOpacity
                 style={styles.editIconBtn}
-                onPress={() => setEditing(e => !e)}
+                onPress={editing ? cancelEditing : beginEditing}
               >
                 {editing ? (
                   <X size={18} color='#000' />
@@ -406,329 +360,479 @@ export default function ProfileScreen() {
                   <Edit3 size={18} color='#000' />
                 )}
               </TouchableOpacity>
-            </View>
-            <Text style={styles.heroHeading}>
-              That's you,{'\n'}
-              {firstName} ✦
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              Your academic profile and details.
-            </Text>
-          </LinearGradient>
-        </View>
-
-        {/* ─── Error ─── */}
-        {error && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={() => fetchProfile()}
-            >
-              <Text style={styles.retryBtnText}>Try again</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ─── Personal Information ─── */}
-        <SectionCard title='Personal Information'>
-          {editing ? (
-            <View style={styles.editBlock}>
-              <Text style={styles.editLabel}>Full name</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editForm.fullName}
-                onChangeText={v => setEditForm(f => ({ ...f, fullName: v }))}
-                placeholder='Your full name'
-              />
-              <Text style={styles.editLabel}>Phone</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editForm.phone}
-                onChangeText={v => setEditForm(f => ({ ...f, phone: v }))}
-                placeholder='+234...'
-                keyboardType='phone-pad'
-              />
-            </View>
-          ) : (
-            <>
-              <InfoRow
-                iconBg={ICON_COLORS.person}
-                icon={<User size={18} color='#000' />}
-                label='Full name'
-                value={profile?.fullname}
-              />
-              <InfoRow
-                iconBg={ICON_COLORS.id}
-                icon={<CreditCard size={18} color='#000' />}
-                label='Email'
-                value={profile?.email}
-                hasBorder={false}
-              />
-            </>
-          )}
-        </SectionCard>
-
-        {/* ─── Academic Information ─── */}
-        <SectionCard title='Academic Information'>
-          <InfoRow
-            iconBg={ICON_COLORS.uni}
-            icon={<Building size={18} color='#000' />}
-            label='University'
-            value={profile?.university || 'Not set'}
-          />
-
-          {/* Reg Number + verify toggle */}
-          <InfoRow
-            iconBg={ICON_COLORS.id}
-            icon={<CreditCard size={18} color='#000' />}
-            label='Registration number'
-            value={profile?.regNumber || 'Not set'}
-            rightEl={
-              <View style={styles.verifyRow}>
-                <Switch
-                  value={!!verificationFields.regNumber}
-                  onValueChange={v =>
-                    setVerificationFields(f => ({ ...f, regNumber: v }))
-                  }
-                  trackColor={{ false: '#ddd', true: '#C4FF0E' }}
-                  thumbColor='#fff'
-                />
-                <TouchableOpacity
-                  style={styles.verifyLink}
-                  onPress={handleVerifyFields}
-                  disabled={verifying}
-                >
-                  <Text style={styles.verifyLinkText}>Verify</Text>
-                </TouchableOpacity>
-              </View>
             }
           />
 
-          <InfoRow
-            iconBg={ICON_COLORS.faculty}
-            icon={<Building size={18} color='#000' />}
-            label='Faculty'
-            value={editing ? undefined : profile?.faculty}
-          />
-
-          <InfoRow
-            iconBg={ICON_COLORS.dept}
-            icon={<GraduationCap size={18} color='#000' />}
-            label='Department'
-            value={editing ? undefined : profile?.department}
-          />
-
-          <InfoRow
-            iconBg={ICON_COLORS.level}
-            icon={<Calendar size={18} color='#000' />}
-            label='Level'
-            value={profile?.level ? `${profile.level} Level` : 'Not set'}
-          />
-
-          <InfoRow
-            iconBg={ICON_COLORS.sem}
-            icon={<Calendar size={18} color='#000' />}
-            label='Semester'
-            value={profile?.semester || 'First'}
-            hasBorder={false}
-          />
-
-          {editing && (
-            <View style={styles.editBlock}>
-              <Text style={styles.editLabel}>University</Text>
+          {/* ─── Error ─── */}
+          {error && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity
-                style={styles.editInput}
-                onPress={() => {
-                  setPickerModal({
-                    visible: true,
-                    title: 'Select University',
-                    options: UNIVERSITIES,
-                    onSelect: val => {
-                      setEditForm(f => ({
-                        ...f,
-                        university: val,
-                        // Reset faculty and department if new university has predefined lists
-                        faculty: UNIVERSITY_DATA[val] ? '' : f.faculty,
-                        department: UNIVERSITY_DATA[val] ? '' : f.department,
-                      }));
-                    },
-                  });
-                }}
+                style={styles.retryBtn}
+                onPress={() => fetchProfile()}
               >
-                <Text
-                  style={{
-                    color: editForm.university ? '#0D0D0D' : '#999',
-                    fontWeight: '600',
-                  }}
-                >
-                  {editForm.university || 'Select University'}
-                </Text>
+                <Text style={styles.retryBtnText}>Try again</Text>
               </TouchableOpacity>
-
-              <Text style={styles.editLabel}>Faculty</Text>
-              {editForm.university && UNIVERSITY_DATA[editForm.university] ? (
-                <TouchableOpacity
-                  style={styles.editInput}
-                  onPress={() => {
-                    setPickerModal({
-                      visible: true,
-                      title: 'Select Faculty',
-                      options: Object.keys(
-                        UNIVERSITY_DATA[editForm.university!]
-                      ),
-                      onSelect: val => {
-                        setEditForm(f => ({
-                          ...f,
-                          faculty: val,
-                          department: '', // Reset department on faculty change
-                        }));
-                      },
-                    });
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: editForm.faculty ? '#0D0D0D' : '#999',
-                      fontWeight: '600',
-                    }}
-                  >
-                    {editForm.faculty || 'Select Faculty'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TextInput
-                  style={styles.editInput}
-                  value={editForm.faculty}
-                  onChangeText={v => setEditForm(f => ({ ...f, faculty: v }))}
-                  placeholder='Your faculty'
-                />
-              )}
-
-              <Text style={styles.editLabel}>Department</Text>
-              {editForm.university &&
-              editForm.faculty &&
-              UNIVERSITY_DATA[editForm.university]?.[editForm.faculty] ? (
-                <TouchableOpacity
-                  style={styles.editInput}
-                  onPress={() => {
-                    setPickerModal({
-                      visible: true,
-                      title: 'Select Department',
-                      options:
-                        UNIVERSITY_DATA[editForm.university!][
-                          editForm.faculty!
-                        ],
-                      onSelect: val => {
-                        setEditForm(f => ({ ...f, department: val }));
-                      },
-                    });
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: editForm.department ? '#0D0D0D' : '#999',
-                      fontWeight: '600',
-                    }}
-                  >
-                    {editForm.department || 'Select Department'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TextInput
-                  style={styles.editInput}
-                  value={editForm.department}
-                  onChangeText={v =>
-                    setEditForm(f => ({ ...f, department: v }))
-                  }
-                  placeholder='Your department'
-                />
-              )}
             </View>
           )}
-        </SectionCard>
 
-        {/* ─── Save / Cancel buttons (edit mode) ─── */}
-        {editing && (
-          <View style={styles.editActionRow}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => setEditing(false)}
-            >
-              <X size={16} color='#000' />
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.saveBtn}
-              onPress={handleUpdateProfile}
-              disabled={updating}
-            >
-              {updating ? (
-                <ActivityIndicator size='small' color='#000' />
-              ) : (
-                <>
-                  <Check size={16} color='#000' />
-                  <Text style={styles.saveBtnText}>Save changes</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+          {/* ─── Personal Information ─── */}
+          <SectionCard title='Personal Information'>
+            {editing ? (
+              <View style={styles.editBlock}>
+                <Text style={styles.editLabel}>Full name</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editForm.fullName}
+                  onChangeText={v => setEditForm(f => ({ ...f, fullName: v }))}
+                  placeholder='Your full name'
+                />
+                <Text style={styles.editLabel}>Phone</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editForm.phone}
+                  onChangeText={v => setEditForm(f => ({ ...f, phone: v }))}
+                  placeholder='+234...'
+                  keyboardType='phone-pad'
+                />
+                <Text style={styles.editLabel}>Registration number</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editForm.regNumber}
+                  onChangeText={v => setEditForm(f => ({ ...f, regNumber: v }))}
+                  placeholder='Your registration number'
+                  autoCapitalize='characters'
+                />
+                <Text style={styles.editLabel}>National ID number (NIN)</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editForm.nin}
+                  onChangeText={v => setEditForm(f => ({ ...f, nin: v }))}
+                  placeholder='Your NIN'
+                  keyboardType='number-pad'
+                />
+              </View>
+            ) : (
+              <>
+                <InfoRow
+                  iconBg={ICON_COLORS.person}
+                  icon={<User size={18} color='#000' />}
+                  label='Full name'
+                  value={profile?.fullname}
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.id}
+                  icon={<CreditCard size={18} color='#000' />}
+                  label='Email'
+                  value={profile?.email}
+                  rightEl={
+                    <VerificationBadge
+                      verified={!!profile?.verificationStatus.email}
+                    />
+                  }
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.sem}
+                  icon={<Phone size={18} color='#000' />}
+                  label='Phone'
+                  value={profile?.phone}
+                  rightEl={
+                    <VerificationBadge
+                      verified={!!profile?.verificationStatus.phone}
+                    />
+                  }
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.id}
+                  icon={<CreditCard size={18} color='#000' />}
+                  label='National ID number (NIN)'
+                  value={profile?.nin}
+                  hasBorder={false}
+                  rightEl={
+                    <VerificationBadge
+                      verified={!!profile?.verificationStatus.nin}
+                    />
+                  }
+                />
+              </>
+            )}
+          </SectionCard>
 
-        {/* ─── Logout ─── */}
-        <View style={styles.logoutWrapper}>
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <View
-              style={[
-                styles.rowIconBox,
-                { backgroundColor: ICON_COLORS.logout },
-              ]}
-            >
-              <LogOut size={18} color='#fff' />
-            </View>
-            <Text style={styles.logoutText}>Log out</Text>
-          </TouchableOpacity>
-        </View>
+          {/* ─── Academic Information ─── */}
+          <SectionCard title='Academic Information'>
+            {editing ? (
+              <View style={styles.editBlock}>
+                <Text style={styles.editLabel}>University</Text>
+                <TouchableOpacity
+                  style={[styles.editInput, styles.selectButton]}
+                  disabled={hierarchy.loading}
+                  onPress={() =>
+                    showPicker(
+                      'Select University',
+                      hierarchy.universities.map(item => ({
+                        id: item.id,
+                        label: item.name,
+                        sublabel: [item.shortName, item.state]
+                          .filter(Boolean)
+                          .join(' · '),
+                      })),
+                      id => {
+                        const item = hierarchy.universities.find(
+                          option => option.id === id
+                        );
+                        if (item) {
+                          void hierarchy.selectUniversity(item);
+                        }
+                      }
+                    )
+                  }
+                >
+                  <Text style={styles.selectButtonText}>
+                    {hierarchy.selection.university?.name ||
+                      'Select University'}
+                  </Text>
+                  <ChevronRight size={18} color='#555' />
+                </TouchableOpacity>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+                <Text style={styles.editLabel}>Faculty</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.editInput,
+                    styles.selectButton,
+                    !hierarchy.selection.university &&
+                      styles.selectButtonDisabled,
+                  ]}
+                  disabled={
+                    !hierarchy.selection.university || hierarchy.loading
+                  }
+                  onPress={() =>
+                    showPicker(
+                      'Select Faculty',
+                      hierarchy.faculties.map(item => ({
+                        id: item.id,
+                        label: item.name,
+                      })),
+                      id => {
+                        const item = hierarchy.faculties.find(
+                          option => option.id === id
+                        );
+                        if (item) {
+                          void hierarchy.selectFaculty(item);
+                        }
+                      }
+                    )
+                  }
+                >
+                  <Text style={styles.selectButtonText}>
+                    {hierarchy.selection.faculty?.name || 'Select Faculty'}
+                  </Text>
+                  <ChevronRight size={18} color='#555' />
+                </TouchableOpacity>
 
-      <Modal
-        visible={pickerModal.visible}
-        transparent={true}
-        animationType='fade'
-        onRequestClose={() => setPickerModal(p => ({ ...p, visible: false }))}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{pickerModal.title}</Text>
+                <Text style={styles.editLabel}>Department</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.editInput,
+                    styles.selectButton,
+                    !hierarchy.selection.faculty && styles.selectButtonDisabled,
+                  ]}
+                  disabled={!hierarchy.selection.faculty || hierarchy.loading}
+                  onPress={() =>
+                    showPicker(
+                      'Select Department',
+                      hierarchy.departments.map(item => ({
+                        id: item.id,
+                        label: item.name,
+                      })),
+                      id => {
+                        const item = hierarchy.departments.find(
+                          option => option.id === id
+                        );
+                        if (item) {
+                          void hierarchy.selectDepartment(item);
+                        }
+                      }
+                    )
+                  }
+                >
+                  <Text style={styles.selectButtonText}>
+                    {hierarchy.selection.department?.name ||
+                      'Select Department'}
+                  </Text>
+                  <ChevronRight size={18} color='#555' />
+                </TouchableOpacity>
+
+                <Text style={styles.editLabel}>Programme</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.editInput,
+                    styles.selectButton,
+                    !hierarchy.selection.department &&
+                      styles.selectButtonDisabled,
+                  ]}
+                  disabled={
+                    !hierarchy.selection.department || hierarchy.loading
+                  }
+                  onPress={() =>
+                    showPicker(
+                      'Select Programme',
+                      hierarchy.programmes.map(item => ({
+                        id: item.id,
+                        label: item.name,
+                      })),
+                      id => {
+                        const item = hierarchy.programmes.find(
+                          option => option.id === id
+                        );
+                        if (item) {
+                          void hierarchy.selectProgramme(item);
+                        }
+                      }
+                    )
+                  }
+                >
+                  <Text style={styles.selectButtonText}>
+                    {hierarchy.selection.programme?.name || 'Select Programme'}
+                  </Text>
+                  <ChevronRight size={18} color='#555' />
+                </TouchableOpacity>
+
+                <Text style={styles.editLabel}>Level</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.editInput,
+                    styles.selectButton,
+                    !hierarchy.selection.programme &&
+                      styles.selectButtonDisabled,
+                  ]}
+                  disabled={!hierarchy.selection.programme || hierarchy.loading}
+                  onPress={() =>
+                    showPicker(
+                      'Select Level',
+                      hierarchy.levels.map(item => ({
+                        id: item.id,
+                        label: `${item.level} Level`,
+                      })),
+                      id => {
+                        const item = hierarchy.levels.find(
+                          option => option.id === id
+                        );
+                        if (item) {
+                          hierarchy.selectLevel(item);
+                        }
+                      }
+                    )
+                  }
+                >
+                  <Text style={styles.selectButtonText}>
+                    {hierarchy.selection.level
+                      ? `${hierarchy.selection.level.level} Level`
+                      : 'Select Level'}
+                  </Text>
+                  <ChevronRight size={18} color='#555' />
+                </TouchableOpacity>
+
+                <Text style={styles.editLabel}>Semester</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.editInput,
+                    styles.selectButton,
+                    !hierarchy.selection.programme &&
+                      styles.selectButtonDisabled,
+                  ]}
+                  disabled={!hierarchy.selection.programme || hierarchy.loading}
+                  onPress={() =>
+                    showPicker(
+                      'Select Semester',
+                      hierarchy.semesters.map(item => ({
+                        id: item.id,
+                        label: item.name,
+                      })),
+                      id => {
+                        const item = hierarchy.semesters.find(
+                          option => option.id === id
+                        );
+                        if (item) {
+                          hierarchy.selectSemester(item);
+                        }
+                      }
+                    )
+                  }
+                >
+                  <Text style={styles.selectButtonText}>
+                    {hierarchy.selection.semester?.name || 'Select Semester'}
+                  </Text>
+                  <ChevronRight size={18} color='#555' />
+                </TouchableOpacity>
+
+                {hierarchy.loading && (
+                  <View style={styles.hierarchyStatus}>
+                    <ActivityIndicator size='small' color='#7B2FBE' />
+                    <Text style={styles.hierarchyStatusText}>
+                      Loading academic options…
+                    </Text>
+                  </View>
+                )}
+                {hierarchy.error && (
+                  <View style={styles.hierarchyErrorRow}>
+                    <Text style={styles.hierarchyError}>{hierarchy.error}</Text>
+                    <TouchableOpacity
+                      style={styles.hierarchyRetryButton}
+                      onPress={() => profile && void hierarchy.hydrate(profile)}
+                    >
+                      <Text style={styles.hierarchyRetryText}>Retry</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <>
+                <InfoRow
+                  iconBg={ICON_COLORS.uni}
+                  icon={<Building size={18} color='#000' />}
+                  label='University'
+                  value={profile?.university}
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.id}
+                  icon={<CreditCard size={18} color='#000' />}
+                  label='Registration number'
+                  value={profile?.regNumber}
+                  rightEl={
+                    <VerificationBadge
+                      verified={!!profile?.verificationStatus.regNumber}
+                    />
+                  }
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.faculty}
+                  icon={<Building size={18} color='#000' />}
+                  label='Faculty'
+                  value={profile?.faculty}
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.dept}
+                  icon={<GraduationCap size={18} color='#000' />}
+                  label='Department'
+                  value={profile?.department}
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.person}
+                  icon={<BookOpen size={18} color='#000' />}
+                  label='Programme'
+                  value={profile?.programme}
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.level}
+                  icon={<Calendar size={18} color='#000' />}
+                  label='Level'
+                  value={profile?.level ? `${profile.level} Level` : null}
+                />
+                <InfoRow
+                  iconBg={ICON_COLORS.sem}
+                  icon={<Calendar size={18} color='#000' />}
+                  label='Semester'
+                  value={profile?.semester}
+                  hasBorder={false}
+                />
+              </>
+            )}
+          </SectionCard>
+
+          {/* ─── Save / Cancel buttons (edit mode) ─── */}
+          {editing && (
+            <View style={styles.editActionRow}>
               <TouchableOpacity
-                onPress={() => setPickerModal(p => ({ ...p, visible: false }))}
+                style={styles.cancelBtn}
+                onPress={cancelEditing}
               >
-                <X size={20} color='#000' />
+                <X size={16} color='#000' />
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleUpdateProfile}
+                disabled={updating}
+              >
+                {updating ? (
+                  <ActivityIndicator size='small' color='#000' />
+                ) : (
+                  <>
+                    <Check size={16} color='#000' />
+                    <Text style={styles.saveBtnText}>Save changes</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={pickerModal.options}
-              keyExtractor={item => item}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalOption}
-                  onPress={() => {
-                    pickerModal.onSelect(item);
-                    setPickerModal(p => ({ ...p, visible: false }));
-                  }}
-                >
-                  <Text style={styles.modalOptionText}>{item}</Text>
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={{ paddingBottom: 20 }}
-            />
+          )}
+
+          {/* ─── Logout ─── */}
+          <View style={styles.logoutWrapper}>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <View
+                style={[
+                  styles.rowIconBox,
+                  { backgroundColor: ICON_COLORS.logout },
+                ]}
+              >
+                <LogOut size={18} color='#fff' />
+              </View>
+              <Text style={styles.logoutText}>Log out</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <Modal
+          visible={pickerModal.visible}
+          transparent={true}
+          animationType='fade'
+          onRequestClose={() => setPickerModal(p => ({ ...p, visible: false }))}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{pickerModal.title}</Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    setPickerModal(p => ({ ...p, visible: false }))
+                  }
+                >
+                  <X size={20} color='#000' />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={pickerModal.options}
+                keyExtractor={item => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.modalOption}
+                    onPress={() => {
+                      pickerModal.onSelect(item.id);
+                      setPickerModal(p => ({ ...p, visible: false }));
+                    }}
+                  >
+                    <Text style={styles.modalOptionText}>{item.label}</Text>
+                    {!!item.sublabel && (
+                      <Text style={styles.modalOptionSublabel}>
+                        {item.sublabel}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <Text style={styles.modalEmptyText}>
+                    No options are available for this selection.
+                  </Text>
+                }
+                contentContainerStyle={{ paddingBottom: 20 }}
+              />
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </TabTransitionWrapper>
   );
 }
 
@@ -737,54 +841,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#EBEFFF' },
   scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
 
-  // ─── Hero Banner ───
-  heroBannerWrapper: {
-    borderRadius: 24,
-    borderWidth: 2.5,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  heroBanner: {
-    borderRadius: 22,
-    padding: 20,
-    paddingBottom: 24,
-    overflow: 'hidden',
-  },
-  decorCircle: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    top: -30,
-    right: -30,
-  },
-  heroBannerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  seasonBadge: {
-    backgroundColor: '#C4FF0E',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1.5,
-    borderColor: '#000',
-  },
-  seasonBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.8,
-  },
   editIconBtn: {
     width: 38,
     height: 38,
@@ -794,19 +850,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#000',
-  },
-  heroHeading: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#fff',
-    lineHeight: 36,
-    marginBottom: 10,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 20,
-    fontWeight: '500',
   },
 
   // ─── Loading ───
@@ -899,17 +942,27 @@ const styles = StyleSheet.create({
   },
   rowValue: { fontSize: 15, fontWeight: '700', color: '#0D0D0D', marginTop: 1 },
 
-  // ─── Verify toggle ───
-  verifyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  verifyLink: {
-    backgroundColor: '#EDE9FE',
+  // ─── Verification status ───
+  verificationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     borderRadius: 12,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1.5,
-    borderColor: '#7B2FBE',
+    paddingVertical: 5,
+    borderWidth: 1,
   },
-  verifyLinkText: { fontSize: 11, fontWeight: '700', color: '#7B2FBE' },
+  verificationBadgeVerified: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
+  },
+  verificationBadgePending: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FCD34D',
+  },
+  verificationBadgeText: { fontSize: 10, fontWeight: '800' },
+  verificationTextVerified: { color: '#166534' },
+  verificationTextPending: { color: '#92400E' },
 
   // ─── Edit block ───
   editBlock: { paddingTop: 8, gap: 8 },
@@ -931,6 +984,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0D0D0D',
   },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectButtonDisabled: { opacity: 0.45 },
+  selectButtonText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0D0D0D',
+  },
+  hierarchyStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  hierarchyStatusText: { fontSize: 12, fontWeight: '600', color: '#555' },
+  hierarchyErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  hierarchyError: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  hierarchyRetryButton: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#7B2FBE',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  hierarchyRetryText: { fontSize: 11, fontWeight: '800', color: '#7B2FBE' },
 
   // ─── Edit action row ───
   editActionRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
@@ -1035,5 +1127,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#0D0D0D',
+  },
+  modalOptionSublabel: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#777',
+  },
+  modalEmptyText: {
+    padding: 24,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#777',
   },
 });
