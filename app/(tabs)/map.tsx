@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MapPin, Navigation, ExternalLink, Plus } from 'lucide-react-native';
 import { useApi, mapApi } from '@/utils/api';
 import { useFocusEffect } from '@react-navigation/native';
+import { HeroBanner } from '@/components/HeroBanner';
 import { ScrollableScreen } from '@/components/ScrollableScreen';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 
@@ -231,23 +232,11 @@ export default function MapScreen() {
 
   // ── Hero banner ──────────────────────────────────────────────────────────────
   const hero = (
-    <View style={styles.heroBannerWrapper}>
-      <LinearGradient
-        colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.heroBanner}
-      >
-        <View style={styles.decorCircle} />
-        <View style={styles.seasonBadge}>
-          <Text style={styles.seasonBadgeText}>WAYFINDING</Text>
-        </View>
-        <Text style={styles.heroHeading}>Where to{'\n'}next? 📍</Text>
-        <Text style={styles.heroSubtitle}>
-          Every building, office, and hangout spot on campus.
-        </Text>
-      </LinearGradient>
-    </View>
+    <HeroBanner
+      badgeText="WAYFINDING"
+      title={'Where to\nnext? 📍'}
+      subtitle="Every building, office, and hangout spot on campus."
+    />
   );
 
   // ── Filter chip row ──────────────────────────────────────────────────────────
@@ -432,64 +421,6 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ─── Hero Banner ───
-  heroBannerWrapper: {
-    borderRadius: 24,
-    borderWidth: 2.5,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  heroBanner: {
-    borderRadius: 22,
-    padding: 20,
-    paddingBottom: 24,
-    overflow: 'hidden',
-  },
-  decorCircle: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    top: -30,
-    right: -30,
-  },
-  seasonBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#C4FF0E',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1.5,
-    borderColor: '#000',
-    marginBottom: 14,
-  },
-  seasonBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.8,
-  },
-  heroHeading: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#fff',
-    lineHeight: 38,
-    marginBottom: 10,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-
   // ─── Filter Pills ───
   filterList: { gap: 10, paddingHorizontal: 16, paddingVertical: 2 },
   filterPill: {

@@ -37,6 +37,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApi, forumApi, ForumPost } from '@/utils/api';
 import { useTabBarClearance } from '@/hooks/useTabBarClearance';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
+import { HeroBanner } from '@/components/HeroBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { canManageForumContent } from '@/utils/forum';
 import { lightTheme } from '@/constants/theme';
@@ -628,25 +629,12 @@ export default function ForumScreen() {
     return (
       <TabTransitionWrapper>
         <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.heroBannerWrapper}>
-            <LinearGradient
-              colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroBanner}
-            >
-              <View style={styles.decorCircle} />
-              <View style={styles.seasonBadge}>
-                <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
-              </View>
-              <Text style={styles.heroHeading}>
-                Spill the tea,{'\n'}ask away 💬
-              </Text>
-              <Text style={styles.heroSubtitle}>
-                Real answers from real students who've been there.
-              </Text>
-            </LinearGradient>
-          </View>
+          <HeroBanner
+            badgeText="PEER TO PEER"
+            title={'Spill the tea,\nask away 💬'}
+            subtitle="Real answers from real students who've been there."
+            style={{ marginHorizontal: lightTheme.spacing.md, marginTop: 12 }}
+          />
           <View style={styles.loadingBox}>
             <ActivityIndicator size='large' color='#7B2FBE' />
             <Text style={styles.loadingText}>Loading posts…</Text>
@@ -675,42 +663,24 @@ export default function ForumScreen() {
           ]}
         >
           {/* Hero Banner */}
-          <View
-            style={[
-              styles.heroBannerWrapper,
-              { marginHorizontal: lightTheme.spacing.md, marginTop: 12 },
-            ]}
-          >
-            <LinearGradient
-              colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroBanner}
-            >
-              <View style={styles.decorCircle} />
-              <View style={styles.heroBannerTop}>
-                <View style={styles.seasonBadge}>
-                  <Text style={styles.seasonBadgeText}>PEER TO PEER</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.searchIconBtn}
-                  onPress={() => setShowSearch(v => !v)}
-                >
-                  {showSearch ? (
-                    <X size={18} color='#000' />
-                  ) : (
-                    <Search size={18} color='#000' />
-                  )}
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.heroHeading}>
-                Spill the tea,{'\n'}ask away 💬
-              </Text>
-              <Text style={styles.heroSubtitle}>
-                Real answers from real students who've been there.
-              </Text>
-            </LinearGradient>
-          </View>
+          <HeroBanner
+            badgeText="PEER TO PEER"
+            title={'Spill the tea,\nask away 💬'}
+            subtitle="Real answers from real students who've been there."
+            style={{ marginHorizontal: lightTheme.spacing.md, marginTop: 12 }}
+            rightAction={
+              <TouchableOpacity
+                style={styles.searchIconBtn}
+                onPress={() => setShowSearch(v => !v)}
+              >
+                {showSearch ? (
+                  <X size={18} color='#000' />
+                ) : (
+                  <Search size={18} color='#000' />
+                )}
+              </TouchableOpacity>
+            }
+          />
 
           {/* Search Input */}
           {showSearch && (
@@ -842,54 +812,6 @@ export default function ForumScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#EBEFFF' },
 
-  // ─── Hero Banner ───
-  heroBannerWrapper: {
-    borderRadius: 24,
-    borderWidth: 2.5,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-    marginBottom: lightTheme.spacing.md,
-    overflow: 'hidden',
-  },
-  heroBanner: {
-    borderRadius: 22,
-    padding: 20,
-    paddingBottom: lightTheme.spacing.lg,
-    overflow: 'hidden',
-  },
-  decorCircle: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    top: -30,
-    right: -30,
-  },
-  heroBannerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  seasonBadge: {
-    backgroundColor: '#C4FF0E',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1.5,
-    borderColor: '#000',
-  },
-  seasonBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.8,
-  },
   searchIconBtn: {
     width: 38,
     height: 38,
@@ -899,19 +821,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#000',
-  },
-  heroHeading: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#fff',
-    lineHeight: 36,
-    marginBottom: 10,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 20,
-    fontWeight: '500',
   },
 
   // ─── Search ───

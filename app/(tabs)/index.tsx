@@ -13,6 +13,7 @@ import { BookOpen } from 'lucide-react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { LoadingState } from '@/components/LoadingState';
 import { GuideCard } from '@/components/GuideCard';
+import { HeroBanner } from '@/components/HeroBanner';
 import { ScrollableScreen } from '@/components/ScrollableScreen';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import { guideApi, useApi } from '@/utils/api';
@@ -96,32 +97,17 @@ export default function HomeScreen() {
   // ── Hero banner ──────────────────────────────────────────────────────────────
   const hero = (
     <>
-      {/* Hero Banner Card */}
-      <View style={styles.heroBannerWrapper}>
-        <LinearGradient
-          colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.heroBanner}
-        >
-          <View style={styles.decorCircle} />
-          <View style={styles.heroBannerTop}>
-            <View style={styles.seasonBadge}>
-              <Text style={styles.seasonBadgeText}>CAMPUS SEASON</Text>
-            </View>
-            <View style={styles.sparkleButton}>
-              <Text style={styles.sparkleButtonText}>✶</Text>
-            </View>
+      <HeroBanner
+        badgeText="CAMPUS SEASON"
+        title={`Hey ${firstName},\nlet's vibe check\nyour semester`}
+        subtitle="Fresh guides, drops, and hacks to make uni actually make sense."
+        emoji="✶✧"
+        rightAction={
+          <View style={styles.sparkleButton}>
+            <Text style={styles.sparkleButtonText}>✶</Text>
           </View>
-          <Text style={styles.heroHeading}>
-            Hey {firstName},{'\n'}let's vibe check{'\n'}your semester
-          </Text>
-          <Text style={styles.heroEmoji}>✶✧</Text>
-          <Text style={styles.heroSubtitle}>
-            Fresh guides, drops, and hacks to make uni actually make sense.
-          </Text>
-        </LinearGradient>
-      </View>
+        }
+      />
 
       {/* Section label */}
       <View style={styles.sectionHeader}>
@@ -212,54 +198,6 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ─── Hero Banner ───
-  heroBannerWrapper: {
-    borderRadius: 24,
-    borderWidth: 2.5,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  heroBanner: {
-    borderRadius: 22,
-    padding: 20,
-    paddingBottom: 24,
-    overflow: 'hidden',
-  },
-  decorCircle: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    top: -30,
-    right: -30,
-  },
-  heroBannerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  seasonBadge: {
-    backgroundColor: '#C4FF0E',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1.5,
-    borderColor: '#000',
-  },
-  seasonBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.8,
-  },
   sparkleButton: {
     width: 40,
     height: 40,
@@ -274,23 +212,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
     color: '#000',
-  },
-  heroHeading: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    lineHeight: 36,
-    marginBottom: 4,
-  },
-  heroEmoji: {
-    fontSize: 22,
-    marginBottom: 10,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 20,
-    fontWeight: '500',
   },
 
   // ─── Filter Pills ───
