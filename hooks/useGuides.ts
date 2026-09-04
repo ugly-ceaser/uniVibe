@@ -58,6 +58,7 @@ export const useGuides = (): UseGuidesReturn => {
               (item.content?.split(' ').length || 0) / 200
             )} min read`,
             likes: item.likesCount || 0,
+            isLiked: Boolean(item.isLiked),
             author: 'UniVibe Team',
             createdAt: item.createdAt,
             status: item.status,

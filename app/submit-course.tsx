@@ -204,7 +204,8 @@ export default function SubmitCourseScreen() {
     university?: string | null;
     faculty?: string | null;
     department?: string | null;
-    level?: number;
+    programme?: string | null;
+    level?: number | null;
     semester?: string | null;
   } | null>(null);
 
@@ -243,7 +244,6 @@ export default function SubmitCourseScreen() {
     isFetchingRef.current = true;
     setProfileLoading(true);
     try {
-      console.log('[DEBUG] loadProfileHierarchy started fetching...');
       const [uniRes, profileRes] = await Promise.all([
         client.getUniversities(),
         profileClient.getProfile(),
@@ -251,9 +251,7 @@ export default function SubmitCourseScreen() {
 
       const rawUnis = uniRes?.data ?? [];
       const userProfile = profileRes?.data;
-      console.log('[DEBUG] userProfile retrieved:', userProfile);
       if (!userProfile) {
-        console.log('[DEBUG] No user profile found');
         setIsProfileIncomplete(true);
         return;
       }
@@ -261,12 +259,14 @@ export default function SubmitCourseScreen() {
       const uniName = userProfile.university?.trim();
       const facName = userProfile.faculty?.trim();
       const deptName = userProfile.department?.trim();
-      const incomplete = !uniName || !facName || !deptName;
-      console.log('[DEBUG] Profile incomplete status:', incomplete, {
-        uniName,
-        facName,
-        deptName,
-      });
+      const programmeName = userProfile.programme?.trim();
+      const incomplete =
+        !uniName ||
+        !facName ||
+        !deptName ||
+        !programmeName ||
+        !userProfile.level ||
+        !userProfile.semester;
       setIsProfileIncomplete(incomplete);
       if (incomplete) return;
 
@@ -276,10 +276,10 @@ export default function SubmitCourseScreen() {
         lp.university !== userProfile.university ||
         lp.faculty !== userProfile.faculty ||
         lp.department !== userProfile.department ||
+        lp.programme !== userProfile.programme ||
         lp.level !== userProfile.level ||
         lp.semester !== userProfile.semester;
       if (!profileChanged) {
-        console.log('[DEBUG] Profile has not changed since last load');
         return;
       }
 
@@ -287,6 +287,7 @@ export default function SubmitCourseScreen() {
         university: userProfile.university,
         faculty: userProfile.faculty,
         department: userProfile.department,
+        programme: userProfile.programme,
         level: userProfile.level,
         semester: userProfile.semester,
       };
@@ -295,17 +296,16 @@ export default function SubmitCourseScreen() {
         (u: any) =>
           u.name.toLowerCase().includes(uniName.toLowerCase()) ||
           uniName.toLowerCase().includes(u.name.toLowerCase()) ||
-          u.shortName.toLowerCase().includes(uniName.toLowerCase()) ||
-          uniName.toLowerCase().includes(u.shortName.toLowerCase())
+          u.shortName?.toLowerCase().includes(uniName.toLowerCase()) ||
+          (u.shortName &&
+            uniName.toLowerCase().includes(u.shortName.toLowerCase()))
       );
       if (!matchedUni) {
-        console.log('[DEBUG] Failed to match university for name:', uniName);
         setIsProfileIncomplete(true);
         return;
       }
 
       setSelectedUniversity({ id: matchedUni.id, label: matchedUni.name });
-      console.log('[DEBUG] Matched University:', matchedUni);
 
       const facsRes = await client.getFaculties(matchedUni.id);
       const rawFacs = facsRes?.data ?? [];
@@ -315,13 +315,11 @@ export default function SubmitCourseScreen() {
           facName.toLowerCase().includes(f.name.toLowerCase())
       );
       if (!matchedFac) {
-        console.log('[DEBUG] Failed to match faculty for name:', facName);
         setIsProfileIncomplete(true);
         return;
       }
 
       setSelectedFaculty({ id: matchedFac.id, label: matchedFac.name });
-      console.log('[DEBUG] Matched Faculty:', matchedFac);
 
       const deptsRes = await client.getDepartments(matchedFac.id);
       const rawDepts = deptsRes?.data ?? [];
@@ -334,39 +332,30 @@ export default function SubmitCourseScreen() {
       let matchedProg = null;
 
       if (matchedDept) {
-        console.log('[DEBUG] Found direct department match:', matchedDept);
         setSelectedDepartment({ id: matchedDept.id, label: matchedDept.name });
         const progsRes = await client.getProgrammes(matchedDept.id);
         const rawProgs = progsRes?.data ?? [];
         matchedProg =
           rawProgs.find(
             (p: any) =>
-              p.name.toLowerCase().includes(deptName.toLowerCase()) ||
-              deptName.toLowerCase().includes(p.name.toLowerCase())
-          ) || rawProgs[0];
-      } else {
-        console.log(
-          '[DEBUG] Searching all programmes under all departments in faculty for:',
-          deptName
-        );
+              p.name.toLowerCase().includes(programmeName.toLowerCase()) ||
+              programmeName.toLowerCase().includes(p.name.toLowerCase())
+          ) || null;
+      }
+
+      if (!matchedProg) {
         // Try searching for a programme match across all departments in this faculty
         for (const dept of rawDepts) {
           const progsRes = await client.getProgrammes(dept.id);
           const rawProgs = progsRes?.data ?? [];
           const foundProg = rawProgs.find(
             (p: any) =>
-              p.name.toLowerCase().includes(deptName.toLowerCase()) ||
-              deptName.toLowerCase().includes(p.name.toLowerCase())
+              p.name.toLowerCase().includes(programmeName.toLowerCase()) ||
+              programmeName.toLowerCase().includes(p.name.toLowerCase())
           );
           if (foundProg) {
             matchedDept = dept;
             matchedProg = foundProg;
-            console.log(
-              '[DEBUG] Found match via programme search. Dept:',
-              dept,
-              'Prog:',
-              foundProg
-            );
             break;
           }
         }
@@ -379,16 +368,11 @@ export default function SubmitCourseScreen() {
       }
 
       if (!matchedDept || !matchedProg) {
-        console.log(
-          '[DEBUG] Failed to match department/programme for deptName:',
-          deptName
-        );
         setIsProfileIncomplete(true);
         return;
       }
 
       setSelectedProgramme({ id: matchedProg.id, label: matchedProg.name });
-      console.log('[DEBUG] Matched Programme:', matchedProg);
 
       const [lvlRes, semRes] = await Promise.all([
         client.getLevels(matchedProg.id),
@@ -428,9 +412,6 @@ export default function SubmitCourseScreen() {
           id: matchedLvl.id,
           label: `Level ${matchedLvl.level}`,
         });
-        console.log('[DEBUG] Matched Level:', matchedLvl);
-      } else {
-        console.log('[DEBUG] Failed to match level for:', userProfile.level);
       }
 
       const matchedSem = rawSems.find((s: any) =>
@@ -438,15 +419,8 @@ export default function SubmitCourseScreen() {
       );
       if (matchedSem) {
         setSelectedSemester({ id: matchedSem.id, label: matchedSem.name });
-        console.log('[DEBUG] Matched Semester:', matchedSem);
-      } else {
-        console.log(
-          '[DEBUG] Failed to match semester for:',
-          userProfile.semester
-        );
       }
-    } catch (err: any) {
-      console.error('[DEBUG] Exception in loadProfileHierarchy:', err);
+    } catch {
       setIsProfileIncomplete(true);
     } finally {
       setProfileLoading(false);
@@ -565,7 +539,7 @@ export default function SubmitCourseScreen() {
       >
         {/* Header */}
         <LinearGradient
-          colors={['#4B1FA8', '#7B2FBE', '#A855F7']}
+          colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}
@@ -579,7 +553,7 @@ export default function SubmitCourseScreen() {
             }
             activeOpacity={0.8}
           >
-            <ArrowLeft size={20} color='#fff' strokeWidth={2.5} />
+            <ArrowLeft size={20} color='#0D0D0D' strokeWidth={2.5} />
           </TouchableOpacity>
           <View style={styles.pillBadge}>
             <Text style={styles.pillBadgeText}>SUBMIT COURSE</Text>
@@ -600,14 +574,15 @@ export default function SubmitCourseScreen() {
             <View style={styles.warningCard}>
               <Text style={styles.warningTitle}>Complete your profile</Text>
               <Text style={styles.warningSubtitle}>
-                Your university, faculty, and department are taken from your
-                profile. Update them there before submitting a course request.
+                Your university, faculty, department, and programme are taken
+                from your profile. Update them there before submitting a course
+                request.
               </Text>
               <TouchableOpacity
                 style={styles.warningButton}
                 onPress={() =>
                   router.push({
-                    pathname: '/profile',
+                    pathname: '/(tabs)/profile',
                     params: { edit: 'true' },
                   })
                 }
@@ -740,26 +715,22 @@ export default function SubmitCourseScreen() {
           <TouchableOpacity
             style={[
               styles.submitButton,
-              (submitting || profileLoading || isProfileIncomplete) && {
-                opacity: 0.6,
-              },
+              submitting && { opacity: 0.6 },
             ]}
             onPress={handleSubmit}
-            disabled={submitting || profileLoading || isProfileIncomplete}
+            disabled={submitting}
             activeOpacity={0.85}
           >
             <LinearGradient
-              colors={['#7B2FBE', '#A855F7']}
+              colors={['#C4FF0E', '#A3E635']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.submitGradient}
             >
               {submitting ? (
-                <ActivityIndicator color='#fff' />
+                <ActivityIndicator color='#000' />
               ) : (
-                <Text style={styles.submitButtonText}>
-                  Submit Course Request
-                </Text>
+                <Text style={styles.submitButtonText}>Submit for Review 🚀</Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -796,20 +767,22 @@ export default function SubmitCourseScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EDE9F8' },
+  container: { flex: 1, backgroundColor: '#EBEFFF' },
   header: {
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 22,
     paddingHorizontal: 20,
     overflow: 'hidden',
     position: 'relative',
+    borderBottomWidth: 2.5,
+    borderBottomColor: '#000',
   },
   orb1: {
     position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(168,85,247,0.3)',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     top: -20,
     right: -20,
   },
@@ -818,31 +791,35 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(168,85,247,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     bottom: -8,
     right: 50,
   },
   backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#C4FF0E',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#000',
   },
   pillBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#C8F135',
+    backgroundColor: '#C4FF0E',
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 4,
     marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: '#000',
   },
   pillBadgeText: {
     fontSize: 10,
-    fontWeight: '800',
-    color: '#1a1a2e',
+    fontWeight: '900',
+    color: '#000',
     letterSpacing: 0.8,
   },
   headline: {
@@ -853,23 +830,29 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
-    lineHeight: 16,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.88)',
+    lineHeight: 18,
+    fontWeight: '500',
   },
 
-  scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 },
   warningCard: {
     backgroundColor: '#FEF3C7',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 20,
-    borderWidth: 1.5,
-    borderColor: '#F59E0B',
+    borderWidth: 2,
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
   },
   warningTitle: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#92400E',
     marginBottom: 6,
   },
@@ -878,27 +861,30 @@ const styles = StyleSheet.create({
     color: '#78350F',
     lineHeight: 18,
     marginBottom: 12,
+    fontWeight: '500',
   },
   warningButton: {
     alignSelf: 'flex-start',
-    backgroundColor: '#F59E0B',
-    borderRadius: 10,
+    backgroundColor: '#C4FF0E',
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: '#000',
   },
-  warningButtonText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  warningButtonText: { fontSize: 13, fontWeight: '800', color: '#000' },
   section: { marginBottom: 24 },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900',
-    color: '#1a1a2e',
-    marginBottom: 16,
+    color: '#0D0D0D',
+    marginBottom: 14,
     letterSpacing: 0.3,
   },
   label: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#1a1a2e',
+    fontWeight: '800',
+    color: '#0D0D0D',
     marginBottom: 8,
     marginTop: 12,
   },
@@ -908,16 +894,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderWidth: 2,
-    borderColor: '#1a1a2e',
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
   },
   selectFieldText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1a1a2e',
+    color: '#0D0D0D',
     flex: 1,
   },
   selectPlaceholder: { color: '#9ca3af', fontWeight: '500' },
@@ -926,27 +917,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 4,
     borderWidth: 2,
-    borderColor: '#1a1a2e',
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
   },
-  input: { flex: 1, fontSize: 15, color: '#1a1a2e', paddingVertical: 13 },
+  input: { flex: 1, fontSize: 14, color: '#0D0D0D', paddingVertical: 12, fontWeight: '600' },
 
   submitButton: {
-    borderRadius: 14,
-    marginTop: 8,
-    shadowColor: '#7B2FBE',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 8,
+    borderRadius: 24,
+    marginTop: 12,
+    borderWidth: 2,
+    borderColor: '#000',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
   },
   submitGradient: {
-    paddingVertical: 17,
-    borderRadius: 14,
+    paddingVertical: 15,
+    borderRadius: 22,
     alignItems: 'center',
   },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  submitButtonText: { color: '#000', fontSize: 16, fontWeight: '900' },
 });
