@@ -170,13 +170,18 @@ export default function ForumScreen() {
   }, []);
 
   const lastFetchRef = useRef(0);
+  const isFetchingRef = useRef(false);
+  const isFetchingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const nextCursorRef = useRef<string | null>(null);
+
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(
     new Set()
   );
   const searchGenerationRef = useRef(0);
   const categoriesFetched = useRef(false);
-  const MIN_FETCH_INTERVAL = 10000;
+  const MIN_FETCH_INTERVAL = 3000;
   const PAGE_SIZE = 20;
 
   const scheduleRetry = useCallback((callback: () => void, delay: number) => {
@@ -228,89 +233,97 @@ export default function ForumScreen() {
         !isRefresh &&
         !isLoadMore &&
         now - lastFetchRef.current < MIN_FETCH_INTERVAL
-      )
+      ) {
         return;
+      }
+
+      if (isRefresh) {
+        isFetchingRef.current = true;
+        setRefreshing(true);
+        hasMoreRef.current = true;
+        setHasMore(true);
+      } else if (isLoadMore) {
+        isFetchingMoreRef.current = true;
+        setLoadingMore(true);
+      } else {
+        isFetchingRef.current = true;
+        setLoading(true);
+      }
+      setError(null);
 
       try {
-        if (isRefresh) setRefreshing(true);
-        else if (isLoadMore) setLoadingMore(true);
-        else setLoading(true);
-        setError(null);
-
-        const tryProcess = (data: any) => {
-          if (data?.questions) {
-            const batch: ForumPost[] = data.questions;
-            const fetchedCursor: string | null = data.nextCursor || null;
-
-            if (isRefresh || !cursorStr) {
-              setAllPosts(batch);
-              setPosts(batch);
-              setNextCursor(fetchedCursor);
-            } else {
-              setAllPosts(prev => {
-                const combined = [...prev, ...batch];
-                // Deduplicate by ID
-                // Note: The appended diversity post from page 1 may naturally reappear in page 2
-                // due to its organic score. Client-side ID deduplication prevents this duplicate
-                // from rendering in the list without corrupting the pagination cursor.
-                const unique = combined.filter(
-                  (post, index, self) =>
-                    self.findIndex(p => p.id === post.id) === index
-                );
-                setPosts(unique);
-                return unique;
-              });
-              setNextCursor(fetchedCursor);
-            }
-            setHasMore(!!fetchedCursor);
-            lastFetchRef.current = now;
-            return true;
-          }
-          return false;
-        };
-
         const response: any = await forumClient.getQuestions({
-          page: 1, // dummy fallback
+          page: 1,
           pageSize: PAGE_SIZE,
           refresh: isRefresh,
           category: categoryEnum,
           cursor: cursorStr || undefined,
         } as any);
 
-        let ok = tryProcess(response?.data);
-        if (!ok) {
-          const fresh: any = await forumClient.getQuestions({
-            page: 1,
-            pageSize: PAGE_SIZE,
-            refresh: true,
-            category: categoryEnum,
-            cursor: cursorStr || undefined,
-          } as any);
-          tryProcess(fresh?.data);
+        const data = response?.data;
+        if (data?.questions) {
+          const batch: ForumPost[] = data.questions;
+          const fetchedCursor: string | null = data.nextCursor || null;
+          const moreAvailable = Boolean(
+            fetchedCursor && batch.length >= PAGE_SIZE
+          );
+
+          hasMoreRef.current = moreAvailable;
+          setHasMore(moreAvailable);
+          nextCursorRef.current = fetchedCursor;
+          setNextCursor(fetchedCursor);
+
+          if (isRefresh || !cursorStr) {
+            setAllPosts(batch);
+            setPosts(batch);
+          } else {
+            setAllPosts(prev => {
+              const combined = [...prev, ...batch];
+              // Deduplicate by ID
+              const unique = combined.filter(
+                (post, index, self) =>
+                  self.findIndex(p => p.id === post.id) === index
+              );
+              setPosts(unique);
+              return unique;
+            });
+          }
+          lastFetchRef.current = now;
+        } else {
+          if (isRefresh || !cursorStr) {
+            setAllPosts([]);
+            setPosts([]);
+          }
+          hasMoreRef.current = false;
+          setHasMore(false);
+          nextCursorRef.current = null;
+          setNextCursor(null);
         }
       } catch (err: any) {
-        if (err.status === 429 && retryCount < 3) {
-          scheduleRetry(
-            () =>
-              fetchPosts(
-                cursorStr,
-                isRefresh,
-                isLoadMore,
-                categoryEnum,
-                retryCount + 1
-              ),
-            Math.pow(2, retryCount) * 1000
+        if (err.status === 429) {
+          if (!isLoadMore && retryCount < 2) {
+            scheduleRetry(
+              () =>
+                fetchPosts(
+                  cursorStr,
+                  isRefresh,
+                  isLoadMore,
+                  categoryEnum,
+                  retryCount + 1
+                ),
+              Math.pow(2, retryCount) * 2000
+            );
+            return;
+          }
+          setError('Too many requests. Please wait a moment.');
+        } else {
+          setError(
+            err instanceof Error ? err.message : 'Failed to load posts.'
           );
-          return;
         }
-        setError(
-          err.status === 429
-            ? 'Too many requests. Please wait a moment.'
-            : err instanceof Error
-            ? err.message
-            : 'Failed to load posts.'
-        );
       } finally {
+        isFetchingRef.current = false;
+        isFetchingMoreRef.current = false;
         setLoading(false);
         setRefreshing(false);
         setLoadingMore(false);
@@ -371,19 +384,24 @@ export default function ForumScreen() {
   useEffect(() => {
     setPosts(allPosts);
   }, [allPosts]);
+
   useEffect(() => {
+    hasMoreRef.current = true;
+    nextCursorRef.current = null;
     setAllPosts([]);
     setPosts([]);
     setNextCursor(null);
     setHasMore(true);
     fetchPosts(null, true, false, getSelectedEnum());
   }, [fetchPosts, getSelectedEnum, selectedCategory]);
+
   useEffect(() => {
     if (!categoriesFetched.current) {
       categoriesFetched.current = true;
       fetchCategories();
     }
   }, [fetchCategories]);
+
   useEffect(
     () => () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -395,23 +413,25 @@ export default function ForumScreen() {
   );
 
   const onRefresh = useCallback(() => {
+    hasMoreRef.current = true;
+    nextCursorRef.current = null;
     fetchPosts(null, true, false, getSelectedEnum());
     fetchCategories();
   }, [getSelectedEnum, fetchPosts, fetchCategories]);
 
   const onLoadMore = useCallback(() => {
-    if (!loadingMore && !loading && hasMore && posts.length > 0) {
-      fetchPosts(nextCursor, false, true, getSelectedEnum());
+    if (
+      isFetchingMoreRef.current ||
+      isFetchingRef.current ||
+      !hasMoreRef.current ||
+      !nextCursorRef.current ||
+      posts.length === 0
+    ) {
+      return;
     }
-  }, [
-    nextCursor,
-    loadingMore,
-    loading,
-    hasMore,
-    posts.length,
-    getSelectedEnum,
-    fetchPosts,
-  ]);
+    isFetchingMoreRef.current = true;
+    fetchPosts(nextCursorRef.current, false, true, getSelectedEnum());
+  }, [getSelectedEnum, fetchPosts, posts.length]);
 
   const handleSearch = useCallback(
     async (
@@ -853,7 +873,7 @@ export default function ForumScreen() {
           ListFooterComponent={renderFooter}
           ListEmptyComponent={emptyOrError}
           onEndReached={onLoadMore}
-          onEndReachedThreshold={0.3}
+          onEndReachedThreshold={0.15}
           onScroll={onListScroll}
           scrollEventThrottle={16}
           extraBottomPadding={64}
