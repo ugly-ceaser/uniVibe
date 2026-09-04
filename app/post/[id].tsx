@@ -233,6 +233,14 @@ export default function PostDetailScreenInner() {
     });
   };
 
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/forum');
+    }
+  }, [router]);
+
   // Delete Post
   const handleDeletePost = useCallback(async () => {
     if (!post?.id) return;
@@ -248,7 +256,7 @@ export default function PostDetailScreenInner() {
             try {
               await forumClient.deleteQuestion(post.id);
               Alert.alert('Deleted', 'Discussion deleted successfully.');
-              router.back();
+              handleBack();
             } catch (e: any) {
               Alert.alert('Error', e?.message || 'Failed to delete post.');
             }
@@ -256,7 +264,7 @@ export default function PostDetailScreenInner() {
         },
       ]
     );
-  }, [post?.id, forumClient, router]);
+  }, [post?.id, forumClient, handleBack]);
 
   // Delete Answer
   const handleDeleteAnswer = useCallback(
@@ -778,8 +786,9 @@ export default function PostDetailScreenInner() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={handleBack}
           activeOpacity={0.8}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <ArrowLeft size={20} color='#0D0D0D' strokeWidth={2.5} />
         </TouchableOpacity>
@@ -993,13 +1002,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#C4FF0E',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#000',
   },
   headerTitle: {

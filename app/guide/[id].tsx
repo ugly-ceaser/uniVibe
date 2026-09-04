@@ -85,6 +85,14 @@ export default function GuideDetailScreen() {
     }
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {loading ? (
@@ -115,8 +123,9 @@ export default function GuideDetailScreen() {
             <View style={styles.headerTopRow}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => router.back()}
+                onPress={handleBack}
                 activeOpacity={0.8}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
                 <ArrowLeft size={20} color='#0D0D0D' strokeWidth={2.5} />
               </TouchableOpacity>

@@ -78,6 +78,14 @@ export default function CreatePostScreen() {
     );
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/forum');
+    }
+  };
+
   const submit = async () => {
     if (!canSubmit) {
       showToast('error', 'Please enter your question (min 4 characters).');
@@ -99,7 +107,7 @@ export default function CreatePostScreen() {
       });
 
       showToast('success', '🎉 Your question is live!');
-      setTimeout(() => router.back(), 1200);
+      setTimeout(() => handleBack(), 1200);
     } catch (e: any) {
       showToast('error', e?.message || 'Failed to post. Try again.');
     } finally {
@@ -142,8 +150,9 @@ export default function CreatePostScreen() {
           <View style={styles.decorCircle} />
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.back()}
+            onPress={handleBack}
             activeOpacity={0.8}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <ArrowLeft size={20} color='#0D0D0D' strokeWidth={2.5} />
           </TouchableOpacity>
