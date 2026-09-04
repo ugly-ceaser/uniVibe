@@ -13,8 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Sparkles, Hash } from 'lucide-react-native';
 import { forumApi, useApi } from '@/utils/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { lightTheme } from '@/constants/theme';
 
 type CategoryEnum =
   | 'GENERAL_DISCUSSION'
@@ -33,47 +35,71 @@ const CATEGORY_OPTIONS: { id: CategoryEnum; label: string; emoji: string }[] = [
   { id: 'CAMPUS_SERVICES', label: 'Campus services', emoji: '🏫' },
 ];
 
-const TITLE_MAX = 80;
-const BODY_MAX = 500;
+const SUGGESTED_TAGS = [
+  '#Exams',
+  '#CourseRegistration',
+  '#Assignments',
+  '#CampusLife',
+  '#Housing',
+  '#Internships',
+  '#Advice',
+];
+
+const TITLE_MAX = 100;
+const BODY_MAX = 600;
 
 export default function CreatePostScreen() {
   const router = useRouter();
   const api = useApi();
+  const { user } = useAuth();
   const client = useMemo(() => forumApi(api), [api]);
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [category, setCategory] = useState<CategoryEnum>('GENERAL_DISCUSSION');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
 
-  const canSubmit = title.trim().length >= 4 && body.trim().length >= 10;
+  // Fast compose: only question title (min 4 chars) is strictly required!
+  const canSubmit = title.trim().length >= 4;
 
   const showToast = (type: 'success' | 'error', message: string, ms = 2000) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), ms);
   };
 
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
   const submit = async () => {
     if (!canSubmit) {
-      showToast('error', 'Title (min 4) and details (min 10) are required.');
+      showToast('error', 'Please enter your question (min 4 characters).');
       return;
     }
     setSubmitting(true);
+
     try {
+      const finalBody =
+        body.trim() ||
+        (selectedTags.length > 0
+          ? `${title.trim()}\n\nTags: ${selectedTags.join(' ')}`
+          : title.trim());
+
       await client.createQuestion({
         title: title.trim(),
-        body: body.trim(),
+        body: finalBody,
         category,
       });
+
       showToast('success', '🎉 Your question is live!');
-      setTitle('');
-      setBody('');
-      setCategory('GENERAL_DISCUSSION');
-      setTimeout(() => router.back(), 1800);
+      setTimeout(() => router.back(), 1200);
     } catch (e: any) {
       showToast('error', e?.message || 'Failed to post. Try again.');
     } finally {
@@ -81,11 +107,15 @@ export default function CreatePostScreen() {
     }
   };
 
+  const peerTag = user?.department
+    ? `${user.department}${user.level ? ` • ${user.level}L` : ''}`
+    : 'Student';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* ── Toast ── */}
         {toast && (
@@ -104,22 +134,22 @@ export default function CreatePostScreen() {
 
         {/* ── Header ── */}
         <LinearGradient
-          colors={['#3B0F6F', '#7B2FBE', '#C026D3']}
+          colors={['#6B21A8', '#9333EA', '#DB2777']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}
         >
-          <View style={styles.orb} />
+          <View style={styles.decorCircle} />
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => router.back()}
             activeOpacity={0.8}
           >
-            <ArrowLeft size={20} color='#fff' strokeWidth={2.5} />
+            <ArrowLeft size={20} color='#0D0D0D' strokeWidth={2.5} />
           </TouchableOpacity>
           <View style={styles.headerBody}>
             <Text style={styles.headerLabel}>STUDENT FORUM</Text>
-            <Text style={styles.headerTitle}>Post a question</Text>
+            <Text style={styles.headerTitle}>Ask Your Peers</Text>
           </View>
         </LinearGradient>
 
@@ -130,9 +160,19 @@ export default function CreatePostScreen() {
           keyboardShouldPersistTaps='handled'
           showsVerticalScrollIndicator={false}
         >
-          {/* Title */}
+          {/* Peer Context Banner */}
+          <View style={styles.peerBanner}>
+            <Sparkles size={16} color='#7B2FBE' />
+            <Text style={styles.peerBannerText}>
+              Posting as <Text style={{ fontWeight: '800' }}>{user?.fullname || 'Student'}</Text> ({peerTag})
+            </Text>
+          </View>
+
+          {/* Question (Required) */}
           <View style={styles.fieldHeader}>
-            <Text style={styles.label}>Title</Text>
+            <Text style={styles.label}>
+              Question <Text style={styles.requiredStar}>*</Text>
+            </Text>
             <Text
               style={[
                 styles.counter,
@@ -145,52 +185,17 @@ export default function CreatePostScreen() {
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.input}
-              placeholder={'E.g. How do I prepare for finals? 📋'}
+              placeholder={'E.g. What is the best way to prepare for finals? 📋'}
               placeholderTextColor='#9CA3AF'
               value={title}
               onChangeText={t => setTitle(t.slice(0, TITLE_MAX))}
               returnKeyType='next'
+              autoFocus
             />
           </View>
 
-          {/* Details */}
-          <View style={[styles.fieldHeader, { marginTop: 18 }]}>
-            <Text style={styles.label}>Details</Text>
-            <Text
-              style={[
-                styles.counter,
-                body.length > BODY_MAX * 0.85 && styles.counterWarn,
-              ]}
-            >
-              {body.length}/{BODY_MAX}
-            </Text>
-          </View>
-          <View style={[styles.inputWrapper, styles.textareaWrapper]}>
-            <TextInput
-              style={[styles.input, styles.textarea]}
-              placeholder={
-                "Give it enough context so people can\nactually help — what have you tried,\nwhat's confusing?"
-              }
-              placeholderTextColor='#9CA3AF'
-              value={body}
-              onChangeText={t => setBody(t.slice(0, BODY_MAX))}
-              multiline
-              textAlignVertical='top'
-              numberOfLines={6}
-            />
-          </View>
-
-          {/* Tip card */}
-          <View style={styles.tipCard}>
-            <Text style={styles.tipEmoji}>💡</Text>
-            <Text style={styles.tipText}>
-              <Text style={styles.tipBold}>Tip: </Text>
-              Questions with details get 3x more answers. Screenshots help too.
-            </Text>
-          </View>
-
-          {/* Category */}
-          <Text style={[styles.label, { marginTop: 20, marginBottom: 12 }]}>
+          {/* Category Selector */}
+          <Text style={[styles.label, { marginTop: 18, marginBottom: 10 }]}>
             Category
           </Text>
           <View style={styles.categoriesRow}>
@@ -217,10 +222,69 @@ export default function CreatePostScreen() {
             })}
           </View>
 
-          <View style={{ height: 100 }} />
+          {/* Additional Context (Optional) */}
+          <View style={[styles.fieldHeader, { marginTop: 20 }]}>
+            <Text style={styles.label}>
+              Additional details <Text style={styles.optionalTag}>(Optional)</Text>
+            </Text>
+            <Text
+              style={[
+                styles.counter,
+                body.length > BODY_MAX * 0.85 && styles.counterWarn,
+              ]}
+            >
+              {body.length}/{BODY_MAX}
+            </Text>
+          </View>
+          <View style={[styles.inputWrapper, styles.textareaWrapper]}>
+            <TextInput
+              style={[styles.input, styles.textarea]}
+              placeholder={
+                "Add context, course code, or what you've tried so far…"
+              }
+              placeholderTextColor='#9CA3AF'
+              value={body}
+              onChangeText={t => setBody(t.slice(0, BODY_MAX))}
+              multiline
+              textAlignVertical='top'
+              numberOfLines={4}
+            />
+          </View>
+
+          {/* Quick Tag Suggestions */}
+          <View style={[styles.fieldHeader, { marginTop: 18 }]}>
+            <Text style={styles.label}>
+              Topic tags <Text style={styles.optionalTag}>(Optional)</Text>
+            </Text>
+          </View>
+          <View style={styles.tagsRow}>
+            {SUGGESTED_TAGS.map(tag => {
+              const active = selectedTags.includes(tag);
+              return (
+                <TouchableOpacity
+                  key={tag}
+                  style={[styles.tagPill, active && styles.tagPillActive]}
+                  onPress={() => toggleTag(tag)}
+                  activeOpacity={0.8}
+                >
+                  <Hash size={12} color={active ? '#000' : '#6B7280'} />
+                  <Text
+                    style={[
+                      styles.tagPillText,
+                      active && styles.tagPillTextActive,
+                    ]}
+                  >
+                    {tag.replace('#', '')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={{ height: 120 }} />
         </ScrollView>
 
-        {/* ── Sticky submit button ── */}
+        {/* ── Sticky Submit Bar ── */}
         <View style={styles.submitContainer}>
           <TouchableOpacity
             style={[
@@ -229,18 +293,18 @@ export default function CreatePostScreen() {
             ]}
             onPress={submit}
             disabled={!canSubmit || submitting}
-            activeOpacity={0.88}
+            activeOpacity={0.85}
           >
             <LinearGradient
-              colors={['#F43F5E', '#9333EA']}
+              colors={['#C4FF0E', '#A3E635']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.submitGradient}
             >
               {submitting ? (
-                <ActivityIndicator color='#fff' />
+                <ActivityIndicator color='#000' />
               ) : (
-                <Text style={styles.submitText}>🚀 Post question</Text>
+                <Text style={styles.submitText}>🚀 Post Question</Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -251,9 +315,9 @@ export default function CreatePostScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#EDE9F8' },
+  safeArea: { flex: 1, backgroundColor: '#EBEFFF' },
 
-  // ── Toast ──
+  // Toast
   toast: {
     position: 'absolute',
     top: 16,
@@ -263,33 +327,40 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderWidth: 1.5,
+    borderWidth: 2,
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
   },
-  toastSuccess: { backgroundColor: '#ECFDF5', borderColor: '#34D399' },
-  toastError: { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' },
+  toastSuccess: { backgroundColor: '#DCFCE7', borderColor: '#000' },
+  toastError: { backgroundColor: '#FEE2E2', borderColor: '#000' },
   toastText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#0D0D0D',
     textAlign: 'center',
   },
 
-  // ── Header ──
+  // Header
   header: {
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 22,
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
-    position: 'relative',
+    borderBottomWidth: 2.5,
+    borderBottomColor: '#000',
   },
-  orb: {
+  decorCircle: {
     position: 'absolute',
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     top: -20,
     right: -20,
   },
@@ -297,28 +368,48 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#C4FF0E',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
+    borderWidth: 2,
+    borderColor: '#000',
   },
   headerBody: { flex: 1 },
   headerLabel: {
     fontSize: 11,
-    fontWeight: '800',
-    color: '#C8F135',
-    letterSpacing: 1.5,
-    marginBottom: 4,
+    fontWeight: '900',
+    color: '#C4FF0E',
+    letterSpacing: 1.2,
+    marginBottom: 2,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
     color: '#fff',
   },
 
-  // ── Form ──
+  // Form
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 24 },
+  content: { paddingHorizontal: 16, paddingTop: 16 },
+
+  peerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EDE9FE',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: '#DDD6FE',
+    marginBottom: 16,
+  },
+  peerBannerText: {
+    fontSize: 12,
+    color: '#6B21A8',
+    fontWeight: '600',
+  },
 
   fieldHeader: {
     flexDirection: 'row',
@@ -326,23 +417,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  label: { fontSize: 15, fontWeight: '700', color: '#1a1a2e' },
-  counter: { fontSize: 12, fontWeight: '600', color: '#9CA3AF' },
+  label: { fontSize: 14, fontWeight: '800', color: '#0D0D0D' },
+  requiredStar: { color: '#EF4444' },
+  optionalTag: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
+  counter: { fontSize: 11, fontWeight: '600', color: '#9CA3AF' },
   counterWarn: { color: '#F59E0B' },
 
   inputWrapper: {
     backgroundColor: '#fff',
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#1a1a2e',
+    borderColor: '#000',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
   },
-  textareaWrapper: { minHeight: 130 },
+  textareaWrapper: { minHeight: 90 },
   input: {
-    fontSize: 15,
-    color: '#1a1a2e',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    fontSize: 14,
+    color: '#0D0D0D',
+    fontWeight: '600',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     ...Platform.select({
       web: {
         outlineStyle: 'none',
@@ -350,7 +449,8 @@ const styles = StyleSheet.create({
     }),
   },
   textarea: {
-    minHeight: 130,
+    minHeight: 90,
+    fontWeight: '500',
     ...Platform.select({
       web: {
         outlineStyle: 'none',
@@ -358,71 +458,88 @@ const styles = StyleSheet.create({
     }),
   },
 
-  // ── Tip card ──
-  tipCard: {
-    marginTop: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: '#7B2FBE',
-    borderStyle: 'dashed',
-    borderRadius: 14,
-    padding: 14,
-  },
-  tipEmoji: { fontSize: 18, marginTop: 1 },
-  tipText: { flex: 1, fontSize: 13, color: '#4B5563', lineHeight: 19 },
-  tipBold: { fontWeight: '800', color: '#1a1a2e' },
-
-  // ── Category chips ──
+  // Categories
   categoriesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 30,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
     backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#1a1a2e',
+    borderWidth: 1.5,
+    borderColor: '#000',
   },
   chipSelected: {
-    backgroundColor: '#C8F135',
-    borderColor: '#1a1a2e',
+    backgroundColor: '#C4FF0E',
+    borderColor: '#000',
   },
-  chipEmoji: { fontSize: 14 },
-  chipText: { fontSize: 13, fontWeight: '700', color: '#1a1a2e' },
-  chipTextSelected: { color: '#1a1a2e' },
+  chipEmoji: { fontSize: 13 },
+  chipText: { fontSize: 12, fontWeight: '800', color: '#0D0D0D' },
+  chipTextSelected: { color: '#0D0D0D' },
 
-  // ── Submit ──
+  // Tags
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  tagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  tagPillActive: {
+    backgroundColor: '#EDE9FE',
+    borderColor: '#7B2FBE',
+    borderWidth: 1.5,
+  },
+  tagPillText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  tagPillTextActive: {
+    color: '#7B2FBE',
+    fontWeight: '800',
+  },
+
+  // Submit Bar
   submitContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    paddingTop: 12,
-    backgroundColor: '#EDE9F8',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.06)',
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingTop: 10,
+    backgroundColor: '#fff',
+    borderTopWidth: 2,
+    borderTopColor: '#000',
   },
   submitBtn: {
-    borderRadius: 30,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#000',
     overflow: 'hidden',
-    shadowColor: '#9333EA',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
   },
-  submitBtnDisabled: { opacity: 0.55 },
+  submitBtnDisabled: { opacity: 0.5 },
   submitGradient: {
-    paddingVertical: 17,
+    paddingVertical: 14,
     alignItems: 'center',
-    borderRadius: 30,
+    borderRadius: 22,
   },
-  submitText: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  submitText: { color: '#000', fontSize: 16, fontWeight: '900' },
 });

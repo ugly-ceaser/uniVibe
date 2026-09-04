@@ -1,6 +1,15 @@
 import React from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import { config, getHealthUrl, log } from '@/config/environment';
+import type { CourseMaterial, CourseMaterialUpload } from '@/types/course';
+import {
+  normalizeCourse,
+  normalizeCourses,
+  normalizeCourseMaterial,
+  normalizeCourseMaterials,
+} from '@/utils/course';
+import { normalizeGuide, normalizeGuides } from '@/utils/guide';
 import { ApiResponse } from '@/types/api';
 import { Guide } from '@/types';
 import { Category, LikeResponse } from '@/types';
@@ -9,8 +18,13 @@ import {
   QuestionSummary,
   UserProfile,
   UpdateProfileRequest,
-  VerifyFieldsRequest,
   ProfileApiResponse,
+  UniversityHierarchyItem,
+  FacultyHierarchyItem,
+  DepartmentHierarchyItem,
+  ProgrammeHierarchyItem,
+  LevelHierarchyItem,
+  SemesterHierarchyItem,
   MapLocation,
   MapApiClient,
 } from './types';
@@ -55,11 +69,13 @@ const STATUS_MESSAGES: Record<number, string> = {
 // ------------------------
 // ApiClient
 // ------------------------
-class ApiClient {
+export class ApiClient {
   private baseURL: string;
   private token?: string;
+  private readonly requestTimeout: number;
   private pendingRequests = new Map<string, Promise<any>>();
   private requestTimestamps = new Map<string, number>();
+  private cacheGeneration = 0;
   private cache = new Map<
     string,
     { data: any; timestamp: number; ttl: number }
@@ -67,37 +83,40 @@ class ApiClient {
   private readonly MIN_REQUEST_INTERVAL = 100;
   private readonly DEFAULT_CACHE_TTL = 30000; // 30 seconds
 
-  constructor() {
-    this.baseURL =
-      process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-    console.log('🌐 API Base URL:', this.baseURL);
-
-    // Test connection on initialization
-    this.testConnection();
+  constructor(
+    baseURL: string = config.api.baseUrl,
+    requestTimeout: number = config.api.timeout
+  ) {
+    this.baseURL = baseURL.replace(/\/+$/, '');
+    this.requestTimeout = requestTimeout;
   }
 
-  private async testConnection() {
-    try {
-      const healthURL = this.baseURL.replace('/api/v1', '/health');
-      console.log('🔍 Testing connection to:', healthURL);
+  async testConnection(): Promise<boolean> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.requestTimeout);
 
-      const response = await fetch(healthURL, {
+    try {
+      const response = await fetch(getHealthUrl(this.baseURL), {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
       });
-
-      console.log('✅ Connection test result:', {
-        url: healthURL,
-        status: response.status,
-        ok: response.ok,
-        statusText: response.statusText,
-      });
+      return response.ok;
     } catch (error) {
-      console.warn('⚠️ Connection test failed:', error);
+      log.debug(
+        'API health check failed',
+        error instanceof Error ? error.message : String(error)
+      );
+      return false;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
   setToken(token: string) {
+    if (this.token !== token) {
+      this.clearCache();
+    }
     this.token = token;
   }
 
@@ -106,21 +125,17 @@ class ApiClient {
     this.clearCache(); // Clear cache on logout
   }
 
-  private clearCache() {
+  public clearCache() {
+    this.cacheGeneration += 1;
     this.cache.clear();
     this.pendingRequests.clear();
+    this.requestTimestamps.clear();
   }
 
-  // 🐛 Debug method to clear all pending requests
   public clearPendingRequests() {
-    console.log(
-      '🧹 Clearing all pending requests:',
-      Array.from(this.pendingRequests.keys())
-    );
     this.pendingRequests.clear();
   }
 
-  // 🐛 Debug method to get current state
   public getDebugInfo() {
     return {
       pendingRequests: Array.from(this.pendingRequests.keys()),
@@ -182,7 +197,6 @@ class ApiClient {
     const waitTime = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest;
 
     if (waitTime > 0) {
-      console.log(`⏱️ Throttling request ${requestKey} for ${waitTime}ms`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
   }
@@ -196,32 +210,15 @@ class ApiClient {
     const method = options.method || 'GET';
     const requestKey = `${method}:${endpoint}`;
     const cacheKey = this.getCacheKey(endpoint, method);
+    const requestCacheGeneration = this.cacheGeneration;
 
     // Check cache for GET requests
     if (method === 'GET' && useCache && this.isRequestCached(cacheKey)) {
-      console.log('💾 Returning cached data for:', requestKey);
       return this.getCachedData<T>(cacheKey)!;
     }
 
-    // 🔧 FIXED: Better deduplication with promise resolution tracking
     if (this.pendingRequests.has(requestKey)) {
-      console.log('🔄 Deduplicating request:', requestKey);
-      const existingPromise = this.pendingRequests.get(requestKey)!;
-
-      // Check if the existing promise is still pending
-      try {
-        const result = await Promise.race([
-          existingPromise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Request timeout')), 10000)
-          ),
-        ]);
-        return result;
-      } catch (error) {
-        // If the existing promise failed or timed out, remove it and continue with new request
-        console.warn('⚠️ Existing request failed, creating new one:', error);
-        this.pendingRequests.delete(requestKey);
-      }
+      return this.pendingRequests.get(requestKey)!;
     }
 
     // Check if we need to throttle this request
@@ -229,17 +226,19 @@ class ApiClient {
       await this.waitForThrottle(requestKey);
     }
 
-    console.log('🚀 Creating new request for:', requestKey);
     const requestPromise = this._makeRequest<T>(endpoint, options);
     this.pendingRequests.set(requestKey, requestPromise);
 
     try {
       const result = await requestPromise;
-      console.log('✅ Request completed for:', requestKey, 'Result:', result);
       this.requestTimestamps.set(requestKey, Date.now());
 
       // Cache GET requests
-      if (method === 'GET' && useCache) {
+      if (
+        method === 'GET' &&
+        useCache &&
+        requestCacheGeneration === this.cacheGeneration
+      ) {
         this.setCacheData(cacheKey, result, cacheTTL);
       }
 
@@ -249,38 +248,18 @@ class ApiClient {
       }
 
       return result;
-    } catch (error) {
-      console.error('💥 Request failed for:', requestKey, error);
-      throw error;
     } finally {
-      // Clean up the pending request immediately after completion
-      this.pendingRequests.delete(requestKey);
-      console.log('🧹 Cleaned up pending request:', requestKey);
+      if (this.pendingRequests.get(requestKey) === requestPromise) {
+        this.pendingRequests.delete(requestKey);
+      }
     }
   }
 
-  private invalidateRelatedCache(endpoint: string) {
-    // Invalidate related cache entries when data is modified
-    const keysToDelete: string[] = [];
-
-    for (const [key] of this.cache) {
-      // If creating/updating questions, invalidate questions list
-      if (
-        endpoint.includes('/questions') &&
-        key.includes('GET:/forum/questions')
-      ) {
-        keysToDelete.push(key);
-      }
-      // If creating comments, invalidate specific question cache
-      if (endpoint.includes('/comments') || endpoint.includes('/answers')) {
-        keysToDelete.push(key);
-      }
-    }
-
-    keysToDelete.forEach(key => {
-      console.log('🗑️ Invalidating cache:', key);
-      this.cache.delete(key);
-    });
+  private invalidateRelatedCache(_endpoint: string) {
+    // Mutations may affect lists, counters, related resources, and permissions.
+    // Prefer correctness over retaining potentially stale GET responses.
+    this.cacheGeneration += 1;
+    this.cache.clear();
   }
 
   private async _makeRequest<T>(
@@ -288,54 +267,36 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
-    console.log('🌐 Making API request to:', url);
-    console.log('🔍 [DEBUG] Request options:', {
-      method: options.method || 'GET',
-      hasToken: !!this.token,
-      tokenLength: this.token?.length || 0,
-      headers: options.headers,
-    });
 
     // Build headers safely so we don't force JSON for FormData
     const mergedHeaders: Record<string, string> = {
       ...(options.headers as Record<string, string> | undefined),
     };
-    if (!mergedHeaders['Content-Type'] && !(options.body instanceof FormData)) {
+    const isFormData =
+      typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (!mergedHeaders['Content-Type'] && !isFormData) {
       mergedHeaders['Content-Type'] = 'application/json';
     }
     if (this.token) {
       mergedHeaders['Authorization'] = `Bearer ${this.token}`;
     }
 
-    console.log('🔍 [DEBUG] Final headers:', mergedHeaders);
+    const requestPath = endpoint.split('?')[0];
+    log.debug(`${options.method || 'GET'} ${requestPath}`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.requestTimeout);
 
     try {
-      // Add timeout to prevent hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.warn('⏰ Request timeout after 30 seconds');
-        controller.abort();
-      }, 30000); // 30 second timeout
-
       const fetchOptions = {
         ...options,
         headers: mergedHeaders,
         signal: controller.signal,
       };
 
-      console.log('🚀 [DEBUG] Starting fetch request...');
       const response = await fetch(url, fetchOptions);
 
-      clearTimeout(timeoutId);
-      console.log('📊 Response received with status:', response.status);
-      console.log(
-        '🔍 [DEBUG] Response headers:',
-        Object.fromEntries(response.headers.entries())
-      );
-
       if (response.status === 429) {
-        console.warn('⚠️ Rate limit hit, backing off...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
         throw new ApiError(
           'Rate limit reached. Please wait a moment and try again.',
           429
@@ -343,104 +304,78 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        console.error('❌ [DEBUG] Non-OK response:', {
-          status: response.status,
-          statusText: response.statusText,
-          url: response.url,
-        });
-
-        let errorData = null;
-        try {
-          errorData = await response.json();
-          console.log('🔍 [DEBUG] Error response body:', errorData);
-        } catch (jsonError) {
-          console.warn('⚠️ Could not parse error response as JSON:', jsonError);
-        }
+        const errorData = await this.parseResponseBody(response);
 
         throw new ApiError(
-          errorData?.message ||
+          (this.isRecord(errorData) &&
+            typeof errorData.message === 'string' &&
+            errorData.message) ||
             `HTTP ${response.status}: ${response.statusText}`,
-          response.status
+          response.status,
+          response.headers.get('x-request-id') || undefined
         );
       }
 
-      console.log('📦 [DEBUG] Parsing response JSON...');
-      const data = await response.json();
-      console.log('✅ [DEBUG] Response data parsed successfully:', {
-        dataType: typeof data,
-        hasData: !!data?.data,
-        dataKeys: data ? Object.keys(data) : [],
-        dataLength: Array.isArray(data?.data) ? data.data.length : 'N/A',
-      });
-
-      return data as T;
+      return (await this.parseResponseBody(response)) as T;
     } catch (error) {
-      console.error('💥 Request failed with error:', {
-        error: error,
-        message: error instanceof Error ? error.message : String(error),
-        name: error instanceof Error ? error.name : typeof error,
-        stack:
-          error instanceof Error ? error.stack?.substring(0, 200) : undefined,
-      });
-
-      // Enhanced error handling with detailed messages
       if (error instanceof ApiError) {
-        throw error; // Re-throw ApiError as-is
+        throw error;
       }
 
-      // Handle abort errors (timeout)
       if (error instanceof Error && error.name === 'AbortError') {
         throw new ApiError(
-          'Request timed out after 30 seconds. Please try again.',
+          `Request timed out after ${Math.ceil(
+            this.requestTimeout / 1000
+          )} seconds. Please try again.`,
           408
         );
       }
 
-      // Handle network errors
-      if (error instanceof TypeError && error.message.includes('fetch')) {
+      if (error instanceof TypeError) {
         throw new ApiError(
           'Network connection failed. Please check your internet connection.',
           0
         );
       }
 
-      // Handle JSON parsing errors
-      if (error instanceof SyntaxError) {
-        throw new ApiError('Invalid response format from server.', 500);
-      }
-
-      // Generic error fallback
       throw new ApiError(
         error instanceof Error ? error.message : 'An unexpected error occurred',
         500
       );
+    } finally {
+      clearTimeout(timeoutId);
     }
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+
+  private async parseResponseBody(response: Response): Promise<unknown> {
+    if (response.status === 204 || response.status === 205) {
+      return undefined;
+    }
+
+    const body = await response.text();
+    if (!body) {
+      return undefined;
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.toLowerCase().includes('json')) {
+      try {
+        return JSON.parse(body);
+      } catch {
+        throw new ApiError('Invalid response format from server.', 500);
+      }
+    }
+
+    return body;
   }
 
   // Helper methods with caching control
   async get<T>(endpoint: string, useCache: boolean = true): Promise<T> {
-    console.log(
-      '🔍 [DEBUG] GET method called for:',
-      endpoint,
-      'useCache:',
-      useCache
-    );
-    console.log(
-      '🔍 [DEBUG] Current pending requests:',
-      Array.from(this.pendingRequests.keys())
-    );
-    console.log(
-      '🔍 [DEBUG] Current cache keys:',
-      Array.from(this.cache.keys())
-    );
-
-    const result = await this.request<T>(endpoint, { method: 'GET' }, useCache);
-    console.log(
-      '🔍 [DEBUG] GET method returning result for:',
-      endpoint,
-      result
-    );
-    return result;
+    return this.request<T>(endpoint, { method: 'GET' }, useCache);
   }
 
   async post<T>(endpoint: string, data?: any): Promise<T> {
@@ -490,35 +425,68 @@ class ApiClient {
   // Authenticated requests
   async authenticatedRequest<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    useCache: boolean = false
   ): Promise<T> {
     if (!this.token) {
       throw new ApiError('Authentication required', 401);
     }
-    return this.request<T>(endpoint, options);
+    return this.request<T>(endpoint, options, useCache);
   }
 
   async authGet<T>(endpoint: string, useCache: boolean = true): Promise<T> {
-    return this.authenticatedRequest<T>(endpoint, { method: 'GET' });
+    return this.authenticatedRequest<T>(endpoint, { method: 'GET' }, useCache);
   }
 
   async authPost<T>(endpoint: string, data?: any): Promise<T> {
+    const isFormData =
+      typeof FormData !== 'undefined' && data instanceof FormData;
     return this.authenticatedRequest<T>(endpoint, {
       method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
+      body: isFormData ? data : data ? JSON.stringify(data) : undefined,
     });
+  }
+
+  async authPut<T>(endpoint: string, data?: any): Promise<T> {
+    const isFormData =
+      typeof FormData !== 'undefined' && data instanceof FormData;
+    return this.authenticatedRequest<T>(endpoint, {
+      method: 'PUT',
+      body: isFormData ? data : data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async authPatch<T>(endpoint: string, data?: any): Promise<T> {
+    const isFormData =
+      typeof FormData !== 'undefined' && data instanceof FormData;
+    return this.authenticatedRequest<T>(endpoint, {
+      method: 'PATCH',
+      body: isFormData ? data : data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async authDelete<T>(endpoint: string): Promise<T> {
+    return this.authenticatedRequest<T>(endpoint, { method: 'DELETE' });
   }
 
   // Force refresh methods (bypass cache)
   async forceRefresh<T>(endpoint: string): Promise<T> {
     const cacheKey = this.getCacheKey(endpoint, 'GET');
+    this.cacheGeneration += 1;
+    const refreshGeneration = this.cacheGeneration;
     this.cache.delete(cacheKey);
-    return this.get<T>(endpoint, false);
+    this.pendingRequests.delete(cacheKey);
+    const data = await this.get<T>(endpoint, false);
+    if (refreshGeneration === this.cacheGeneration) {
+      this.setCacheData(cacheKey, data);
+    }
+    return data;
   }
 }
 
 // Create a global instance of ApiClient
 const apiClient = new ApiClient();
+let isSessionExpiryAlertVisible = false;
 
 // ------------------------
 // useApi hook
@@ -536,18 +504,25 @@ export const useApi = () => {
       try {
         return await fn();
       } catch (error: any) {
-        console.error('API Error Details:', {
-          message: error.message,
-          status: error.status,
-          stack: error.stack,
-          name: error.name,
-        });
-
         if (error instanceof ApiError) {
           if (error.status === 401) {
-            Alert.alert('Session Expired', 'Please log in again', [
-              { text: 'OK', onPress: logout },
-            ]);
+            await logout();
+            if (!isSessionExpiryAlertVisible) {
+              isSessionExpiryAlertVisible = true;
+              Alert.alert(
+                'Session Expired',
+                'Please log in again',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      isSessionExpiryAlertVisible = false;
+                    },
+                  },
+                ],
+                { cancelable: false }
+              );
+            }
           } else if (error.status === 403) {
             Alert.alert('Access Denied', "You don't have permission", [
               { text: 'OK' },
@@ -588,15 +563,15 @@ export const useApi = () => {
 
       // authenticated (adds JWT + handles 401/403)
       authGet: <T>(endpoint: string, useCache: boolean = true) =>
-        authenticatedRequest(() => apiClient.get<T>(endpoint, useCache)),
+        authenticatedRequest(() => apiClient.authGet<T>(endpoint, useCache)),
       authPost: <T>(endpoint: string, data?: any) =>
-        authenticatedRequest(() => apiClient.post<T>(endpoint, data)),
+        authenticatedRequest(() => apiClient.authPost<T>(endpoint, data)),
       authPut: <T>(endpoint: string, data?: any) =>
-        authenticatedRequest(() => apiClient.put<T>(endpoint, data)),
+        authenticatedRequest(() => apiClient.authPut<T>(endpoint, data)),
       authPatch: <T>(endpoint: string, data?: any) =>
-        authenticatedRequest(() => apiClient.patch<T>(endpoint, data)),
+        authenticatedRequest(() => apiClient.authPatch<T>(endpoint, data)),
       authDelete: <T>(endpoint: string) =>
-        authenticatedRequest(() => apiClient.delete<T>(endpoint)),
+        authenticatedRequest(() => apiClient.authDelete<T>(endpoint)),
 
       // Additional methods
       authenticatedRequest: <T>(fn: () => Promise<T>) =>
@@ -605,6 +580,7 @@ export const useApi = () => {
         apiClient.forceRefresh<T>(endpoint),
 
       // 🐛 Debug methods
+      clearCache: () => apiClient.clearCache(),
       clearPendingRequests: () => apiClient.clearPendingRequests(),
       getDebugInfo: () => apiClient.getDebugInfo(),
     }),
@@ -618,8 +594,14 @@ export const useApi = () => {
 // Auth API
 // ------------------------
 export const authApi = {
-  register: (user: { name: string; email: string; password: string }) =>
-    apiClient.post('/auth/register', user),
+  register: (user: {
+    username: string;
+    firstname: string;
+    middlename?: string | null;
+    lastname: string;
+    email: string;
+    password: string;
+  }) => apiClient.post('/auth/register', user),
   login: (credentials: { email: string; password: string }) =>
     apiClient.post('/auth/login', credentials),
   checkUsername: (username: string) =>
@@ -633,7 +615,7 @@ export const authApi = {
 // ------------------------
 export const coursesApi = (api: ReturnType<typeof useApi>) => ({
   // ─── Official Courses ────────────────────────────────────────────────
-  getAll: (filters?: {
+  getAll: async (filters?: {
     universityId?: string;
     facultyId?: string;
     departmentId?: string;
@@ -647,22 +629,36 @@ export const coursesApi = (api: ReturnType<typeof useApi>) => ({
           Object.entries(filters).filter(([, v]) => !!v) as any
         ).toString()
       : '';
-    return api.authGet<{ data: any[] }>(`/courses${params}`, false);
+    const response = await api.authGet<{ data: unknown }>(
+      `/courses${params}`,
+      false
+    );
+    return { ...response, data: normalizeCourses(response.data) };
   },
-  getById: (id: string) => api.authGet<{ data: any }>(`/courses/${id}`),
-  search: (q: string, universityId?: string) => {
+  getById: async (id: string) => {
+    const response = await api.authGet<{ data: unknown }>(`/courses/${id}`);
+    return { ...response, data: normalizeCourse(response.data) };
+  },
+  search: async (q: string, universityId?: string) => {
     const params = new URLSearchParams({
       q,
       ...(universityId ? { universityId } : {}),
     });
-    return api.authGet<{ data: any[] }>(
+    const response = await api.authGet<{ data: unknown }>(
       `/courses/search?${params.toString()}`,
       false
     );
+    return { ...response, data: normalizeCourses(response.data) };
   },
 
   // ─── Selected/Enrolled Courses ─────────────────────────────────────────
-  getSelected: () => api.authGet<{ data: any[] }>('/courses/selected', false),
+  getSelected: async () => {
+    const response = await api.authGet<{ data: unknown }>(
+      '/courses/selected',
+      false
+    );
+    return { ...response, data: normalizeCourses(response.data) };
+  },
   enroll: (id: string) =>
     api.authPost<{ message: string }>(`/courses/${id}/enroll`),
   unenroll: (id: string) =>
@@ -673,30 +669,33 @@ export const coursesApi = (api: ReturnType<typeof useApi>) => ({
     const params = new URLSearchParams(
       Object.entries({ country, state }).filter(([, v]) => !!v) as any
     ).toString();
-    return api.get<{ data: any[] }>(
+    return api.get<{ data: UniversityHierarchyItem[] }>(
       `/courses/universities${params ? '?' + params : ''}`,
       true
     );
   },
   getFaculties: (universityId: string) =>
-    api.get<{ data: any[] }>(
+    api.get<{ data: FacultyHierarchyItem[] }>(
       `/courses/universities/${universityId}/faculties`,
       true
     ),
   getDepartments: (facultyId: string) =>
-    api.get<{ data: any[] }>(
+    api.get<{ data: DepartmentHierarchyItem[] }>(
       `/courses/faculties/${facultyId}/departments`,
       true
     ),
   getProgrammes: (departmentId: string) =>
-    api.get<{ data: any[] }>(
+    api.get<{ data: ProgrammeHierarchyItem[] }>(
       `/courses/departments/${departmentId}/programmes`,
       true
     ),
   getLevels: (programmeId: string) =>
-    api.get<{ data: any[] }>(`/courses/programmes/${programmeId}/levels`, true),
+    api.get<{ data: LevelHierarchyItem[] }>(
+      `/courses/programmes/${programmeId}/levels`,
+      true
+    ),
   getSemesters: (programmeId: string) =>
-    api.get<{ data: any[] }>(
+    api.get<{ data: SemesterHierarchyItem[] }>(
       `/courses/programmes/${programmeId}/semesters`,
       true
     ),
@@ -757,6 +756,50 @@ export const coursesApi = (api: ReturnType<typeof useApi>) => ({
   // ─── Legacy Course Requests (backward compat) ────────────────────────
   getRequestStatus: () => api.authGet<any>('/courses/requests/status', false),
   submitRequest: (data: any) => api.authPost<any>('/courses/requests', data),
+});
+
+// ------------------------
+// Course Materials API
+// ------------------------
+export const courseMaterialsApi = (api: ReturnType<typeof useApi>) => ({
+  list: async (courseId: string): Promise<{ data: CourseMaterial[] }> => {
+    const response = await api.authGet<{ data: unknown }>(
+      `/courses/${courseId}/materials`,
+      false
+    );
+    const payload = response.data as
+      | unknown[]
+      | { materials?: unknown[] }
+      | undefined;
+    const values = Array.isArray(payload) ? payload : payload?.materials;
+    return { ...response, data: normalizeCourseMaterials(values) };
+  },
+
+  upload: async (
+    courseId: string,
+    file: CourseMaterialUpload
+  ): Promise<{ data: CourseMaterial }> => {
+    const body = new FormData();
+    if (file.webFile) {
+      body.append('file', file.webFile, file.name);
+    } else {
+      body.append('file', {
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType,
+      } as any);
+    }
+
+    const response = await api.authPost<{ data: unknown }>(
+      `/courses/${courseId}/materials`,
+      body
+    );
+    const payload = response.data as { material?: unknown } | undefined;
+    return {
+      ...response,
+      data: normalizeCourseMaterial(payload?.material ?? response.data),
+    };
+  },
 });
 
 // ------------------------
@@ -943,25 +986,21 @@ export interface CourseChatsResponse {
 export const aiApi = (api: ReturnType<typeof useApi>) => ({
   // Course-specific AI chat
   courseChat: (data: AIChatRequest) => {
-    console.log(`🤖 Sending AI chat request for course ${data.courseId}`);
     return api.authPost<AIApiResponse>('/ai/chat/course', data);
   },
 
   // General AI chat
   generalChat: (data: GeneralChatRequest) => {
-    console.log('🤖 Sending general AI chat request');
     return api.authPost<AIApiResponse>('/ai/chat/general', data);
   },
 
   // Academic progress AI chat
   academicChat: (data: AcademicChatRequest) => {
-    console.log('🤖 Sending academic progress AI chat request');
     return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/academic', data);
   },
 
   // Get course insights and study recommendations
   getCourseInsights: (courseId: string) => {
-    console.log(`📚 Fetching AI insights for course ${courseId}`);
     return api.authGet<ApiResponse<CourseInsights>>(
       `/ai/insights/course/${courseId}`
     );
@@ -979,9 +1018,6 @@ export const aiApi = (api: ReturnType<typeof useApi>) => ({
       forumParticipation?: string;
     }
   ) => {
-    console.log(
-      `🎯 Fetching personalized recommendations for course ${courseId}`
-    );
     return api.authPost<ApiResponse<PersonalizedRecommendations>>(
       `/ai/recommendations/course/${courseId}`,
       {
@@ -992,30 +1028,25 @@ export const aiApi = (api: ReturnType<typeof useApi>) => ({
 
   // Chat session management
   getChatSessions: () => {
-    console.log('📋 Fetching user chat sessions');
     return api.authGet<ApiResponse<ChatSession[]>>('/ai/sessions');
   },
 
   getChatSession: (sessionId: string) => {
-    console.log(`📋 Fetching chat session ${sessionId}`);
     return api.authGet<ApiResponse<ChatSession>>(`/ai/sessions/${sessionId}`);
   },
 
   deleteChatSession: (sessionId: string) => {
-    console.log(`🗑️ Deleting chat session ${sessionId}`);
     return api.authDelete<ApiResponse<void>>(`/ai/sessions/${sessionId}`);
   },
 
   // Course-specific chat session management
   getCourseChatSessions: (courseId: string) => {
-    console.log(`📚 Fetching chat sessions for course ${courseId}`);
     return api.authGet<CourseChatsListResponse>(
       `/ai/courses/${courseId}/chats`
     );
   },
 
   getCourseActiveSession: (courseId: string) => {
-    console.log(`💬 Getting active chat session for course ${courseId}`);
     return api.authGet<CourseSessionResponse>(
       `/ai/courses/${courseId}/chats/session`
     );
@@ -1023,9 +1054,6 @@ export const aiApi = (api: ReturnType<typeof useApi>) => ({
 
   // Enhanced course chat with automatic session management
   courseChatWithSession: (data: AIChatRequest) => {
-    console.log(
-      `🤖 Sending AI chat request for course ${data.courseId} with session management`
-    );
     return api.authPost<AIApiResponse>('/ai/chat/course', data);
   },
 
@@ -1034,7 +1062,6 @@ export const aiApi = (api: ReturnType<typeof useApi>) => ({
     message: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   ) => {
-    console.log('🤖 Sending general AI chat request (legacy)');
     return api.authPost<ApiResponse<AIChatResponse>>('/ai/chat/general', {
       message,
       conversationHistory,
@@ -1050,21 +1077,34 @@ export interface QuestionDetail {
   id: string;
   title: string;
   body: string;
-  forumId: string;
-  status: 'Cleared' | 'Pending' | 'Closed';
-  authorId: string;
+  forumId?: string;
+  status: 'Cleared' | 'Pending' | 'Closed' | 'Open';
+  authorId?: string;
   createdAt: string;
-  author: {
+  category?: string;
+  department?: string;
+  courseCode?: string;
+  viewCount?: number;
+  views?: number;
+  score?: number;
+  reactionCount?: number;
+  answerCount?: number;
+  author?: {
     id: string;
     fullname: string;
-    email: string;
-  };
-  forum: {
+    email?: string;
+    department?: string;
+    faculty?: string;
+    level?: number;
+    username?: string;
+    avatarUrl?: string;
+  } | null;
+  forum?: {
     id: string;
     name: string;
-  };
+  } | null;
   answers: Answer[];
-  _count: {
+  _count?: {
     answers: number;
   };
 }
@@ -1072,17 +1112,22 @@ export interface QuestionDetail {
 export interface Answer {
   id: string;
   body: string;
-  authorId: string;
+  authorId?: string;
   questionId: string;
-  status: 'Cleared' | 'Pending' | 'Closed';
+  status?: 'Cleared' | 'Pending' | 'Closed';
   createdAt: string;
   commentsCount?: number;
-  author: {
+  author?: {
     id: string;
     fullname: string;
-    email: string;
-  };
-  _count: {
+    email?: string;
+    department?: string;
+    faculty?: string;
+    level?: number;
+    username?: string;
+    avatarUrl?: string;
+  } | null;
+  _count?: {
     comments: number;
   };
 }
@@ -1091,16 +1136,28 @@ export type ForumComment = {
   id: string;
   body: string;
   createdAt: string;
-  author?: { fullname?: string; id?: string };
+  author?: {
+    fullname?: string;
+    id?: string;
+    department?: string;
+    faculty?: string;
+    level?: number;
+  } | null;
   parentId?: string | null;
-  answerId: string;
+  answerId?: string;
 };
 
 export type ForumCommentNode = {
   id: string;
   body: string;
   createdAt?: string;
-  author?: { id?: string; fullname?: string };
+  author?: {
+    id?: string;
+    fullname?: string;
+    department?: string;
+    faculty?: string;
+    level?: number;
+  } | null;
   replies?: ForumCommentNode[];
 };
 
@@ -1124,12 +1181,16 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     refresh?: boolean; // when true, bypass cache
     category?: string; // e.g. TECH_AND_PROGRAMMING (enum)
     forumId?: string;
+    cursor?: string;
+    profileName?: 'forum' | 'homeTrending';
   }) => {
     const qs = new URLSearchParams();
     qs.set('page', String(params.page));
     qs.set('pageSize', String(params.pageSize));
     if (params.category) qs.set('category', params.category);
     if (params.forumId) qs.set('forumId', params.forumId);
+    if (params.cursor) qs.set('cursor', params.cursor);
+    if (params.profileName) qs.set('profileName', params.profileName);
 
     const endpoint = `/forum/questions${
       qs.toString() ? `?${qs.toString()}` : ''
@@ -1164,7 +1225,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     forumId?: string;
   }) => {
     const endpoint = `/forum/questions`;
-    return api.post(endpoint, payload);
+    return api.authPost(endpoint, payload);
   },
 
   /**
@@ -1188,7 +1249,17 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * DELETE /api/v1/forum/questions/:id - Delete Question (if supported)
    */
   deleteQuestion: (questionId: string) => {
-    return api.delete<ApiResponse<void>>(`/forum/questions/${questionId}`);
+    return api.authDelete<ApiResponse<void>>(`/forum/questions/${questionId}`);
+  },
+
+  /**
+   * POST /api/v1/forum/questions/:id/report - Report Question
+   */
+  reportQuestion: (questionId: string, reason: string) => {
+    return api.authPost<ApiResponse<any>>(
+      `/forum/questions/${questionId}/report`,
+      { reason }
+    );
   },
 
   // ===== ANSWERS =====
@@ -1220,7 +1291,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * DELETE /api/v1/forum/answers/:id - Delete Answer (if supported)
    */
   deleteAnswer: (answerId: string) => {
-    return api.delete<ApiResponse<void>>(`/forum/answers/${answerId}`);
+    return api.authDelete<ApiResponse<void>>(`/forum/answers/${answerId}`);
   },
 
   /**
@@ -1270,7 +1341,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * DELETE /api/v1/forum/comments/:id - Delete Comment (if supported)
    */
   deleteComment: (commentId: string) => {
-    return api.delete<ApiResponse<void>>(`/forum/comments/${commentId}`);
+    return api.authDelete<ApiResponse<void>>(`/forum/comments/${commentId}`);
   },
 
   // ===== FORUMS/CATEGORIES =====
@@ -1347,8 +1418,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
    * Clear all forum-related cache
    */
   clearCache: () => {
-    // This would need to be implemented in the ApiClient
-    console.log('🗑️ Clearing forum cache...');
+    api.clearCache();
   },
 
   listCategories: () =>
@@ -1382,7 +1452,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
     body: string;
     parentId?: string;
   }) => {
-    return api.post('/forum/comments', {
+    return api.authPost('/forum/comments', {
       body: params.body,
       answerId: params.answerId,
       ...(params.parentId ? { parentId: params.parentId } : {}),
@@ -1391,7 +1461,7 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
 
   // Public: list all replies tree under an answer (top-level + nested)
   getAnswerComments: async (answerId: string) => {
-    return api.get<ForumCommentNode[]>(
+    return api.authGet<ForumCommentNode[]>(
       `/forum/answers/${answerId}/comments`,
       true
     );
@@ -1432,19 +1502,30 @@ export interface ForumPost {
   body: string;
   forumId?: string;
   forum?: Forum;
-  authorId: string;
-  author: {
+  authorId?: string;
+  author?: {
     id: string;
     fullname: string;
-    email: string;
-  };
-  answers: Answer[];
+    email?: string;
+    department?: string;
+    faculty?: string;
+    level?: number;
+    username?: string;
+    avatarUrl?: string;
+  } | null;
+  answers?: Answer[];
   tags?: string[];
-  views: number;
-  votes: number;
-  isResolved: boolean;
+  views?: number;
+  viewCount?: number;
+  votes?: number;
+  reactionCount?: number;
+  answerCount?: number;
+  isResolved?: boolean;
+  category?: string;
+  department?: string;
+  courseCode?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   // Additional properties for UI
   isLiked?: boolean;
   likes?: number;
@@ -1452,6 +1533,7 @@ export interface ForumPost {
   _count?: {
     answers: number;
   };
+  score?: number;
 }
 
 // ------------------------
@@ -1459,40 +1541,37 @@ export interface ForumPost {
 // ------------------------
 export const guideApi = (api: ReturnType<typeof useApi>) => ({
   // Guide CRUD operations - Fixed endpoints to match backend
-  getAll: () => {
-    console.log('🌐 Fetching guides from /api/v1/guide');
-    return api.authGet<ApiResponse<Guide[]>>('/guide');
+  getAll: async () => {
+    const response = await api.authGet<ApiResponse<unknown>>('/guide');
+    const payload = response.data as { guides?: unknown[] } | unknown[];
+    const guides = Array.isArray(payload) ? payload : payload?.guides;
+    return { ...response, data: normalizeGuides(guides) };
   },
-  getById: (id: string) => {
-    console.log(`🌐 Fetching guide ${id} from /api/v1/guide/${id}`);
-    return api.authGet<ApiResponse<Guide>>(`/guide/${id}`);
+  getById: async (id: string) => {
+    const response = await api.authGet<ApiResponse<unknown>>(`/guide/${id}`);
+    const payload = response.data as { guide?: unknown };
+    return {
+      ...response,
+      data: normalizeGuide(payload?.guide ?? response.data),
+    };
   },
   create: (data: Partial<Guide>) => {
-    console.log('🌐 Creating guide at /api/v1/guide');
     return api.authPost<ApiResponse<Guide>>('/guide', data);
   },
   update: (id: string, data: Partial<Guide>) => {
-    console.log(`🌐 Updating guide ${id} at /api/v1/guide/${id}`);
     return api.authPut<ApiResponse<Guide>>(`/guide/${id}`, data);
   },
   delete: (id: string) => {
-    console.log(`🌐 Deleting guide ${id} at /api/v1/guide/${id}`);
     return api.authDelete<ApiResponse<void>>(`/guide/${id}`);
   },
 
   // Like operations - using your actual backend routes
   like: (guideId: string) => {
-    console.log(
-      `🌐 Liking guide ${guideId} at /api/v1/likes/guide/${guideId}/like`
-    );
     return api.authPost<ApiResponse<LikeResponse>>(
       `/likes/guide/${guideId}/like`
     );
   },
   unlike: (guideId: string) => {
-    console.log(
-      `🌐 Unliking guide ${guideId} at /api/v1/likes/guide/${guideId}/like`
-    );
     return api.authDelete<ApiResponse<LikeResponse>>(
       `/likes/guide/${guideId}/like`
     );
@@ -1500,13 +1579,11 @@ export const guideApi = (api: ReturnType<typeof useApi>) => ({
 
   // Alternative: Generic like endpoint (if you want to use the generic route)
   genericLike: (guideId: string) => {
-    console.log(`🌐 Generic like guide ${guideId}`);
     return api.authPost<ApiResponse<LikeResponse>>(
       `/likes/guide/${guideId}/like`
     );
   },
   genericUnlike: (guideId: string) => {
-    console.log(`🌐 Generic unlike guide ${guideId}`);
     return api.authDelete<ApiResponse<LikeResponse>>(
       `/likes/guide/${guideId}/like`
     );
@@ -1541,23 +1618,7 @@ export const mapApi = (api: ReturnType<typeof useApi>): MapApiClient => ({
     api.authPatch<ApiResponse<MapLocation>>(`/map/${id}/investigate`, {}),
 });
 
-// ------------------------
-// Profile API (secured with JWT)
-// ------------------------
-export interface Profile {
-  id: string;
-  fullname: string;
-  email: string;
-  phone?: string;
-  department?: string;
-  faculty?: string;
-  level?: number;
-  semester?: string;
-}
-
-// UserProfile, UpdateProfileRequest, VerifyFieldsRequest, and ProfileApiResponse
-// are now imported from utils/types.ts to maintain single source of truth
-
+// Profile API (secured with JWT). Profile contracts live in utils/types.ts.
 export const profileApi = (api: ReturnType<typeof useApi>) => {
   const toBackendPayload = (data: UpdateProfileRequest) => {
     const { fullName, ...rest } = data;
@@ -1567,46 +1628,92 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
     };
     Object.keys(payload).forEach(k => {
       const v = payload[k];
-      if (v === '' || v === undefined || v === null) delete payload[k];
+      if (v === '' || v === undefined || v === null) {
+        delete payload[k];
+      }
     });
     return payload;
   };
 
   // Transform API response to match our strict UserProfile type
   const transformUserProfile = (apiData: any): UserProfile => {
-    const validRoles: Array<'STUDENT' | 'ADMIN' | 'LECTURER'> = [
+    const validRoles: ('STUDENT' | 'ADMIN' | 'LECTURER')[] = [
       'STUDENT',
       'ADMIN',
       'LECTURER',
     ];
-    const validSemesters: Array<'First' | 'Second'> = ['First', 'Second'];
-    const validStatuses: Array<'Cleared' | 'Pending' | 'Suspended'> = [
+    const validSemesters: ('First' | 'Second')[] = ['First', 'Second'];
+    const validStatuses: ('Cleared' | 'Pending' | 'Suspended')[] = [
       'Cleared',
       'Pending',
       'Suspended',
     ];
 
+    const hierarchyName = (value: unknown): string => {
+      if (typeof value === 'string') {
+        return value;
+      }
+      if (
+        value &&
+        typeof value === 'object' &&
+        'name' in value &&
+        typeof value.name === 'string'
+      ) {
+        return value.name;
+      }
+      return '';
+    };
+    const isVerified = (value: unknown): boolean =>
+      value === true ||
+      (typeof value === 'string' && value.toUpperCase() === 'VERIFIED');
+    const rawVerification =
+      apiData.verificationStatus ?? apiData.verification_status;
+    const verificationStatus = {
+      email:
+        typeof rawVerification === 'boolean'
+          ? rawVerification
+          : isVerified(rawVerification?.email ?? apiData.emailVerified),
+      phone:
+        typeof rawVerification === 'boolean'
+          ? rawVerification
+          : isVerified(rawVerification?.phone ?? apiData.phoneVerified),
+      nin:
+        typeof rawVerification === 'boolean'
+          ? rawVerification
+          : isVerified(rawVerification?.nin ?? apiData.ninVerified),
+      regNumber:
+        typeof rawVerification === 'boolean'
+          ? rawVerification
+          : isVerified(rawVerification?.regNumber ?? apiData.regNumberVerified),
+    };
+
     return {
       id: apiData.id || '',
       email: apiData.email || '',
-      fullname: apiData.fullname || '',
+      fullname: apiData.fullname || apiData.fullName || '',
       role: validRoles.includes(apiData.role) ? apiData.role : 'STUDENT',
       regNumber: apiData.regNumber || '',
-      department: apiData.department || '',
-      faculty: apiData.faculty || '',
-      level: apiData.level || 100,
+      department: hierarchyName(apiData.department),
+      faculty: hierarchyName(apiData.faculty),
+      level:
+        apiData.level !== undefined &&
+        apiData.level !== null &&
+        Number.isFinite(Number(apiData.level))
+          ? Number(apiData.level)
+          : undefined,
       semester: validSemesters.includes(apiData.semester)
         ? apiData.semester
-        : 'First',
+        : undefined,
       phone: apiData.phone || '',
       nin: apiData.nin || '',
       avatarUrl: apiData.avatarUrl,
-      verificationStatus: apiData.verificationStatus || false,
+      verificationStatus,
       status: validStatuses.includes(apiData.status)
         ? apiData.status
         : 'Pending',
       createdAt: apiData.createdAt || new Date().toISOString(),
-      university: apiData.university || '',
+      university: hierarchyName(apiData.university),
+      programme: hierarchyName(apiData.programme),
     };
   };
 
@@ -1633,23 +1740,6 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
         message: response.message,
       };
     },
-    verifyFields: async (
-      data: VerifyFieldsRequest
-    ): Promise<ProfileApiResponse> => {
-      const response = await api.authPatch<{ data: any; message?: string }>(
-        '/user/profile/verify',
-        data
-      );
-      return {
-        data: transformUserProfile(response.data),
-        message: response.message,
-      };
-    },
-    uploadAvatar: (formData: FormData) =>
-      api.authPost<{ data: { avatarUrl: string } }>(
-        '/user/profile/avatar',
-        formData
-      ),
   };
 };
 
@@ -1668,42 +1758,8 @@ export interface ApiInstance {
   authPut: <T>(endpoint: string, data?: any) => Promise<T>;
   authPatch: <T>(endpoint: string, data?: any) => Promise<T>;
   authDelete: <T>(endpoint: string) => Promise<T>;
+  clearCache: () => void;
 }
 
-const logRequest = async (endpoint: string, options?: any) => {
-  console.log(`API Request: ${endpoint}`, {
-    options,
-    timestamp: new Date().toISOString(),
-  });
-};
-
-export const testConnection = async (): Promise<boolean> => {
-  const baseURL = process.env.EXPO_PUBLIC_API_URL || '';
-
-  try {
-    // Extract the base server URL (without /api/v1)
-    const serverURL = baseURL.replace('/api/v1', '');
-    const healthURL = `${serverURL}/health`;
-
-    console.log('Testing local connection to:', healthURL);
-
-    const response = await fetch(healthURL, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    console.log('Connection test result:', {
-      url: healthURL,
-      status: response.status,
-      ok: response.ok,
-      statusText: response.statusText,
-    });
-
-    return response.ok;
-  } catch (error) {
-    console.error('Local connection failed:', error);
-    return false;
-  }
-};
+export const testConnection = (): Promise<boolean> =>
+  apiClient.testConnection();

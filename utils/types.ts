@@ -1,24 +1,37 @@
+import type { AuthUser } from '@/utils/authSession';
+
 // ... existing code above stays the same ...
 
 export interface QuestionDetail {
   id: string;
   title: string;
   body: string;
-  forumId: string;
-  status: 'Open' | 'Cleared' | 'Closed';
-  authorId: string;
+  forumId?: string;
+  status: 'Open' | 'Cleared' | 'Closed' | 'Pending';
+  authorId?: string;
   createdAt: string;
-  author: {
+  category?: string;
+  department?: string;
+  courseCode?: string;
+  viewCount?: number;
+  reactionCount?: number;
+  answerCount?: number;
+  author?: {
     id: string;
     fullname: string;
-    email: string;
-  };
-  forum: {
+    email?: string;
+    department?: string;
+    faculty?: string;
+    level?: number;
+    username?: string;
+    avatarUrl?: string;
+  } | null;
+  forum?: {
     id: string;
     name: string;
-  };
+  } | null;
   answers: Answer[];
-  _count: {
+  _count?: {
     answers: number;
   };
 }
@@ -26,22 +39,34 @@ export interface QuestionDetail {
 export interface Answer {
   id: string;
   body: string;
-  authorId: string;
+  authorId?: string;
   questionId: string;
-  status: 'Open' | 'Cleared' | 'Closed';
+  status?: 'Open' | 'Cleared' | 'Closed' | 'Pending';
   createdAt: string;
   commentsCount?: number;
-  author: {
+  author?: {
     id: string;
     fullname: string;
-    email: string;
-  };
-  _count: {
+    email?: string;
+    department?: string;
+    faculty?: string;
+    level?: number;
+    username?: string;
+    avatarUrl?: string;
+  } | null;
+  _count?: {
     comments: number;
   };
 }
 
-export interface UserProfile {
+export interface FieldVerificationStatus {
+  email: boolean;
+  phone: boolean;
+  nin: boolean;
+  regNumber: boolean;
+}
+
+export interface UserProfile extends AuthUser {
   id: string;
   email: string;
   fullname: string;
@@ -49,15 +74,16 @@ export interface UserProfile {
   regNumber: string;
   department: string;
   faculty: string;
-  level: number;
-  semester: 'First' | 'Second';
+  level?: number;
+  semester?: 'First' | 'Second';
   phone: string;
   nin: string;
   avatarUrl?: string;
-  verificationStatus: boolean;
+  verificationStatus: FieldVerificationStatus;
   status: 'Cleared' | 'Pending' | 'Suspended';
   createdAt: string;
   university?: string | null;
+  programme?: string | null;
 }
 
 export interface UpdateProfileRequest {
@@ -70,13 +96,40 @@ export interface UpdateProfileRequest {
   regNumber?: string; // added
   nin?: string; // added
   university?: string;
+  programme?: string;
 }
 
-export interface VerifyFieldsRequest {
-  email?: boolean;
-  phone?: boolean;
-  nin?: boolean;
-  regNumber?: boolean;
+export interface UniversityHierarchyItem {
+  id: string;
+  name: string;
+  shortName?: string;
+  state?: string;
+}
+
+export interface FacultyHierarchyItem {
+  id: string;
+  name: string;
+}
+
+export interface DepartmentHierarchyItem {
+  id: string;
+  name: string;
+}
+
+export interface ProgrammeHierarchyItem {
+  id: string;
+  name: string;
+  degreeType?: string;
+}
+
+export interface LevelHierarchyItem {
+  id: string;
+  level: number;
+}
+
+export interface SemesterHierarchyItem {
+  id: string;
+  name: string;
 }
 
 export interface ProfileApiResponse {
