@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Profile, profileApi } from '@/utils/api';
+import { useCallback, useState, useEffect } from 'react';
+import { profileApi } from '@/utils/api';
 import { useApi } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
+import type { UserProfile } from '@/utils/types';
 import React from 'react';
 
 export function useProfile() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,27 +14,24 @@ export function useProfile() {
   const { token } = useAuth();
   const apiClient = React.useMemo(() => profileApi(api), [api]);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('response123');
       const response = await apiClient.getProfile();
-      console.log('response', response);
       setProfile(response.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');
-      console.error('Profile fetch error:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiClient]);
 
   useEffect(() => {
     if (token) {
-      fetchProfile();
+      void fetchProfile();
     }
-  }, [token]);
+  }, [fetchProfile, token]);
 
   return { profile, loading, error, refetchProfile: fetchProfile };
 }

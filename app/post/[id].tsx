@@ -33,9 +33,11 @@ import {
   Share2,
   ChevronDown,
   ChevronUp,
+  BookOpen,
 } from 'lucide-react-native';
 import {
   forumApi,
+  likesApi,
   useApi,
   ForumCommentNode,
   QuestionDetail,
@@ -96,6 +98,7 @@ export default function PostDetailScreenInner() {
   const { user } = useAuth();
   const api = useApi();
   const forumClient = useMemo(() => forumApi(api), [api]);
+  const likesClient = useMemo(() => likesApi(api), [api]);
   const insets = useSafeAreaInsets();
 
   // State
@@ -116,7 +119,21 @@ export default function PostDetailScreenInner() {
   const [questionReactions, setQuestionReactions] = useState<{
     counts: Record<string, number>;
     userReacted?: string;
-  }>({ counts: { '🔥': 2, '💡': 1 } });
+  }>({ counts: {} });
+
+  // Sync post reaction count when post loads
+  useEffect(() => {
+    if (post) {
+      const baseCount = post.reactionCount ?? post.score ?? 0;
+      setQuestionReactions(prev => ({
+        counts: {
+          ...prev.counts,
+          ...(baseCount > 0 ? { '❤️': baseCount } : {}),
+        },
+        userReacted: post.isLiked ? '❤️' : prev.userReacted,
+      }));
+    }
+  }, [post?.id, post?.reactionCount, post?.score, post?.isLiked]);
 
   const [answerReactions, setAnswerReactions] = useState<
     Record<string, { counts: Record<string, number>; userReacted?: string }>
@@ -198,20 +215,38 @@ export default function PostDetailScreenInner() {
     };
   }, [questionId, fetchPost]);
 
-  // Reactions Handler
-  const handleReactQuestion = (emoji: string) => {
-    setQuestionReactions(prev => {
-      const already = prev.userReacted === emoji;
-      const curCount = prev.counts[emoji] || 0;
-      return {
-        ...prev,
+  // Reactions Handler with real backend like sync
+  const handleReactQuestion = async (emoji: string) => {
+    if (!post?.id) return;
+    const isCurrentlyReacted = questionReactions.userReacted === emoji;
+    const nextReacted = !isCurrentlyReacted;
+    const curCount = questionReactions.counts[emoji] || 0;
+
+    // Optimistic update
+    setQuestionReactions(prev => ({
+      counts: {
+        ...prev.counts,
+        [emoji]: nextReacted ? curCount + 1 : Math.max(0, curCount - 1),
+      },
+      userReacted: nextReacted ? emoji : undefined,
+    }));
+
+    try {
+      if (nextReacted) {
+        await likesClient.like('Question', post.id);
+      } else {
+        await likesClient.unlike('Question', post.id);
+      }
+    } catch {
+      // Rollback on failure
+      setQuestionReactions(prev => ({
         counts: {
           ...prev.counts,
-          [emoji]: already ? Math.max(0, curCount - 1) : curCount + 1,
+          [emoji]: isCurrentlyReacted ? curCount + 1 : Math.max(0, curCount - 1),
         },
-        userReacted: already ? undefined : emoji,
-      };
-    });
+        userReacted: isCurrentlyReacted ? emoji : undefined,
+      }));
+    }
   };
 
   const handleReactAnswer = (answerId: string, emoji: string) => {
@@ -836,6 +871,14 @@ export default function PostDetailScreenInner() {
                         </Text>
                       </View>
                     )}
+                    {post.courseCode ? (
+                      <View style={styles.courseTagBadge}>
+                        <BookOpen size={10} color='#0D0D0D' />
+                        <Text style={styles.courseTagBadgeText} numberOfLines={1}>
+                          {post.courseCode}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                   <Text style={styles.postMetaText}>
                     {formatRelativeTime(post.createdAt)} • 👀 {views} view
@@ -1088,6 +1131,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#6B21A8',
+  },
+  courseTagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#C4FF0E',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#000',
+  },
+  courseTagBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#0D0D0D',
   },
   postMetaText: {
     fontSize: 11.5,

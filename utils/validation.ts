@@ -171,24 +171,23 @@ export const validateCourse = (
 ): { isValid: boolean; errors: string[] } => {
   const errors: string[] = [];
 
-  if (!course.code || course.code.trim().length === 0) {
+  if (!course.courseCode || course.courseCode.trim().length === 0) {
     errors.push('Course code is required');
   }
 
-  if (!course.name || course.name.trim().length === 0) {
+  if (!course.title || course.title.trim().length === 0) {
     errors.push('Course name is required');
   }
 
-  if (course.credits && (course.credits < 1 || course.credits > 30)) {
+  if (
+    course.creditUnit &&
+    (course.creditUnit < 1 || course.creditUnit > 30)
+  ) {
     errors.push('Course credits must be between 1 and 30');
   }
 
   if (!course.instructor || course.instructor.trim().length === 0) {
     errors.push('Course instructor is required');
-  }
-
-  if (course.year && (course.year < 2020 || course.year > 2030)) {
-    errors.push('Course year must be between 2020 and 2030');
   }
 
   return {

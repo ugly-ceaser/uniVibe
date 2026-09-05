@@ -8,14 +8,12 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { showMessage } from 'react-native-flash-message';
-import { testConnection } from '@/utils/api';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -31,15 +29,6 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  React.useEffect(() => {
-    const checkConnection = async () => {
-      console.log('Testing API connection...');
-      const isConnected = await testConnection();
-      console.log('API connection status:', isConnected);
-    };
-    checkConnection();
-  }, []);
-
   const handleSubmit = async () => {
     const { email, password } = formData;
 
@@ -50,15 +39,6 @@ export default function LoginScreen() {
         type: 'danger',
         icon: 'danger',
       });
-      return;
-    }
-
-    const isConnected = await testConnection();
-    if (!isConnected) {
-      Alert.alert(
-        'Connection Error',
-        'Cannot connect to the server. Please check your internet connection and try again.'
-      );
       return;
     }
 
@@ -79,8 +59,6 @@ export default function LoginScreen() {
 
       router.replace('/(tabs)');
     } catch (error: any) {
-      console.error('Login error:', error);
-
       if (error?.status === 429) {
         showMessage({
           message: 'Too Many Attempts',

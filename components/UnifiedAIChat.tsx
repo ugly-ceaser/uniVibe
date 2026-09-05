@@ -14,9 +14,12 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   ActivityIndicator,
+  UIManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -28,6 +31,8 @@ import {
   Lightbulb,
   User,
   BarChart,
+  RotateCcw,
+  AlertCircle,
 } from 'lucide-react-native';
 import { ChatMessage } from '@/types';
 import { validateChatMessage } from '@/utils/validation';
@@ -181,6 +186,7 @@ export default function UnifiedAIChat({
 }: UnifiedAIChatProps): React.JSX.Element {
   const api = useApi();
   const scrollViewRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -223,13 +229,59 @@ export default function UnifiedAIChat({
     }
   }, [isVisible]);
 
-  const handleSend = useCallback(async (): Promise<void> => {
-    try {
-      if (!inputText.trim()) return;
+  // Typewriter effect function
+  const animateTyping = useCallback(
+    (messageId: string, fullText: string, currentIndex: number = 0) => {
+      if (currentIndex < fullText.length) {
+        const displayText = fullText.substring(0, currentIndex + 1);
+
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId
+              ? { ...msg, text: displayText + (showCursor ? '|' : '') }
+              : msg
+          )
+        );
+
+        // Variable typing speed for more natural feel
+        const char = fullText[currentIndex];
+        let delay = 50; // Base delay
+
+        if (char === ' ') delay = 80; // Slower for spaces
+        else if (char === '.' || char === '!' || char === '?')
+          delay = 300; // Pause at sentence endings
+        else if (char === ',' || char === ';')
+          delay = 150; // Short pause at commas
+        else if (char === '\n') delay = 200; // Pause at line breaks
+
+        typingTimeoutRef.current = setTimeout(() => {
+          animateTyping(messageId, fullText, currentIndex + 1);
+        }, delay) as unknown as number;
+      } else {
+        // Typing complete - remove cursor and clean up
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId ? { ...msg, text: fullText } : msg
+          )
+        );
+        setTypingMessageId(null);
+        setIsLoading(false);
+        if (cursorIntervalRef.current) {
+          clearInterval(cursorIntervalRef.current);
+          cursorIntervalRef.current = null;
+        }
+      }
+    },
+    [showCursor]
+  );
+
+  const sendPrompt = useCallback(
+    async (textToSend: string): Promise<void> => {
+      if (!textToSend.trim() || isLoading) return;
 
       const userMessage: ChatMessage = {
         id: Date.now().toString(),
-        text: inputText.trim(),
+        text: textToSend.trim(),
         isUser: true,
         timestamp: new Date().toLocaleTimeString([], {
           hour: '2-digit',
@@ -255,13 +307,13 @@ export default function UnifiedAIChat({
 
       setMessages(prev => [...prev, userMessage]);
       setIsLoading(true);
+      setFailedMessage(null);
+      setInputText('');
       onMessageSent?.(userMessage, contextType);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
 
-      // Store the original input text to restore if needed
-      const originalInputText = inputText.trim();
-      setInputText(''); // Clear input optimistically
-
-      // API call based on context
       try {
         let response;
         const conversationHistory = messages.slice(1).map(msg => ({
@@ -310,7 +362,7 @@ export default function UnifiedAIChat({
         const aiResponseId = (Date.now() + 1).toString();
         const aiResponse: ChatMessage = {
           id: aiResponseId,
-          text: '', // Start with empty text for typing effect
+          text: '',
           isUser: false,
           timestamp: new Date().toLocaleTimeString([], {
             hour: '2-digit',
@@ -318,57 +370,49 @@ export default function UnifiedAIChat({
           }),
         };
 
-        // Add empty AI message first
         setMessages(prev => [...prev, aiResponse]);
-        setFailedMessage(null); // Clear any previous failed message
-
-        // Start typing animation
         setTypingMessageId(aiResponseId);
         setShowCursor(true);
         animateTyping(aiResponseId, response.data.response);
       } catch (apiError) {
         console.error('AI API failed:', apiError);
-        // Restore the original input text on failure
-        setInputText(originalInputText);
-        setFailedMessage(originalInputText);
-        // Remove the user message that was optimistically added
-        setMessages(prev => prev.slice(0, -1));
+        setFailedMessage(textToSend.trim());
+        setMessages(prev => prev.filter(m => m.id !== userMessage.id));
 
         const errorMessage =
           apiError instanceof Error
             ? apiError.message
             : 'AI service is currently unavailable';
         onError?.(errorMessage);
-        Alert.alert(
-          'Message Failed to Send',
-          "Your message couldn't be sent. It has been restored to the input field so you can try again.",
-          [{ text: 'OK' }]
-        );
+      } finally {
         setIsLoading(false);
-        return;
       }
+    },
+    [
+      isLoading,
+      messages,
+      maxMessages,
+      onError,
+      contextType,
+      courseContext,
+      studentContext,
+      api,
+      onMessageSent,
+      animateTyping,
+    ]
+  );
 
-      setIsLoading(false);
-    } catch (error) {
-      // If we haven't cleared the input yet, we don't need to restore it
-      // This handles validation errors and early returns
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to send message';
-      onError?.(errorMessage);
-      Alert.alert('Error', errorMessage);
-      setIsLoading(false);
+  const handleSend = useCallback(async (): Promise<void> => {
+    await sendPrompt(inputText);
+  }, [inputText, sendPrompt]);
+
+  const handleRetry = useCallback(async (): Promise<void> => {
+    if (failedMessage) {
+      const msg = failedMessage;
+      setFailedMessage(null);
+      await sendPrompt(msg);
     }
-  }, [
-    inputText,
-    messages.length,
-    maxMessages,
-    onMessageSent,
-    onError,
-    contextType,
-    courseContext,
-    studentContext,
-    api,
-  ]);
+  }, [failedMessage, sendPrompt]);
 
   const handleClose = useCallback((): void => {
     setIsVisible(false);
@@ -399,51 +443,7 @@ export default function UnifiedAIChat({
     setShowScrollButton(false);
   }, []);
 
-  // Typewriter effect function
-  const animateTyping = useCallback(
-    (messageId: string, fullText: string, currentIndex: number = 0) => {
-      if (currentIndex < fullText.length) {
-        const displayText = fullText.substring(0, currentIndex + 1);
 
-        setMessages(prev =>
-          prev.map(msg =>
-            msg.id === messageId
-              ? { ...msg, text: displayText + (showCursor ? '|' : '') }
-              : msg
-          )
-        );
-
-        // Variable typing speed for more natural feel
-        const char = fullText[currentIndex];
-        let delay = 50; // Base delay
-
-        if (char === ' ') delay = 80; // Slower for spaces
-        else if (char === '.' || char === '!' || char === '?')
-          delay = 300; // Pause at sentence endings
-        else if (char === ',' || char === ';')
-          delay = 150; // Short pause at commas
-        else if (char === '\n') delay = 200; // Pause at line breaks
-
-        typingTimeoutRef.current = setTimeout(() => {
-          animateTyping(messageId, fullText, currentIndex + 1);
-        }, delay) as unknown as number;
-      } else {
-        // Typing complete - remove cursor and clean up
-        setMessages(prev =>
-          prev.map(msg =>
-            msg.id === messageId ? { ...msg, text: fullText } : msg
-          )
-        );
-        setTypingMessageId(null);
-        setIsLoading(false);
-        if (cursorIntervalRef.current) {
-          clearInterval(cursorIntervalRef.current);
-          cursorIntervalRef.current = null;
-        }
-      }
-    },
-    [showCursor]
-  );
 
   // Cursor blinking effect
   useEffect(() => {
@@ -459,6 +459,27 @@ export default function UnifiedAIChat({
       setShowCursor(true);
     }
   }, [typingMessageId]);
+
+  // Smooth keyboard animation listener
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Cleanup typing animation on unmount
   useEffect(() => {
@@ -644,6 +665,7 @@ export default function UnifiedAIChat({
               contentContainerStyle={{ paddingBottom: 10 }}
               onScroll={handleScroll}
               scrollEventThrottle={16}
+              keyboardShouldPersistTaps='handled'
             >
               {messages.map(message => (
                 <View
@@ -710,8 +732,35 @@ export default function UnifiedAIChat({
             )}
           </View>
 
+          {failedMessage && !isLoading && (
+            <View style={styles.retryBanner}>
+              <AlertCircle size={18} color="#dc2626" />
+              <Text style={styles.retryBannerText} numberOfLines={1}>
+                Message failed to send
+              </Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={handleRetry}
+                accessibilityRole="button"
+                accessibilityLabel="Retry sending message"
+              >
+                <RotateCcw size={14} color="#ffffff" />
+                <Text style={styles.retryButtonLabel}>Try again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setFailedMessage(null)}
+                style={styles.dismissRetryButton}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss error"
+              >
+                <X size={16} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.chatInputContainer}>
             <TextInput
+              ref={inputRef}
               style={[
                 styles.chatInput,
                 failedMessage &&
@@ -738,8 +787,11 @@ export default function UnifiedAIChat({
               }}
               multiline
               maxLength={500}
-              editable={!isLoading}
+              editable={true}
               accessibilityLabel='Type your question'
+              returnKeyType='send'
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
             />
             <TouchableOpacity
               style={[
@@ -752,6 +804,7 @@ export default function UnifiedAIChat({
               accessibilityRole='button'
               accessibilityLabel='Send message'
               accessibilityState={{ disabled: !isInputValid }}
+              {...(Platform.OS === 'web' ? ({ onMouseDown: (e: any) => e.preventDefault() } as any) : {})}
             >
               <Send size={20} color='#ffffff' strokeWidth={2} />
             </TouchableOpacity>
@@ -956,5 +1009,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    gap: 8,
+  },
+  retryBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#991b1b',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  retryButtonLabel: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  dismissRetryButton: {
+    padding: 4,
   },
 });

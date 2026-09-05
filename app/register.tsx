@@ -61,8 +61,7 @@ export default function RegisterScreen() {
       } else {
         setUsernameStatus('taken');
       }
-    } catch (err) {
-      console.error('Error checking username:', err);
+    } catch {
       setUsernameStatus('default');
     }
   };
@@ -134,7 +133,6 @@ export default function RegisterScreen() {
         () => router.replace('/login')
       );
     } catch (error: any) {
-      console.error('Registration error:', error);
       const errorMessage =
         error?.response?.data?.message ||
         error?.message ||

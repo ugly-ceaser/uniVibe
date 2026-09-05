@@ -1,29 +1,14 @@
-export interface Course {
-  id: string;
-  courseCode: string;
-  courseName: string;
-  coordinator: string;
-  coordinatorEmail: string;
-  coordinatorPhone: string;
-  unitLoad: number;
-  semester: 1 | 2;
-  outline: string[];
-  assessment: {
-    type: string;
-    percentage: number;
-  }[];
-  description: string;
-}
+import type { Course } from '@/types/course';
 
 export const courses: Course[] = [
   {
     id: '1',
     courseCode: 'CSC 101',
-    courseName: 'Introduction to Computer Science',
-    coordinator: 'Dr. Adebayo Ogundimu',
-    coordinatorEmail: 'a.ogundimu@university.edu.ng',
-    coordinatorPhone: '+234 803 123 4567',
-    unitLoad: 3,
+    title: 'Introduction to Computer Science',
+    instructor: 'Dr. Adebayo Ogundimu',
+    instructorEmail: 'a.ogundimu@university.edu.ng',
+    instructorPhone: '+234 803 123 4567',
+    creditUnit: 3,
     semester: 1,
     description:
       'An introduction to the fundamental concepts of computer science, including problem-solving, algorithms, and programming basics.',
@@ -48,11 +33,11 @@ export const courses: Course[] = [
   {
     id: '2',
     courseCode: 'CSC 102',
-    courseName: 'Programming Fundamentals',
-    coordinator: 'Prof. Kemi Adeyemi',
-    coordinatorEmail: 'k.adeyemi@university.edu.ng',
-    coordinatorPhone: '+234 805 987 6543',
-    unitLoad: 4,
+    title: 'Programming Fundamentals',
+    instructor: 'Prof. Kemi Adeyemi',
+    instructorEmail: 'k.adeyemi@university.edu.ng',
+    instructorPhone: '+234 805 987 6543',
+    creditUnit: 4,
     semester: 1,
     description:
       'Hands-on programming course focusing on Python programming language and fundamental programming concepts.',
@@ -77,11 +62,11 @@ export const courses: Course[] = [
   {
     id: '3',
     courseCode: 'MTH 101',
-    courseName: 'Calculus I',
-    coordinator: 'Dr. Olumide Fashola',
-    coordinatorEmail: 'o.fashola@university.edu.ng',
-    coordinatorPhone: '+234 807 456 7890',
-    unitLoad: 3,
+    title: 'Calculus I',
+    instructor: 'Dr. Olumide Fashola',
+    instructorEmail: 'o.fashola@university.edu.ng',
+    instructorPhone: '+234 807 456 7890',
+    creditUnit: 3,
     semester: 1,
     description:
       'Introduction to differential and integral calculus with applications to computer science.',
@@ -106,11 +91,11 @@ export const courses: Course[] = [
   {
     id: '4',
     courseCode: 'PHY 101',
-    courseName: 'General Physics I',
-    coordinator: 'Dr. Chioma Nwosu',
-    coordinatorEmail: 'c.nwosu@university.edu.ng',
-    coordinatorPhone: '+234 809 234 5678',
-    unitLoad: 3,
+    title: 'General Physics I',
+    instructor: 'Dr. Chioma Nwosu',
+    instructorEmail: 'c.nwosu@university.edu.ng',
+    instructorPhone: '+234 809 234 5678',
+    creditUnit: 3,
     semester: 1,
     description:
       'Fundamental principles of mechanics, waves, and thermodynamics with laboratory component.',
@@ -135,11 +120,11 @@ export const courses: Course[] = [
   {
     id: '5',
     courseCode: 'ENG 101',
-    courseName: 'English Composition',
-    coordinator: 'Dr. Folake Adebisi',
-    coordinatorEmail: 'f.adebisi@university.edu.ng',
-    coordinatorPhone: '+234 806 345 6789',
-    unitLoad: 2,
+    title: 'English Composition',
+    instructor: 'Dr. Folake Adebisi',
+    instructorEmail: 'f.adebisi@university.edu.ng',
+    instructorPhone: '+234 806 345 6789',
+    creditUnit: 2,
     semester: 1,
     description:
       'Development of writing skills, critical thinking, and effective communication in English.',
@@ -164,11 +149,11 @@ export const courses: Course[] = [
   {
     id: '6',
     courseCode: 'CSC 201',
-    courseName: 'Data Structures and Algorithms',
-    coordinator: 'Dr. Ibrahim Musa',
-    coordinatorEmail: 'i.musa@university.edu.ng',
-    coordinatorPhone: '+234 808 567 8901',
-    unitLoad: 4,
+    title: 'Data Structures and Algorithms',
+    instructor: 'Dr. Ibrahim Musa',
+    instructorEmail: 'i.musa@university.edu.ng',
+    instructorPhone: '+234 808 567 8901',
+    creditUnit: 4,
     semester: 2,
     description:
       'Advanced study of data structures, algorithms, and their implementation in programming.',
@@ -193,11 +178,11 @@ export const courses: Course[] = [
   {
     id: '7',
     courseCode: 'MTH 102',
-    courseName: 'Calculus II',
-    coordinator: 'Prof. Adunni Oladele',
-    coordinatorEmail: 'a.oladele@university.edu.ng',
-    coordinatorPhone: '+234 804 678 9012',
-    unitLoad: 3,
+    title: 'Calculus II',
+    instructor: 'Prof. Adunni Oladele',
+    instructorEmail: 'a.oladele@university.edu.ng',
+    instructorPhone: '+234 804 678 9012',
+    creditUnit: 3,
     semester: 2,
     description:
       'Continuation of Calculus I with focus on advanced integration techniques and series.',
@@ -222,11 +207,11 @@ export const courses: Course[] = [
   {
     id: '8',
     courseCode: 'STA 101',
-    courseName: 'Introduction to Statistics',
-    coordinator: 'Dr. Blessing Okwu',
-    coordinatorEmail: 'b.okwu@university.edu.ng',
-    coordinatorPhone: '+234 802 789 0123',
-    unitLoad: 2,
+    title: 'Introduction to Statistics',
+    instructor: 'Dr. Blessing Okwu',
+    instructorEmail: 'b.okwu@university.edu.ng',
+    instructorPhone: '+234 802 789 0123',
+    creditUnit: 2,
     semester: 2,
     description:
       'Basic statistical concepts and methods with applications to computer science.',

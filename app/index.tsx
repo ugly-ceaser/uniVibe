@@ -3,6 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { GraduationCap } from 'lucide-react-native';
+import { useAuth } from '@/contexts/AuthContext';
+import { hasCompletedOnboarding } from '@/utils/onboarding';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -13,28 +15,56 @@ import Animated, {
 
 export default function SplashScreen() {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const logoScale = useSharedValue(0);
   const logoOpacity = useSharedValue(0);
   const textOpacity = useSharedValue(0);
 
   useEffect(() => {
-    // Animate logo entrance
-    logoScale.value = withSequence(
-      withTiming(1.2, { duration: 600 }),
-      withTiming(1, { duration: 200 })
-    );
-    logoOpacity.value = withTiming(1, { duration: 600 });
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    // Animate text and footer after logo
-    textOpacity.value = withDelay(400, withTiming(1, { duration: 500 }));
+    const resolveInitialRoute = async () => {
+      if (isAuthenticated) {
+        router.replace('/(tabs)');
+        return;
+      }
 
-    // Navigate to onboarding after animation
-    const timer = setTimeout(() => {
-      router.replace('/onboarding');
-    }, 2800);
+      let onboardingComplete = false;
+      try {
+        onboardingComplete = await hasCompletedOnboarding();
+      } catch {
+        // If onboarding state cannot be read, use the safe first-run path.
+      }
 
-    return () => clearTimeout(timer);
-  }, [logoOpacity, logoScale, textOpacity, router]);
+      if (cancelled) {
+        return;
+      }
+
+      if (onboardingComplete) {
+        router.replace('/login');
+        return;
+      }
+
+      logoScale.value = withSequence(
+        withTiming(1.2, { duration: 600 }),
+        withTiming(1, { duration: 200 })
+      );
+      logoOpacity.value = withTiming(1, { duration: 600 });
+      textOpacity.value = withDelay(400, withTiming(1, { duration: 500 }));
+
+      timer = setTimeout(() => router.replace('/onboarding'), 2800);
+    };
+
+    void resolveInitialRoute();
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [isAuthenticated, logoOpacity, logoScale, textOpacity, router]);
 
   const logoAnimatedStyle = useAnimatedStyle(
     () => ({

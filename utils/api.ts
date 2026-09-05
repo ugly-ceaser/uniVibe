@@ -27,6 +27,8 @@ import {
   SemesterHierarchyItem,
   MapLocation,
   MapApiClient,
+  NotificationItem,
+  NotificationListResponse,
 } from './types';
 
 // ------------------------
@@ -51,6 +53,44 @@ export class ApiError extends Error {
     this.status = status;
     this.requestId = requestId;
   }
+}
+
+/**
+ * Numeric HTTP status codes the app specifically handles.
+ * Use with isApiError() in screens for type-safe error branching.
+ */
+export const ApiErrorCode = {
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  UNPROCESSABLE: 422,
+  TOO_MANY_REQUESTS: 429,
+  SERVER_ERROR: 500,
+  BAD_GATEWAY: 502,
+  SERVICE_UNAVAILABLE: 503,
+} as const;
+
+/**
+ * Type-safe guard — narrows an unknown catch value to ApiError and
+ * optionally checks it against a specific HTTP status code.
+ *
+ * @example
+ * catch (err) {
+ *   if (isApiError(err, ApiErrorCode.CONFLICT)) {
+ *     setError('That username is already taken.');
+ *   } else {
+ *     setError('Something went wrong.');
+ *   }
+ * }
+ */
+export function isApiError(
+  err: unknown,
+  status?: number
+): err is ApiError {
+  if (!(err instanceof ApiError)) return false;
+  return status === undefined || err.status === status;
 }
 
 const STATUS_MESSAGES: Record<number, string> = {
@@ -503,8 +543,11 @@ export const useApi = () => {
     async <T>(fn: () => Promise<T>): Promise<T> => {
       try {
         return await fn();
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (error instanceof ApiError) {
+          // ── 401: Session expired ─────────────────────────────────────────
+          // Global interception: the user's token is invalid or has expired.
+          // We log them out and show a single, non-cancellable alert.
           if (error.status === 401) {
             await logout();
             if (!isSessionExpiryAlertVisible) {
@@ -524,24 +567,34 @@ export const useApi = () => {
               );
             }
           } else if (error.status === 403) {
-            Alert.alert('Access Denied', "You don't have permission", [
-              { text: 'OK' },
-            ]);
-          } else {
+            // ── 403: Access denied ────────────────────────────────────────
+            // Global interception: user lacks permission for this resource.
+            // No individual screen has enough context to handle this better.
             Alert.alert(
-              'API Error',
-              `${error.message} (Status: ${error.status})`,
+              'Access Denied',
+              "You don't have permission to perform this action.",
               [{ text: 'OK' }]
+            );
+          } else {
+            // ── All other API errors (400, 404, 422, 429, 5xx) ───────────
+            // Silently rethrow — every screen owns its own error/retry UI.
+            // Log in development only so we don't lose debugging signal.
+            log.error(
+              `[API ${error.status}] ${error.message}`,
+              error.requestId ? `requestId=${error.requestId}` : ''
             );
           }
         } else {
-          Alert.alert(
-            'Network Error',
-            error.message || 'Unexpected error occurred',
-            [{ text: 'OK' }]
+          // ── Network / timeout / unexpected JS errors ──────────────────
+          // Rethrow so the calling screen can show its own error state.
+          // Log for debugging — this covers CORS failures, offline, etc.
+          log.error(
+            '[Network Error]',
+            error instanceof Error ? error.message : String(error)
           );
         }
-        throw error;
+
+        throw error; // always rethrow so screens can catch and react
       }
     },
     [logout]
@@ -1088,6 +1141,8 @@ export interface QuestionDetail {
   views?: number;
   score?: number;
   reactionCount?: number;
+  likes?: number;
+  isLiked?: boolean;
   answerCount?: number;
   author?: {
     id: string;
@@ -1223,6 +1278,8 @@ export const forumApi = (api: ReturnType<typeof useApi>) => ({
       | 'TECH_AND_PROGRAMMING'
       | 'CAMPUS_SERVICES';
     forumId?: string;
+    courseCode?: string;
+    department?: string;
   }) => {
     const endpoint = `/forum/questions`;
     return api.authPost(endpoint, payload);
@@ -1591,6 +1648,34 @@ export const guideApi = (api: ReturnType<typeof useApi>) => ({
 });
 
 // ------------------------
+// Likes API - Generic like/unlike for Questions, Guides, etc.
+// ------------------------
+export const likesApi = (api: ReturnType<typeof useApi>) => ({
+  like: (
+    contentType: 'Question' | 'GuideItem' | 'Answer' | 'Comment',
+    contentId: string
+  ) =>
+    api.authPost<ApiResponse<LikeResponse>>(
+      `/likes/${contentType}/${contentId}/like`
+    ),
+  unlike: (
+    contentType: 'Question' | 'GuideItem' | 'Answer' | 'Comment',
+    contentId: string
+  ) =>
+    api.authDelete<ApiResponse<LikeResponse>>(
+      `/likes/${contentType}/${contentId}/like`
+    ),
+  checkLiked: (contentType: string, contentId: string) =>
+    api.authGet<ApiResponse<{ liked: boolean; guideId?: string }>>(
+      `/likes/${contentType}/${contentId}/check`
+    ),
+  getCount: (contentType: string, contentId: string) =>
+    api.get<ApiResponse<{ count: number }>>(
+      `/likes/${contentType}/${contentId}/count`
+    ),
+});
+
+// ------------------------
 // Map API
 // ------------------------
 export const mapApi = (api: ReturnType<typeof useApi>): MapApiClient => ({
@@ -1706,7 +1791,7 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
         : undefined,
       phone: apiData.phone || '',
       nin: apiData.nin || '',
-      avatarUrl: apiData.avatarUrl,
+      avatarUrl: apiData.avatarUrl || apiData.avatar || apiData.image || undefined,
       verificationStatus,
       status: validStatuses.includes(apiData.status)
         ? apiData.status
@@ -1735,8 +1820,12 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
         '/user/profile',
         toBackendPayload(data)
       );
+      const transformed = transformUserProfile(response.data);
+      if (!transformed.programme && data.programme) {
+        transformed.programme = data.programme;
+      }
       return {
-        data: transformUserProfile(response.data),
+        data: transformed,
         message: response.message,
       };
     },
@@ -1763,3 +1852,33 @@ export interface ApiInstance {
 
 export const testConnection = (): Promise<boolean> =>
   apiClient.testConnection();
+
+export const notificationsApi = (apiInstance: ApiInstance = apiClient) => ({
+  getNotifications: async (page = 1, pageSize = 20): Promise<ApiResponse<NotificationListResponse>> => {
+    const res = await apiInstance.authGet<{ data: NotificationListResponse; status?: number; message?: string }>(
+      `/notifications?page=${page}&pageSize=${pageSize}`,
+      false
+    );
+    return { data: res.data, status: res.status ?? 200, message: res.message };
+  },
+  getUnreadCount: async (): Promise<ApiResponse<{ unreadCount: number }>> => {
+    const res = await apiInstance.authGet<{ data: { unreadCount: number }; status?: number; message?: string }>(
+      '/notifications/unread-count',
+      false
+    );
+    return { data: res.data, status: res.status ?? 200, message: res.message };
+  },
+  markAsRead: async (id: string): Promise<ApiResponse<{ success: boolean }>> => {
+    const res = await apiInstance.authPatch<{ data: { success: boolean }; status?: number; message?: string }>(
+      `/notifications/${id}/read`
+    );
+    return { data: res.data, status: res.status ?? 200, message: res.message };
+  },
+  markAllAsRead: async (): Promise<ApiResponse<{ count: number }>> => {
+    const res = await apiInstance.authPatch<{ data: { count: number }; status?: number; message?: string }>(
+      '/notifications/read-all'
+    );
+    return { data: res.data, status: res.status ?? 200, message: res.message };
+  },
+});
+

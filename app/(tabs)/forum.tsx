@@ -17,7 +17,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Plus,
   Search,
@@ -30,9 +30,10 @@ import {
   Trash2,
   X,
   HelpCircle,
+  Heart,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useApi, forumApi, ForumPost } from '@/utils/api';
+import { useApi, forumApi, likesApi, ForumPost } from '@/utils/api';
 import { useTabBarClearance } from '@/hooks/useTabBarClearance';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import { HeroBanner } from '@/components/HeroBanner';
@@ -124,9 +125,19 @@ function formatRelativeTime(dateString: string) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForumScreen() {
   const router = useRouter();
+  const { authorId, myPosts } = useLocalSearchParams<{
+    authorId?: string;
+    myPosts?: string;
+  }>();
   const api = useApi();
   const { user } = useAuth();
+
+  const targetAuthorId = useMemo(() => {
+    if (myPosts === 'true' && user?.id) return user.id;
+    return authorId || null;
+  }, [authorId, myPosts, user?.id]);
   const forumClient = useMemo(() => forumApi(api), [api]);
+  const likesClient = useMemo(() => likesApi(api), [api]);
   const clearance = useTabBarClearance(64); // Clearance for floating FAB
   const fabBottom = useTabBarClearance(16); // 16px above the tab bar
 
@@ -148,26 +159,101 @@ export default function ForumScreen() {
   const [postReactions, setPostReactions] = useState<
     Record<string, { counts: Record<string, number>; userReacted?: string }>
   >({});
+  const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
+  const [selectedCourseCode, setSelectedCourseCode] = useState('all');
 
-  const handleQuickReact = useCallback((postId: string, emoji: string) => {
-    setPostReactions(prev => {
-      const current = prev[postId] || { counts: {} };
-      const alreadyReacted = current.userReacted === emoji;
-      const currentCount = current.counts[emoji] || 0;
-      const nextCounts = {
-        ...current.counts,
-        [emoji]: alreadyReacted ? Math.max(0, currentCount - 1) : currentCount + 1,
-      };
+  const handleToggleLike = useCallback(
+    async (postId: string, emoji: string = '❤️') => {
+      const isCurrentlyLiked = likedPostIds.has(postId);
+      const nextLiked = !isCurrentlyLiked;
 
-      return {
-        ...prev,
-        [postId]: {
-          counts: nextCounts,
-          userReacted: alreadyReacted ? undefined : emoji,
-        },
-      };
-    });
-  }, []);
+      // Optimistic reaction update
+      setLikedPostIds(prev => {
+        const next = new Set(prev);
+        if (nextLiked) next.add(postId);
+        else next.delete(postId);
+        return next;
+      });
+
+      setPostReactions(prev => {
+        const current = prev[postId] || { counts: {} };
+        const curCount = current.counts[emoji] || 0;
+        return {
+          ...prev,
+          [postId]: {
+            counts: {
+              ...current.counts,
+              [emoji]: nextLiked ? curCount + 1 : Math.max(0, curCount - 1),
+            },
+            userReacted: nextLiked ? emoji : undefined,
+          },
+        };
+      });
+
+      const updateList = (list: ForumPost[]) =>
+        list.map(p => {
+          if (p.id !== postId) return p;
+          const currentCount = p.reactionCount ?? p.likes ?? 0;
+          const nextCount = Math.max(0, currentCount + (nextLiked ? 1 : -1));
+          return {
+            ...p,
+            isLiked: nextLiked,
+            reactionCount: nextCount,
+            likes: nextCount,
+          };
+        });
+
+      setPosts(updateList);
+      setAllPosts(updateList);
+      setSearchResults(updateList);
+
+      try {
+        if (nextLiked) {
+          await likesClient.like('Question', postId);
+        } else {
+          await likesClient.unlike('Question', postId);
+        }
+      } catch {
+        // Rollback on failure
+        setLikedPostIds(prev => {
+          const next = new Set(prev);
+          if (isCurrentlyLiked) next.add(postId);
+          else next.delete(postId);
+          return next;
+        });
+        setPostReactions(prev => {
+          const current = prev[postId] || { counts: {} };
+          const curCount = current.counts[emoji] || 0;
+          return {
+            ...prev,
+            [postId]: {
+              counts: {
+                ...current.counts,
+                [emoji]: isCurrentlyLiked ? curCount + 1 : Math.max(0, curCount - 1),
+              },
+              userReacted: isCurrentlyLiked ? emoji : undefined,
+            },
+          };
+        });
+        const rollbackList = (list: ForumPost[]) =>
+          list.map(p => {
+            if (p.id !== postId) return p;
+            const currentCount = p.reactionCount ?? p.likes ?? 0;
+            const originalCount = Math.max(0, currentCount + (isCurrentlyLiked ? 1 : -1));
+            return {
+              ...p,
+              isLiked: isCurrentlyLiked,
+              reactionCount: originalCount,
+              likes: originalCount,
+            };
+          });
+        setPosts(rollbackList);
+        setAllPosts(rollbackList);
+        setSearchResults(rollbackList);
+      }
+    },
+    [likedPostIds, likesClient]
+  );
 
   const lastFetchRef = useRef(0);
   const isFetchingRef = useRef(false);
@@ -477,10 +563,39 @@ export default function ForumScreen() {
     [forumClient, scheduleRetry]
   );
 
-  const displayedPosts = useMemo(
-    () => (showSearch && searchQuery ? searchResults : posts),
-    [showSearch, searchQuery, searchResults, posts]
-  );
+  const availableCourseCodes = useMemo(() => {
+    const codes = new Set<string>();
+    allPosts.forEach(p => {
+      if (p.courseCode && p.courseCode.trim()) {
+        codes.add(p.courseCode.trim().toUpperCase());
+      }
+    });
+    return Array.from(codes).sort();
+  }, [allPosts]);
+
+  const displayedPosts = useMemo(() => {
+    let source = showSearch && searchQuery ? searchResults : posts;
+    if (targetAuthorId) {
+      source = source.filter(
+        p => p.authorId === targetAuthorId || p.author?.id === targetAuthorId
+      );
+    }
+    if (selectedCourseCode !== 'all') {
+      source = source.filter(
+        p =>
+          p.courseCode?.trim().toUpperCase() ===
+          selectedCourseCode.toUpperCase()
+      );
+    }
+    return source;
+  }, [
+    showSearch,
+    searchQuery,
+    searchResults,
+    posts,
+    selectedCourseCode,
+    targetAuthorId,
+  ]);
 
   // ─── Render helpers ──────────────────────────────────────────────────────────
   const handleDelete = useCallback(
@@ -580,6 +695,14 @@ export default function ForumScreen() {
                           </Text>
                         </View>
                       ) : null}
+                      {post.courseCode ? (
+                        <View style={styles.courseTagBadge}>
+                          <BookOpen size={10} color='#0D0D0D' />
+                          <Text style={styles.courseTagBadgeText} numberOfLines={1}>
+                            {post.courseCode}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Text style={styles.postMetaText}>
                       {formatRelativeTime(post.createdAt)} • 👀 {views} view
@@ -659,9 +782,12 @@ export default function ForumScreen() {
                 <View style={styles.emojiReactionRow}>
                   {['🔥', '💡', '❤️'].map(emoji => {
                     const active =
-                      postReactions[post.id]?.userReacted === emoji;
+                      postReactions[post.id]?.userReacted === emoji ||
+                      (emoji === '❤️' && likedPostIds.has(post.id));
+                    const baseReactionCount = post.reactionCount ?? post.likes ?? 0;
                     const count =
-                      postReactions[post.id]?.counts?.[emoji] || 0;
+                      postReactions[post.id]?.counts?.[emoji] ??
+                      (emoji === '❤️' ? baseReactionCount : 0);
                     return (
                       <TouchableOpacity
                         key={emoji}
@@ -669,7 +795,7 @@ export default function ForumScreen() {
                           styles.emojiPill,
                           active && styles.emojiPillActive,
                         ]}
-                        onPress={() => handleQuickReact(post.id, emoji)}
+                        onPress={() => handleToggleLike(post.id, emoji)}
                         activeOpacity={0.7}
                       >
                         <Text style={styles.emojiIcon}>{emoji}</Text>
@@ -747,7 +873,8 @@ export default function ForumScreen() {
       handleDelete,
       handleReport,
       postReactions,
-      handleQuickReact,
+      likedPostIds,
+      handleToggleLike,
     ]
   );
 
@@ -766,13 +893,42 @@ export default function ForumScreen() {
       loading ? null : (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyEmoji}>💬</Text>
-          <Text style={styles.emptyTitle}>No posts yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Be the first to start a discussion!
+          <Text style={styles.emptyTitle}>
+            {targetAuthorId
+              ? myPosts === 'true'
+                ? "You haven't posted any questions yet"
+                : 'No posts found for this user'
+              : selectedCourseCode !== 'all'
+              ? `No posts for ${selectedCourseCode}`
+              : 'No posts yet'}
           </Text>
+          <Text style={styles.emptySubtitle}>
+            {targetAuthorId
+              ? 'Start a discussion or ask a question to your peers!'
+              : selectedCourseCode !== 'all'
+              ? 'Try clearing the course filter or starting a new post.'
+              : 'Be the first to start a discussion!'}
+          </Text>
+          {targetAuthorId ? (
+            <TouchableOpacity
+              style={styles.clearFilterBtn}
+              onPress={() =>
+                router.setParams({ authorId: undefined, myPosts: undefined })
+              }
+            >
+              <Text style={styles.clearFilterBtnText}>Show all posts</Text>
+            </TouchableOpacity>
+          ) : selectedCourseCode !== 'all' ? (
+            <TouchableOpacity
+              style={styles.clearFilterBtn}
+              onPress={() => setSelectedCourseCode('all')}
+            >
+              <Text style={styles.clearFilterBtnText}>Show all courses</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ),
-    [loading]
+    [loading, selectedCourseCode, targetAuthorId, myPosts, router]
   );
 
   // ─── Hero & Search ─────────────────────────────────────────────────────────
@@ -829,20 +985,91 @@ export default function ForumScreen() {
 
   // ─── Filter Chips ───────────────────────────────────────────────────────────
   const filterChips = (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.filterList}
-    >
-      {categories.map(item => (
-        <FilterPill
-          key={item.id}
-          label={item.name}
-          isActive={item.id === selectedCategory}
-          onPress={() => setSelectedCategory(item.id)}
-        />
-      ))}
-    </ScrollView>
+    <View style={{ gap: 6 }}>
+      {targetAuthorId && (
+        <View style={styles.activeAuthorBanner}>
+          <Text style={styles.activeAuthorBannerText}>
+            👤 {myPosts === 'true' ? 'My Questions & Posts' : 'Filtered by User'}
+          </Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.setParams({ authorId: undefined, myPosts: undefined })
+            }
+            style={styles.clearAuthorBtn}
+          >
+            <X size={12} color='#7B2FBE' />
+            <Text style={styles.clearAuthorBtnText}>Clear filter</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterList}
+      >
+        {categories.map(item => (
+          <FilterPill
+            key={item.id}
+            label={item.name}
+            isActive={item.id === selectedCategory}
+            onPress={() => setSelectedCategory(item.id)}
+          />
+        ))}
+      </ScrollView>
+
+      {availableCourseCodes.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.courseFilterList}
+        >
+          <TouchableOpacity
+            style={[
+              styles.courseFilterChip,
+              selectedCourseCode === 'all' && styles.courseFilterChipActive,
+            ]}
+            onPress={() => setSelectedCourseCode('all')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.courseFilterChipText,
+                selectedCourseCode === 'all' && styles.courseFilterChipTextActive,
+              ]}
+            >
+              All courses
+            </Text>
+          </TouchableOpacity>
+
+          {availableCourseCodes.map(code => {
+            const isActive = selectedCourseCode === code;
+            return (
+              <TouchableOpacity
+                key={code}
+                style={[
+                  styles.courseFilterChip,
+                  isActive && styles.courseFilterChipActive,
+                ]}
+                onPress={() =>
+                  setSelectedCourseCode(isActive ? 'all' : code)
+                }
+                activeOpacity={0.8}
+              >
+                <BookOpen size={12} color={isActive ? '#0D0D0D' : '#7B2FBE'} />
+                <Text
+                  style={[
+                    styles.courseFilterChipText,
+                    isActive && styles.courseFilterChipTextActive,
+                  ]}
+                >
+                  {code}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
   );
 
   // ─── Empty or Error Component ───────────────────────────────────────────────
@@ -1055,6 +1282,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#6B21A8',
   },
+  courseTagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#C4FF0E',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#000',
+  },
+  courseTagBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.3,
+  },
   postMetaText: {
     fontSize: 11.5,
     color: '#6B7280',
@@ -1220,7 +1464,89 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  clearFilterBtn: {
+    backgroundColor: '#C4FF0E',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: '#000000',
+    marginTop: 8,
+  },
+  clearFilterBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0D0D0D',
+  },
+
+  // ─── Active Author Banner ───
+  activeAuthorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EDE9FE',
+    marginHorizontal: lightTheme.spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#7B2FBE',
+    marginBottom: 4,
+  },
+  activeAuthorBannerText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#7B2FBE',
+  },
+  clearAuthorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#7B2FBE',
+  },
+  clearAuthorBtnText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#7B2FBE',
+  },
+
+  // ─── Course Filter Chips ───
+  courseFilterList: {
+    paddingHorizontal: lightTheme.spacing.md,
+    gap: 8,
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  courseFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#000000',
+  },
+  courseFilterChipActive: {
+    backgroundColor: '#C4FF0E',
+    borderColor: '#000000',
+  },
+  courseFilterChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0D0D0D',
+  },
+  courseFilterChipTextActive: {
+    fontWeight: '900',
+    color: '#0D0D0D',
   },
 
   // ─── FAB ───

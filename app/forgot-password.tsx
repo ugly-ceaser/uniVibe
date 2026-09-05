@@ -22,9 +22,9 @@ import {
   ShieldCheck,
 } from 'lucide-react-native';
 import { showMessage } from 'react-native-flash-message';
+import { api } from '@/utils/api';
 
 const { width } = Dimensions.get('window');
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 type Step = 'email' | 'otp' | 'newPassword';
 
@@ -72,12 +72,7 @@ export default function ForgotPasswordScreen() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      if (!res.ok) throw new Error('Failed');
+      await api.post('/auth/forgot-password', { email: email.trim() });
       showMessage({
         message: 'Check your email for the code!',
         type: 'success',
@@ -121,12 +116,10 @@ export default function ForgotPasswordScreen() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/verify-reset-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), otp: code }),
+      await api.post('/auth/verify-reset-otp', {
+        email: email.trim(),
+        otp: code,
       });
-      if (!res.ok) throw new Error('Invalid code');
       setStep('newPassword');
     } catch {
       showMessage({
@@ -153,16 +146,11 @@ export default function ForgotPasswordScreen() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          otp: otp.join(''),
-          newPassword,
-        }),
+      await api.post('/auth/reset-password', {
+        email: email.trim(),
+        otp: otp.join(''),
+        newPassword,
       });
-      if (!res.ok) throw new Error('Failed');
       showMessage({
         message: '🎉 Password reset!',
         description: 'You can now sign in with your new password.',

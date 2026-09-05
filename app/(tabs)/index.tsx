@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { LoadingState } from '@/components/LoadingState';
 import { GuideCard } from '@/components/GuideCard';
 import { HeroBanner } from '@/components/HeroBanner';
+import { NotificationBell } from '@/components/NotificationBell';
 import { FilterPill } from '@/components/FilterPill';
 import { ScrollableScreen } from '@/components/ScrollableScreen';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
@@ -92,7 +93,7 @@ export default function HomeScreen() {
   const firstName = user?.fullname?.split(' ')[0] ?? 'there';
 
   if (loading && !refreshing) {
-    return <LoadingState title='Loading guides...' />;
+    return <LoadingState skeleton={4} />;
   }
 
   // ── Hero banner ──────────────────────────────────────────────────────────────
@@ -102,11 +103,7 @@ export default function HomeScreen() {
         badgeText="CAMPUS SEASON"
         title={`Hey ${firstName},\nlet's vibe check ✨`}
         subtitle="Fresh guides, drops, and hacks to make uni actually make sense."
-        rightAction={
-          <View style={styles.sparkleButton}>
-            <Text style={styles.sparkleButtonText}>✶</Text>
-          </View>
-        }
+        rightAction={<NotificationBell />}
       />
 
       {/* Section label */}

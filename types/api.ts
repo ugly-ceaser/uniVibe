@@ -1,5 +1,4 @@
 import { Guide } from './guide';
-import { Profile, ProfileUpdateData } from './profile';
 
 export interface ApiInstance {
   get: <T>(endpoint: string, options?: RequestInit) => Promise<T>;
@@ -35,9 +34,3 @@ export interface ApiResponse<T = any> {
 export interface GuideResponse extends ApiResponse<Guide> {
   // Add any guide-specific response fields here
 }
-
-export const profileApi = (api: ApiInstance) => ({
-  updateProfile: (data: ProfileUpdateData): Promise<ApiResponse<Profile>> => {
-    return api.authPut('/profile', data);
-  },
-});

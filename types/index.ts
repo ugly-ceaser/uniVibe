@@ -74,20 +74,7 @@ export interface SurvivalTip {
 }
 
 // Course Types
-export interface Course {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  credits: number;
-  instructor: string;
-  schedule: CourseSchedule[];
-  syllabus: string;
-  assignments: Assignment[];
-  resources: CourseResource[];
-  semester: string;
-  year: number;
-}
+export type { Course } from './course';
 
 export interface CourseSchedule {
   day:

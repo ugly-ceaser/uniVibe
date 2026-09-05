@@ -1,483 +1,378 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  FlatList,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
+  Alert,
   Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowLeft,
   BookOpen,
-  MessageCircle,
-  Paperclip,
-  Send,
+  FileText,
+  RefreshCw,
   Search,
   Upload,
-  MoreVertical,
-  CircleCheck as CheckCircle,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useApi } from '@/utils/api';
+import CourseAIChat from '@/components/CourseAIChat';
+import type { Course, CourseMaterial } from '@/types/course';
+import { courseMaterialsApi, coursesApi, useApi } from '@/utils/api';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 type TabKey = 'chat' | 'materials';
+type LoadState = 'loading' | 'ready' | 'error';
 
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  tags?: Array<{ label: string; color: string }>;
-}
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : 'Please try again.';
 
-interface Material {
-  id: string;
-  name: string;
-  type: 'pdf' | 'pptx' | 'docx' | 'm4a' | 'other';
-  size: string;
-  date: string;
-  aiSummarized?: boolean;
-  group: 'THIS WEEK' | 'EARLIER';
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const FILE_CONFIG: Record<Material['type'], { bg: string; emoji: string }> = {
-  pdf: { bg: '#FF3B30', emoji: '📄' },
-  pptx: { bg: '#10B981', emoji: '📊' },
-  docx: { bg: '#FFD93D', emoji: '📝' },
-  m4a: { bg: '#C4FF0E', emoji: '🎵' },
-  other: { bg: '#7B2FBE', emoji: '📁' },
+const formatSize = (size?: number): string => {
+  if (!size || size < 0) return 'Size unavailable';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const QUICK_CHIPS = ['🩷 Quiz me', '📄 Summarize', '🔥 Ask human tutor'];
+const formatDate = (value?: string): string => {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
 
-const MOCK_MESSAGES: ChatMessage[] = [
-  {
-    id: '1',
-    role: 'assistant',
-    text: "Welcome! I'm your AI tutor for this course. Ask me anything about the material, and I'll help you understand it better.",
-    tags: [{ label: '✓ Ready to help', color: '#00E5C0' }],
-  },
-];
-
-const MOCK_MATERIALS: Material[] = [
-  {
-    id: '1',
-    name: 'Lecture 5 – Trees & Graphs.pdf',
-    type: 'pdf',
-    size: '2.4 MB',
-    date: 'Today',
-    aiSummarized: true,
-    group: 'THIS WEEK',
-  },
-  {
-    id: '2',
-    name: 'Week 5 Slides.pptx',
-    type: 'pptx',
-    size: '5.1 MB',
-    date: 'Yesterday',
-    group: 'THIS WEEK',
-  },
-  {
-    id: '3',
-    name: 'Assignment 3 Brief.docx',
-    type: 'docx',
-    size: '140 KB',
-    date: 'Mon',
-    group: 'THIS WEEK',
-  },
-  {
-    id: '4',
-    name: 'Lecture 1 – Intro.pdf',
-    type: 'pdf',
-    size: '1.2 MB',
-    date: '2 wks ago',
-    aiSummarized: true,
-    group: 'EARLIER',
-  },
-  {
-    id: '5',
-    name: 'Audio Notes – BFS.m4a',
-    type: 'm4a',
-    size: '8.9 MB',
-    date: '3 wks ago',
-    group: 'EARLIER',
-  },
-];
-
-// ─── Chat Message Bubble ──────────────────────────────────────────────────────
-function ChatBubble({ msg }: { msg: ChatMessage }) {
-  if (msg.role === 'user') {
-    return (
-      <View style={styles.userBubble}>
-        <Text style={styles.userBubbleText}>{msg.text}</Text>
-      </View>
-    );
-  }
+function MaterialRow({
+  material,
+  onOpen,
+}: {
+  material: CourseMaterial;
+  onOpen: () => void;
+}) {
   return (
-    <View style={styles.aiBubbleWrapper}>
-      <View style={styles.aiBubble}>
-        <Text style={styles.aiBubbleText}>{msg.text}</Text>
-        {msg.tags && msg.tags.length > 0 && (
-          <View style={styles.tagRow}>
-            {msg.tags.map((tag, i) => (
-              <View
-                key={i}
-                style={[styles.tag, { backgroundColor: tag.color + '33' }]}
-              >
-                <Text style={[styles.tagText, { color: tag.color }]}>
-                  {tag.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-    </View>
-  );
-}
-
-// ─── Material Row ─────────────────────────────────────────────────────────────
-function MaterialRow({ item }: { item: Material }) {
-  const cfg = FILE_CONFIG[item.type] ?? FILE_CONFIG.other;
-  return (
-    <TouchableOpacity style={styles.materialRow} activeOpacity={0.8}>
-      <View style={[styles.fileIconBox, { backgroundColor: cfg.bg }]}>
-        <Text style={styles.fileEmoji}>{cfg.emoji}</Text>
+    <TouchableOpacity
+      style={styles.materialRow}
+      onPress={onOpen}
+      activeOpacity={0.8}
+      accessibilityLabel={`Open ${material.name}`}
+    >
+      <View style={styles.fileIcon}>
+        <FileText size={21} color='#111' />
       </View>
       <View style={styles.fileInfo}>
-        <Text style={styles.fileName} numberOfLines={1}>
-          {item.name}
+        <Text style={styles.fileName} numberOfLines={2}>
+          {material.name}
         </Text>
         <Text style={styles.fileMeta}>
-          {item.size} · {item.date}
+          {formatSize(material.sizeBytes)} · {formatDate(material.uploadedAt)}
         </Text>
       </View>
-      {item.aiSummarized && (
-        <View style={styles.summBadge}>
-          <Text style={styles.summBadgeText}>AI summarized</Text>
-        </View>
-      )}
+      <Text style={styles.openLabel}>Open</Text>
     </TouchableOpacity>
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 export default function CourseDetailScreen() {
   const api = useApi();
   const router = useRouter();
-  const { courseId } = useLocalSearchParams();
-  const [course, setCourse] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const params = useLocalSearchParams<{ courseId?: string | string[] }>();
+  const courseId = Array.isArray(params.courseId)
+    ? params.courseId[0]
+    : params.courseId;
+  const courseClient = useMemo(() => coursesApi(api), [api]);
+  const materialsClient = useMemo(() => courseMaterialsApi(api), [api]);
+
+  const [course, setCourse] = useState<Course | null>(null);
+  const [courseState, setCourseState] = useState<LoadState>('loading');
+  const [courseError, setCourseError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('chat');
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES);
-  const [inputText, setInputText] = useState('');
-  const [sending, setSending] = useState(false);
+  const [materials, setMaterials] = useState<CourseMaterial[]>([]);
+  const [materialsState, setMaterialsState] = useState<LoadState>('loading');
+  const [materialsError, setMaterialsError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const chatScrollRef = useRef<ScrollView>(null);
+  const [uploading, setUploading] = useState(false);
 
-  // ─── Fetch course ────────────────────────────────────────────────────────
+  const loadCourse = useCallback(async () => {
+    if (!courseId) {
+      setCourse(null);
+      setCourseError('No course was selected.');
+      setCourseState('error');
+      return;
+    }
+    setCourseState('loading');
+    setCourseError(null);
+    try {
+      const response = await courseClient.getById(courseId);
+      if (!response.data.id) throw new Error('Course not found.');
+      setCourse(response.data);
+      setCourseState('ready');
+    } catch (error) {
+      setCourse(null);
+      setCourseError(errorMessage(error));
+      setCourseState('error');
+    }
+  }, [courseClient, courseId]);
+
+  const loadMaterials = useCallback(async () => {
+    if (!courseId) return;
+    setMaterialsState('loading');
+    setMaterialsError(null);
+    try {
+      const response = await materialsClient.list(courseId);
+      setMaterials(response.data);
+      setMaterialsState('ready');
+    } catch (error) {
+      setMaterials([]);
+      setMaterialsError(errorMessage(error));
+      setMaterialsState('error');
+    }
+  }, [courseId, materialsClient]);
+
   useEffect(() => {
-    const fetchCourse = async () => {
-      try {
-        setLoading(true);
-        const response = (await api.get(`/courses/${courseId}`)) as any;
-        setCourse(response.data);
-      } catch (err) {
-        console.error('Error fetching course:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (courseId) fetchCourse();
-  }, [courseId, api]);
+    void loadCourse();
+    void loadMaterials();
+  }, [loadCourse, loadMaterials]);
 
-  // ─── Chat send ───────────────────────────────────────────────────────────
-  const handleSend = useCallback(
-    async (text?: string) => {
-      const msg = text ?? inputText.trim();
-      if (!msg) return;
-      setInputText('');
-      const userMsg: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'user',
-        text: msg,
-      };
-      setMessages(prev => [...prev, userMsg]);
-      setSending(true);
-      setTimeout(() => {
-        const aiMsg: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          text: 'Great question! Based on the course material, let me break this down for you…',
-          tags: [
-            { label: '✓ Core concept', color: '#00E5C0' },
-            { label: '↻ Review suggested', color: '#FF9F45' },
-          ],
-        };
-        setMessages(prev => [...prev, aiMsg]);
-        setSending(false);
-        setTimeout(
-          () => chatScrollRef.current?.scrollToEnd({ animated: true }),
-          100
-        );
-      }, 1200);
-    },
-    [inputText]
-  );
+  const filteredMaterials = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return materials;
+    return materials.filter(material =>
+      material.name.toLowerCase().includes(query)
+    );
+  }, [materials, searchQuery]);
 
-  // ─── Filtered materials ──────────────────────────────────────────────────
-  const filteredMaterials = MOCK_MATERIALS.filter(m =>
-    m.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const thisWeek = filteredMaterials.filter(m => m.group === 'THIS WEEK');
-  const earlier = filteredMaterials.filter(m => m.group === 'EARLIER');
+  const openMaterial = useCallback(async (material: CourseMaterial) => {
+    if (!material.url) {
+      Alert.alert(
+        'File unavailable',
+        'This material does not include a download link.'
+      );
+      return;
+    }
+    try {
+      await Linking.openURL(material.url);
+    } catch {
+      Alert.alert('Could not open file', 'Check the link and try again.');
+    }
+  }, []);
 
-  // ─── Loading ─────────────────────────────────────────────────────────────
-  if (loading) {
+  const uploadMaterial = useCallback(async () => {
+    if (!courseId || uploading) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      setUploading(true);
+      await materialsClient.upload(courseId, {
+        uri: asset.uri,
+        name: asset.name,
+        mimeType: asset.mimeType || 'application/octet-stream',
+        webFile: asset.file,
+      });
+      await loadMaterials();
+      Alert.alert('Upload complete', `${asset.name} is now available.`);
+    } catch (error) {
+      setMaterialsError(`Upload failed. ${errorMessage(error)}`);
+    } finally {
+      setUploading(false);
+    }
+  }, [courseId, loadMaterials, materialsClient, uploading]);
+
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/courses');
+    }
+  }, [router]);
+
+  if (courseState === 'loading') {
     return (
-      <View style={styles.darkContainer}>
-        <SafeAreaView
-          edges={['top']}
-          style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
-        >
+      <View style={styles.screen}>
+        <SafeAreaView style={styles.centerState}>
           <ActivityIndicator size='large' color='#C4FF0E' />
-          <Text style={{ color: '#fff', marginTop: 12, fontWeight: '600' }}>
-            Loading course…
-          </Text>
+          <Text style={styles.stateTitle}>Loading course…</Text>
         </SafeAreaView>
       </View>
     );
   }
 
-  if (!course) {
+  if (courseState === 'error' || !course) {
     return (
-      <View style={styles.darkContainer}>
-        <SafeAreaView
-          edges={['top']}
-          style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
-        >
-          <Text style={{ color: '#ff6b6b', fontSize: 18, fontWeight: '700' }}>
-            Course not found
-          </Text>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backPillBtn}
-          >
-            <Text style={styles.backPillBtnText}>← Go back</Text>
-          </TouchableOpacity>
+      <View style={styles.screen}>
+        <SafeAreaView style={styles.centerState}>
+          <Text style={styles.stateTitle}>Course could not be loaded</Text>
+          <Text style={styles.stateText}>{courseError}</Text>
+          <View style={styles.errorActions}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleBack}
+            >
+              <Text style={styles.secondaryButtonText}>Go back</Text>
+            </TouchableOpacity>
+            {courseId ? (
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={loadCourse}
+              >
+                <RefreshCw size={16} color='#111' />
+                <Text style={styles.primaryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </SafeAreaView>
       </View>
     );
   }
 
-  // ─── Main render ─────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      style={styles.darkContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* ─── Header ─── */}
+    <View style={styles.screen}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => router.back()}
+            style={styles.backButton}
+            onPress={handleBack}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole='button'
+            accessibilityLabel='Go back'
           >
-            <ArrowLeft size={20} color='#fff' strokeWidth={2.5} />
+            <ArrowLeft size={20} color='#fff' />
           </TouchableOpacity>
-
-          <View style={styles.courseIconBox}>
-            <BookOpen size={22} color='#000' />
+          <View style={styles.courseIcon}>
+            <BookOpen size={21} color='#111' />
           </View>
-
-          <View style={styles.headerMid}>
-            <Text style={styles.headerCode}>{course.code} • TUTOR</Text>
-            <Text style={styles.headerName} numberOfLines={1}>
-              {course.name}
+          <View style={styles.headerText}>
+            <Text style={styles.courseCode}>{course.courseCode}</Text>
+            <Text style={styles.courseTitle} numberOfLines={1}>
+              {course.title}
             </Text>
           </View>
-
-          <TouchableOpacity style={styles.menuBtn}>
-            <MoreVertical size={20} color='#aaa' />
-          </TouchableOpacity>
         </View>
 
-        {/* ─── Tab Switcher ─── */}
         <View style={styles.tabBar}>
           {(['chat', 'materials'] as TabKey[]).map(tab => (
             <TouchableOpacity
               key={tab}
-              style={styles.tabBtn}
+              style={styles.tabButton}
               onPress={() => setActiveTab(tab)}
-              activeOpacity={0.8}
             >
               <Text
                 style={[
-                  styles.tabBtnText,
-                  activeTab === tab && styles.tabBtnTextActive,
+                  styles.tabText,
+                  activeTab === tab ? styles.activeTabText : null,
                 ]}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'chat' ? 'AI tutor' : 'Materials'}
               </Text>
-              {activeTab === tab && <View style={styles.tabUnderline} />}
+              {activeTab === tab ? <View style={styles.tabUnderline} /> : null}
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* ─── Chat Tab ─── */}
-        {activeTab === 'chat' && (
-          <View style={styles.chatContainer}>
-            {/* Messages */}
-            <ScrollView
-              ref={chatScrollRef}
-              style={styles.chatMessages}
-              contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {messages.map(m => (
-                <ChatBubble key={m.id} msg={m} />
-              ))}
-              {sending && (
-                <View style={styles.aiBubbleWrapper}>
-                  <View style={styles.aiBubble}>
-                    <ActivityIndicator size='small' color='#C4FF0E' />
-                  </View>
-                </View>
-              )}
-            </ScrollView>
-
-            {/* Ask human tutor CTA */}
-            <View style={styles.humanTutorCard}>
-              <View style={styles.humanTutorIcon}>
-                <Text style={{ fontSize: 20 }}>🤝</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.humanTutorTitle}>Ask a human tutor</Text>
-                <Text style={styles.humanTutorSub}>
-                  Dr. Adeyemi · Available now
-                </Text>
-              </View>
-              <TouchableOpacity style={styles.requestBtn}>
-                <Text style={styles.requestBtnText}>Request review</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Quick action chips */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.quickChips}
-              style={{ flexShrink: 0, maxHeight: 52 }}
-            >
-              {QUICK_CHIPS.map(chip => (
-                <TouchableOpacity
-                  key={chip}
-                  style={styles.quickChip}
-                  onPress={() => handleSend(chip)}
-                >
-                  <Text style={styles.quickChipText}>{chip}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Input bar */}
-            <View style={styles.inputBar}>
-              <TouchableOpacity style={styles.attachBtn}>
-                <Paperclip size={18} color='#aaa' />
-              </TouchableOpacity>
-              <TextInput
-                style={styles.chatInput}
-                value={inputText}
-                onChangeText={setInputText}
-                placeholder='Ask your tutor anything…'
-                placeholderTextColor='#555'
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendBtn,
-                  !inputText.trim() && styles.sendBtnDisabled,
-                ]}
-                onPress={() => handleSend()}
-                disabled={!inputText.trim()}
-              >
-                <Send size={16} color={inputText.trim() ? '#000' : '#555'} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* ─── Materials Tab ─── */}
-        {activeTab === 'materials' && (
+        {activeTab === 'chat' ? (
+          <CourseAIChat course={course} />
+        ) : (
           <View style={styles.materialsContainer}>
-            {/* Search */}
-            <View style={styles.matSearchBar}>
-              <Search size={15} color='#777' />
+            <View style={styles.searchBar}>
+              <Search size={16} color='#777' />
               <TextInput
-                style={styles.matSearchInput}
-                placeholder='Search materials…'
-                placeholderTextColor='#555'
+                style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                placeholder='Search materials…'
+                placeholderTextColor='#666'
               />
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 120 }}
-            >
-              {thisWeek.length > 0 && (
-                <>
-                  <Text style={styles.matGroupHeader}>THIS WEEK</Text>
-                  {thisWeek.map(m => (
-                    <MaterialRow key={m.id} item={m} />
-                  ))}
-                </>
-              )}
-              {earlier.length > 0 && (
-                <>
-                  <Text style={styles.matGroupHeader}>EARLIER</Text>
-                  {earlier.map(m => (
-                    <MaterialRow key={m.id} item={m} />
-                  ))}
-                </>
-              )}
-              {filteredMaterials.length === 0 && (
-                <Text style={styles.noMatText}>No materials found.</Text>
-              )}
-            </ScrollView>
-
-            {/* Upload button */}
-            <TouchableOpacity style={styles.uploadBtn}>
-              <Upload size={18} color='#fff' />
-              <Text style={styles.uploadBtnText}>Upload material</Text>
-            </TouchableOpacity>
+            {materialsState === 'loading' ? (
+              <View style={styles.centerState}>
+                <ActivityIndicator size='large' color='#C4FF0E' />
+                <Text style={styles.stateTitle}>Loading materials…</Text>
+              </View>
+            ) : materialsState === 'error' ? (
+              <View style={styles.centerState}>
+                <Text style={styles.stateTitle}>Materials are unavailable</Text>
+                <Text style={styles.stateText}>{materialsError}</Text>
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={loadMaterials}
+                >
+                  <RefreshCw size={16} color='#111' />
+                  <Text style={styles.primaryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {materialsError ? (
+                  <Text style={styles.inlineError}>{materialsError}</Text>
+                ) : null}
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.materialsList}
+                >
+                  {filteredMaterials.length ? (
+                    filteredMaterials.map(material => (
+                      <MaterialRow
+                        key={material.id}
+                        material={material}
+                        onOpen={() => openMaterial(material)}
+                      />
+                    ))
+                  ) : (
+                    <View style={styles.emptyMaterials}>
+                      <FileText size={30} color='#77778F' />
+                      <Text style={styles.emptyTitle}>
+                        {searchQuery.trim()
+                          ? 'No matching materials'
+                          : 'No course materials yet'}
+                      </Text>
+                      <Text style={styles.stateText}>
+                        {searchQuery.trim()
+                          ? 'Try a different file name.'
+                          : 'Upload the first file for this course.'}
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
+                <TouchableOpacity
+                  style={styles.uploadButton}
+                  onPress={uploadMaterial}
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <ActivityIndicator size='small' color='#111' />
+                  ) : (
+                    <Upload size={18} color='#111' />
+                  )}
+                  <Text style={styles.uploadButtonText}>
+                    {uploading ? 'Uploading…' : 'Upload material'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
       </SafeAreaView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const DARK = '#1A1A2E';
-const CARD_BG = '#252540';
-
 const styles = StyleSheet.create({
-  darkContainer: { flex: 1, backgroundColor: DARK },
-
-  // ─── Header ───
+  screen: { flex: 1, backgroundColor: '#1A1A2E' },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -488,262 +383,136 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#2A2A45',
   },
-  backBtn: {
+  backButton: {
     width: 36,
     height: 36,
     borderRadius: 12,
     backgroundColor: '#2A2A45',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  courseIconBox: {
+  courseIcon: {
     width: 38,
     height: 38,
     borderRadius: 12,
     backgroundColor: '#C4FF0E',
-    justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#000',
+    justifyContent: 'center',
   },
-  headerMid: { flex: 1 },
-  headerCode: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#7B2FBE',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  headerName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#fff',
-    lineHeight: 20,
-  },
-  menuBtn: { padding: 6 },
-  backPillBtn: {
-    marginTop: 16,
-    backgroundColor: '#C4FF0E',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderWidth: 2,
-    borderColor: '#000',
-  },
-  backPillBtnText: { fontSize: 14, fontWeight: '800', color: '#000' },
-
-  // ─── Tabs ───
+  headerText: { flex: 1 },
+  courseCode: { color: '#C4FF0E', fontSize: 11, fontWeight: '900' },
+  courseTitle: { color: '#fff', fontSize: 15, fontWeight: '800', marginTop: 2 },
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#2A2A45',
-    marginBottom: 4,
   },
-  tabBtn: { marginRight: 24, paddingVertical: 12, alignItems: 'center' },
-  tabBtnText: { fontSize: 15, fontWeight: '700', color: '#555' },
-  tabBtnTextActive: { color: '#fff' },
+  tabButton: { marginRight: 26, paddingVertical: 13 },
+  tabText: { color: '#77778F', fontSize: 14, fontWeight: '700' },
+  activeTabText: { color: '#fff' },
   tabUnderline: {
     position: 'absolute',
-    bottom: 0,
+    height: 3,
     left: 0,
     right: 0,
-    height: 2.5,
-    backgroundColor: '#C4FF0E',
+    bottom: 0,
     borderRadius: 2,
-  },
-
-  // ─── Chat ───
-  chatContainer: { flex: 1 },
-  chatMessages: { flex: 1 },
-
-  aiBubbleWrapper: { marginBottom: 12 },
-  aiBubble: {
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#3A3A55',
-    maxWidth: '88%',
-  },
-  aiBubbleText: { color: '#E0E0F0', fontSize: 14, lineHeight: 21 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  tag: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  tagText: { fontSize: 12, fontWeight: '700' },
-
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#0D0D0D',
-    borderRadius: 18,
-    padding: 12,
-    maxWidth: '80%',
-    marginBottom: 12,
-    borderWidth: 1.5,
-    borderColor: '#3A3A55',
-  },
-  userBubbleText: { color: '#fff', fontSize: 14, lineHeight: 20 },
-
-  humanTutorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: CARD_BG,
-    margin: 12,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#7B2FBE',
-    borderStyle: 'dashed',
-    padding: 12,
-  },
-  humanTutorIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#FF9F4522',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  humanTutorTitle: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  humanTutorSub: {
-    fontSize: 12,
-    color: '#10B981',
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  requestBtn: {
-    backgroundColor: '#3A2060',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1.5,
-    borderColor: '#7B2FBE',
-  },
-  requestBtnText: { fontSize: 12, fontWeight: '700', color: '#C4B5FD' },
-
-  quickChips: { paddingHorizontal: 12, paddingVertical: 8, gap: 10 },
-  quickChip: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1.5,
-    borderColor: '#3A3A55',
-    backgroundColor: CARD_BG,
-  },
-  quickChipText: { fontSize: 13, fontWeight: '700', color: '#E0E0F0' },
-
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A45',
-    backgroundColor: DARK,
-  },
-  attachBtn: { padding: 6 },
-  chatInput: {
-    flex: 1,
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#3A3A55',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: '#fff',
-    fontSize: 14,
-    maxHeight: 100,
-  },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
     backgroundColor: '#C4FF0E',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  sendBtnDisabled: { backgroundColor: '#2A2A45' },
-
-  // ─── Materials ───
-  materialsContainer: { flex: 1, paddingHorizontal: 16 },
-  matSearchBar: {
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 28,
+  },
+  stateTitle: { color: '#fff', fontSize: 17, fontWeight: '800', marginTop: 12 },
+  stateText: {
+    color: '#AAAAC0',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 7,
+  },
+  errorActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  primaryButton: {
+    marginTop: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: CARD_BG,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#3A3A55',
-    paddingHorizontal: 14,
+    gap: 7,
+    paddingHorizontal: 18,
     paddingVertical: 10,
-    marginBottom: 16,
-    marginTop: 8,
+    borderRadius: 20,
+    backgroundColor: '#C4FF0E',
   },
-  matSearchInput: { flex: 1, fontSize: 14, color: '#fff' },
-  matGroupHeader: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#555',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-    marginTop: 4,
+  primaryButtonText: { color: '#111', fontWeight: '800' },
+  secondaryButton: {
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#55556F',
   },
+  secondaryButtonText: { color: '#fff', fontWeight: '800' },
+  materialsContainer: { flex: 1, paddingHorizontal: 16 },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 14,
+    paddingHorizontal: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#3A3A55',
+    backgroundColor: '#252540',
+  },
+  searchInput: { flex: 1, color: '#fff', paddingVertical: 11, fontSize: 14 },
+  materialsList: { paddingBottom: 95, flexGrow: 1 },
   materialRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A2A45',
-  },
-  fileIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  fileEmoji: { fontSize: 20 },
-  fileInfo: { flex: 1 },
-  fileName: { fontSize: 14, fontWeight: '700', color: '#E0E0F0' },
-  fileMeta: { fontSize: 12, color: '#666', marginTop: 2 },
-  summBadge: {
-    backgroundColor: '#7B2FBE33',
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    padding: 13,
+    marginBottom: 10,
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#7B2FBE',
+    borderColor: '#3A3A55',
+    backgroundColor: '#252540',
   },
-  summBadgeText: { fontSize: 10, fontWeight: '700', color: '#C4B5FD' },
-  noMatText: {
-    color: '#555',
-    textAlign: 'center',
-    marginTop: 40,
-    fontSize: 14,
+  fileIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#C4FF0E',
   },
-  uploadBtn: {
+  fileInfo: { flex: 1 },
+  fileName: { color: '#fff', fontSize: 14, lineHeight: 19, fontWeight: '700' },
+  fileMeta: { color: '#8D8DA8', fontSize: 11, marginTop: 4 },
+  openLabel: { color: '#C4FF0E', fontSize: 12, fontWeight: '800' },
+  emptyMaterials: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { color: '#fff', fontSize: 16, fontWeight: '800', marginTop: 12 },
+  inlineError: {
+    color: '#FF8A80',
+    backgroundColor: '#3A2535',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    fontSize: 12,
+  },
+  uploadButton: {
     position: 'absolute',
-    bottom: 90,
-    left: 0,
-    right: 0,
-    marginHorizontal: 16,
+    left: 16,
+    right: 16,
+    bottom: 20,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#7B2FBE',
-    borderRadius: 16,
-    paddingVertical: 14,
-    borderWidth: 2,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 6,
+    gap: 8,
+    borderRadius: 24,
+    backgroundColor: '#C4FF0E',
   },
-  uploadBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  uploadButtonText: { color: '#111', fontSize: 14, fontWeight: '900' },
 });

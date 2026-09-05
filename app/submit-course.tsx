@@ -23,6 +23,7 @@ import {
   Hash,
   Layers,
   X,
+  Sparkles,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { showMessage } from 'react-native-flash-message';
@@ -238,6 +239,13 @@ export default function SubmitCourseScreen() {
   const [creditUnit, setCreditUnit] = useState('');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [successModal, setSuccessModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    courseCode: string;
+    courseTitle: string;
+  } | null>(null);
 
   const loadProfileHierarchy = useCallback(async () => {
     if (isFetchingRef.current) return;
@@ -264,11 +272,12 @@ export default function SubmitCourseScreen() {
         !uniName ||
         !facName ||
         !deptName ||
-        !programmeName ||
         !userProfile.level ||
         !userProfile.semester;
-      setIsProfileIncomplete(incomplete);
-      if (incomplete) return;
+      if (incomplete) {
+        setIsProfileIncomplete(true);
+        return;
+      }
 
       const lp = lastProfileRef.current;
       const profileChanged =
@@ -335,15 +344,19 @@ export default function SubmitCourseScreen() {
         setSelectedDepartment({ id: matchedDept.id, label: matchedDept.name });
         const progsRes = await client.getProgrammes(matchedDept.id);
         const rawProgs = progsRes?.data ?? [];
-        matchedProg =
-          rawProgs.find(
-            (p: any) =>
-              p.name.toLowerCase().includes(programmeName.toLowerCase()) ||
-              programmeName.toLowerCase().includes(p.name.toLowerCase())
-          ) || null;
+        if (programmeName) {
+          matchedProg =
+            rawProgs.find(
+              (p: any) =>
+                p.name.toLowerCase().includes(programmeName.toLowerCase()) ||
+                programmeName.toLowerCase().includes(p.name.toLowerCase())
+            ) || null;
+        } else if (rawProgs.length > 0) {
+          matchedProg = rawProgs[0];
+        }
       }
 
-      if (!matchedProg) {
+      if (!matchedProg && programmeName) {
         // Try searching for a programme match across all departments in this faculty
         for (const dept of rawDepts) {
           const progsRes = await client.getProgrammes(dept.id);
@@ -414,11 +427,24 @@ export default function SubmitCourseScreen() {
         });
       }
 
-      const matchedSem = rawSems.find((s: any) =>
-        s.name.toLowerCase().includes(userProfile.semester?.toLowerCase() || '')
-      );
+      const matchedSem = rawSems.find((s: any) => {
+        const sName = s.name.toLowerCase();
+        const pSem = (userProfile.semester || '').toLowerCase();
+        return (
+          sName.includes(pSem) ||
+          pSem.includes(sName) ||
+          (pSem.includes('first') && sName.includes('first')) ||
+          (pSem.includes('second') && sName.includes('second'))
+        );
+      });
       if (matchedSem) {
         setSelectedSemester({ id: matchedSem.id, label: matchedSem.name });
+      }
+
+      if (matchedUni && matchedFac && matchedDept && matchedProg) {
+        setIsProfileIncomplete(false);
+      } else {
+        setIsProfileIncomplete(true);
       }
     } catch {
       setIsProfileIncomplete(true);
@@ -514,12 +540,17 @@ export default function SubmitCourseScreen() {
         msg: result.message,
         type: 'success',
       };
-      showMessage({ message: res.msg, type: res.type, duration: 3000 });
-
-      setTimeout(() => {
-        if (router.canGoBack()) router.back();
-        else router.replace('/');
-      }, 1500);
+      
+      setSuccessModal({
+        visible: true,
+        title:
+          result.type === 'CREATED'
+            ? 'Request Submitted! 🚀'
+            : 'Course Update',
+        message: res.msg,
+        courseCode: courseCode.trim().toUpperCase(),
+        courseTitle: title.trim(),
+      });
     } catch (err: any) {
       showMessage({
         message: 'Submission Failed',
@@ -762,6 +793,61 @@ export default function SubmitCourseScreen() {
         }}
         onClose={() => setOpenModal(null)}
       />
+
+      {/* Success Confirmation Modal */}
+      {successModal && (
+        <Modal
+          visible={successModal.visible}
+          transparent
+          animationType='fade'
+          onRequestClose={() => {
+            setSuccessModal(null);
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/courses');
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.successModalCard}>
+              <View style={styles.successIconBadge}>
+                <Sparkles size={32} color='#0D0D0D' />
+              </View>
+              <Text style={styles.successModalTitle}>{successModal.title}</Text>
+              <Text style={styles.successModalMessage}>{successModal.message}</Text>
+
+              <View style={styles.successCourseChip}>
+                <BookOpen size={16} color='#7B2FBE' />
+                <Text style={styles.successCourseCode}>{successModal.courseCode}</Text>
+                <Text style={styles.successCourseTitle} numberOfLines={1}>
+                  {successModal.courseTitle}
+                </Text>
+              </View>
+
+              <Text style={styles.successModalFootnote}>
+                Our moderators review new course requests daily. You'll see it in the catalog once approved!
+              </Text>
+
+              <TouchableOpacity
+                style={styles.successModalBtn}
+                onPress={() => {
+                  setSuccessModal(null);
+                  if (router.canGoBack()) router.back();
+                  else router.replace('/(tabs)/courses');
+                }}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#C4FF0E', '#A3E635']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.successModalBtnGradient}
+                >
+                  <Text style={styles.successModalBtnText}>Back to Courses 📚</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -948,4 +1034,107 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonText: { color: '#000', fontSize: 16, fontWeight: '900' },
+
+  // ─── Success Confirmation Modal ───
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  successModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    borderWidth: 2.5,
+    borderColor: '#000',
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+  },
+  successIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#C4FF0E',
+    borderWidth: 2,
+    borderColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successModalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0D0D0D',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  successModalMessage: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  successCourseChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EDE9FE',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1.5,
+    borderColor: '#7B2FBE',
+    gap: 8,
+    width: '100%',
+    marginBottom: 16,
+  },
+  successCourseCode: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#7B2FBE',
+  },
+  successCourseTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0D0D0D',
+  },
+  successModalFootnote: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  successModalBtn: {
+    width: '100%',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#000',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  successModalBtnGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  successModalBtnText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#000',
+  },
 });

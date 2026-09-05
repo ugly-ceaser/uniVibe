@@ -23,8 +23,22 @@ interface EnvironmentConfig {
   };
 }
 
+const DEVELOPMENT_API_URL = 'http://localhost:3000/api/v1';
+const PRODUCTION_API_URL = 'https://univibesbackend.onrender.com/api/v1';
+const DEFAULT_API_TIMEOUT = 30000;
+
+const normalizeUrl = (url: string): string => url.replace(/\/+$/, '');
+
+const getPositiveNumber = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 const getEnvironmentConfig = (): EnvironmentConfig => {
-  const isDevelopment = __DEV__;
+  const isDevelopment =
+    typeof __DEV__ !== 'undefined'
+      ? __DEV__
+      : process.env.NODE_ENV !== 'production';
   const isProduction = !isDevelopment;
 
   return {
@@ -34,10 +48,14 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
       environment: isDevelopment ? 'development' : 'production',
     },
     api: {
-      baseUrl: isDevelopment
-        ? 'http://localhost:3000/api'
-        : 'https://api.univibe.com',
-      timeout: 30000,
+      baseUrl: normalizeUrl(
+        process.env['EXPO_PUBLIC_API_URL'] ||
+          (isDevelopment ? DEVELOPMENT_API_URL : PRODUCTION_API_URL)
+      ),
+      timeout: getPositiveNumber(
+        process.env['EXPO_PUBLIC_API_TIMEOUT'],
+        DEFAULT_API_TIMEOUT
+      ),
     },
     features: {
       aiChat: true,
@@ -74,9 +92,14 @@ export const isStaging = (): boolean => config.app.environment === 'staging';
 
 // API helpers
 export const getApiUrl = (endpoint: string): string => {
-  const baseUrl = config.api.baseUrl.replace(/\/$/, '');
+  const baseUrl = normalizeUrl(config.api.baseUrl);
   const cleanEndpoint = endpoint.replace(/^\//, '');
   return `${baseUrl}/${cleanEndpoint}`;
+};
+
+export const getHealthUrl = (baseUrl = config.api.baseUrl): string => {
+  const serverUrl = normalizeUrl(baseUrl).replace(/\/api(?:\/v\d+)?$/i, '');
+  return `${serverUrl}/health`;
 };
 
 // Logging

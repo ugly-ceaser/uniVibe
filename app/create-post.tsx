@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Sparkles, Hash } from 'lucide-react-native';
+import { ArrowLeft, Sparkles, Hash, BookOpen } from 'lucide-react-native';
 import { forumApi, useApi } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { lightTheme } from '@/constants/theme';
@@ -47,6 +47,7 @@ const SUGGESTED_TAGS = [
 
 const TITLE_MAX = 100;
 const BODY_MAX = 600;
+const COURSE_CODE_MAX = 20;
 
 export default function CreatePostScreen() {
   const router = useRouter();
@@ -56,6 +57,7 @@ export default function CreatePostScreen() {
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [courseCode, setCourseCode] = useState('');
   const [category, setCategory] = useState<CategoryEnum>('GENERAL_DISCUSSION');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -104,6 +106,9 @@ export default function CreatePostScreen() {
         title: title.trim(),
         body: finalBody,
         category,
+        courseCode: courseCode.trim().toUpperCase() || undefined,
+        department:
+          typeof user?.department === 'string' ? user.department : undefined,
       });
 
       showToast('success', '🎉 Your question is live!');
@@ -229,6 +234,33 @@ export default function CreatePostScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+
+          {/* Course Code (Optional) */}
+          <View style={[styles.fieldHeader, { marginTop: 18 }]}>
+            <Text style={styles.label}>
+              Course code <Text style={styles.optionalTag}>(Optional)</Text>
+            </Text>
+            <Text
+              style={[
+                styles.counter,
+                courseCode.length >= COURSE_CODE_MAX && styles.counterWarn,
+              ]}
+            >
+              {courseCode.length}/{COURSE_CODE_MAX}
+            </Text>
+          </View>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder='e.g. CSC 201'
+              placeholderTextColor='#9CA3AF'
+              value={courseCode}
+              onChangeText={t => setCourseCode(t.toUpperCase())}
+              maxLength={COURSE_CODE_MAX}
+              autoCapitalize='characters'
+              autoCorrect={false}
+            />
           </View>
 
           {/* Additional Context (Optional) */}

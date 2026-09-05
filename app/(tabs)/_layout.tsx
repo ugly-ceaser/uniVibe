@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
-import { Home, Map, MessageCircle, Square, User } from 'lucide-react-native';
+import { Home, Map, MessageCircle, BookOpen, User } from 'lucide-react-native';
 import { View, StyleSheet, Platform } from 'react-native';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { TabHistoryProvider } from '@/contexts/TabHistoryContext';
 
 const ACTIVE_COLOR = '#C4FF0E';
 const INACTIVE_COLOR = '#555577';
@@ -10,8 +11,9 @@ const TAB_BG = '#0F0F16';
 export default function TabLayout() {
   return (
     <ErrorBoundary>
-      <View style={styles.container}>
-        <Tabs
+      <TabHistoryProvider>
+        <View style={styles.container}>
+          <Tabs
           screenOptions={{
             headerShown: false,
             tabBarActiveTintColor: ACTIVE_COLOR,
@@ -66,7 +68,7 @@ export default function TabLayout() {
             options={{
               title: 'Courses',
               tabBarIcon: ({ size, color }) => (
-                <Square size={size - 2} color={color} strokeWidth={2.2} />
+                <BookOpen size={size - 2} color={color} strokeWidth={2.2} />
               ),
             }}
           />
@@ -79,8 +81,9 @@ export default function TabLayout() {
               ),
             }}
           />
-        </Tabs>
-      </View>
+          </Tabs>
+        </View>
+      </TabHistoryProvider>
     </ErrorBoundary>
   );
 }

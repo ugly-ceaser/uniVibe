@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { markOnboardingComplete } from '@/utils/onboarding';
 
 const { width, height } = Dimensions.get('window');
 
@@ -47,6 +48,14 @@ export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  const finishOnboarding = async () => {
+    try {
+      await markOnboardingComplete();
+    } finally {
+      router.replace('/login');
+    }
+  };
+
   const handleNext = () => {
     if (currentIndex < onboardingData.length - 1) {
       const nextIndex = currentIndex + 1;
@@ -56,12 +65,12 @@ export default function OnboardingScreen() {
         animated: true,
       });
     } else {
-      router.replace('/login');
+      void finishOnboarding();
     }
   };
 
   const handleSkip = () => {
-    router.replace('/login');
+    void finishOnboarding();
   };
 
   const isLast = currentIndex === onboardingData.length - 1;

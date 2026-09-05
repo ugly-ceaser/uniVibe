@@ -1,4 +1,3 @@
-// app/(tabs)/profile.tsx
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -12,6 +11,7 @@ import {
   RefreshControl,
   Modal,
   FlatList,
+  Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -28,10 +28,14 @@ import {
   Phone,
   BookOpen,
   ShieldCheck,
+  Camera,
+  MessageCircle,
+  Plus,
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { HeroBanner } from '@/components/HeroBanner';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { coursesApi, useApi, profileApi } from '../../utils/api';
+import { coursesApi, useApi, profileApi, forumApi } from '../../utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { TabTransitionWrapper } from '@/components/TabTransitionWrapper';
 import {
@@ -45,6 +49,28 @@ type PickerOption = {
   label: string;
   sublabel?: string;
 };
+
+const AVATAR_COLORS = [
+  '#7B2FBE',
+  '#DB2777',
+  '#0EA5E9',
+  '#10B981',
+  '#F59E0B',
+  '#EF4444',
+  '#8B5CF6',
+];
+function avatarColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++)
+    h = (h * 31 + name.charCodeAt(i)) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[h];
+}
+function getInitials(name: string) {
+  const parts = name.trim().split(' ');
+  return parts.length >= 2
+    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+}
 
 // ─── Icon box colours ─────────────────────────────────────────────────────────
 const ICON_COLORS: Record<string, string> = {
@@ -146,10 +172,12 @@ export default function ProfileScreen() {
   const api = useApi();
   const profileClient = React.useMemo(() => profileApi(api), [api]);
   const hierarchyClient = React.useMemo(() => coursesApi(api), [api]);
+  const forumClient = React.useMemo(() => forumApi(api), [api]);
   const hierarchy = useProfileHierarchy(hierarchyClient);
   const handledEditParam = React.useRef(false);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [userPostsCount, setUserPostsCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -169,6 +197,99 @@ export default function ProfileScreen() {
     regNumber: '',
     nin: '',
   });
+
+  const [updatingAvatar, setUpdatingAvatar] = useState(false);
+
+  const uploadAvatar = useCallback(
+    async (imageUri: string) => {
+      try {
+        setUpdatingAvatar(true);
+        const response = await profileClient.updateProfile({
+          avatarUrl: imageUri,
+        });
+        if (response?.data) {
+          setProfile(response.data);
+          await updateUser(response.data);
+          Alert.alert('Success', 'Profile photo updated!');
+        }
+      } catch (err: any) {
+        Alert.alert(
+          'Error',
+          err?.message || 'Failed to update profile photo.'
+        );
+      } finally {
+        setUpdatingAvatar(false);
+      }
+    },
+    [profileClient, updateUser]
+  );
+
+  const handleAvatarPick = useCallback(() => {
+    Alert.alert('Profile Photo', 'Choose an option to update your photo', [
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          try {
+            const perm = await ImagePicker.requestCameraPermissionsAsync();
+            if (!perm.granted) {
+              Alert.alert(
+                'Permission Required',
+                'Camera access is required to take a profile photo.'
+              );
+              return;
+            }
+            const res = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.7,
+              base64: true,
+            });
+            if (!res.canceled && res.assets[0]) {
+              const asset = res.assets[0];
+              const uri = asset.base64
+                ? `data:image/jpeg;base64,${asset.base64}`
+                : asset.uri;
+              await uploadAvatar(uri);
+            }
+          } catch (err: any) {
+            Alert.alert('Error', err?.message || 'Failed to take photo.');
+          }
+        },
+      },
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          try {
+            const perm =
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) {
+              Alert.alert(
+                'Permission Required',
+                'Photo library access is required to select a photo.'
+              );
+              return;
+            }
+            const res = await ImagePicker.launchImageLibraryAsync({
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.7,
+              base64: true,
+            });
+            if (!res.canceled && res.assets[0]) {
+              const asset = res.assets[0];
+              const uri = asset.base64
+                ? `data:image/jpeg;base64,${asset.base64}`
+                : asset.uri;
+              await uploadAvatar(uri);
+            }
+          } catch (err: any) {
+            Alert.alert('Error', err?.message || 'Failed to select photo.');
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [uploadAvatar]);
 
   // ─── Data fetch ─────────────────────────────────────────────────────────────
   const fetchProfile = useCallback(
@@ -199,6 +320,27 @@ export default function ProfileScreen() {
   React.useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  React.useEffect(() => {
+    let unmounted = false;
+    if (profile?.id) {
+      forumClient
+        .getQuestions({ page: 1, pageSize: 50 })
+        .then((res: any) => {
+          if (!unmounted && res?.data?.questions) {
+            const count = res.data.questions.filter(
+              (q: any) =>
+                q.authorId === profile.id || q.author?.id === profile.id
+            ).length;
+            setUserPostsCount(count);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      unmounted = true;
+    };
+  }, [forumClient, profile?.id]);
 
   const onRefresh = useCallback(() => fetchProfile(true), [fetchProfile]);
 
@@ -246,18 +388,25 @@ export default function ProfileScreen() {
 
     const { university, faculty, department, programme, level, semester } =
       hierarchy.selection;
-    const normalizedSemester = normalizeSemester(semester?.name);
+    const normalizedSemester =
+      normalizeSemester(semester?.name) ?? normalizeSemester(profile.semester);
+    const universityName = university?.name || profile.university;
+    const facultyName = faculty?.name || profile.faculty;
+    const departmentName = department?.name || profile.department;
+    const programmeName = programme?.name || profile.programme;
+    const levelNumber =
+      level?.level ?? (profile.level ? Number(profile.level) : undefined);
+
     if (
-      !university ||
-      !faculty ||
-      !department ||
-      !programme ||
-      !level ||
+      !universityName ||
+      !facultyName ||
+      !departmentName ||
+      !levelNumber ||
       !normalizedSemester
     ) {
       Alert.alert(
         'Complete your academic profile',
-        'Select a university, faculty, department, programme, level, and semester.'
+        'Select a university, faculty, department, level, and semester.'
       );
       return;
     }
@@ -271,11 +420,11 @@ export default function ProfileScreen() {
       setUpdating(true);
       const response = await profileClient.updateProfile({
         ...editForm,
-        university: university.name,
-        faculty: faculty.name,
-        department: department.name,
-        programme: programme.name,
-        level: level.level,
+        university: universityName,
+        faculty: facultyName,
+        department: departmentName,
+        programme: programmeName || undefined,
+        level: levelNumber,
         semester: normalizedSemester,
       });
       if (response?.data) {
@@ -285,8 +434,11 @@ export default function ProfileScreen() {
         setEditing(false);
         Alert.alert('Success', response.message || 'Profile updated!');
       }
-    } catch {
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } catch (err: any) {
+      Alert.alert(
+        'Error',
+        err?.message || 'Failed to update profile. Please try again.'
+      );
     } finally {
       setUpdating(false);
     }
@@ -362,6 +514,63 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             }
           />
+
+          {/* ─── Avatar Header Card ─── */}
+          <View style={styles.avatarCard}>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={handleAvatarPick}
+              activeOpacity={0.8}
+              disabled={updatingAvatar}
+            >
+              {profile?.avatarUrl ? (
+                <Image
+                  source={{ uri: profile.avatarUrl }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.avatarFallback,
+                    { backgroundColor: avatarColor(displayName) },
+                  ]}
+                >
+                  <Text style={styles.avatarInitials}>
+                    {getInitials(displayName)}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.cameraBadge}>
+                {updatingAvatar ? (
+                  <ActivityIndicator size='small' color='#000' />
+                ) : (
+                  <Camera size={14} color='#000' strokeWidth={2.5} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.avatarTextMeta}>
+              <Text style={styles.avatarName}>
+                {profile?.fullname || 'Student'}
+              </Text>
+              <Text style={styles.avatarRole}>
+                {profile?.department
+                  ? `${profile.department}${
+                      profile.level ? ` • ${profile.level}L` : ''
+                    }`
+                  : profile?.email || 'Student'}
+              </Text>
+              <TouchableOpacity
+                onPress={handleAvatarPick}
+                style={styles.changePhotoBtn}
+                disabled={updatingAvatar}
+              >
+                <Text style={styles.changePhotoBtnText}>
+                  {updatingAvatar ? 'Updating photo…' : 'Change profile photo'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           {/* ─── Error ─── */}
           {error && (
@@ -737,6 +946,55 @@ export default function ProfileScreen() {
                 />
               </>
             )}
+          </SectionCard>
+
+          {/* ─── Community & Activity ─── */}
+          <SectionCard title='Community & Activity'>
+            <TouchableOpacity
+              style={styles.activityRow}
+              onPress={() =>
+                router.push({
+                  pathname: '/(tabs)/forum',
+                  params: { myPosts: 'true' },
+                })
+              }
+              activeOpacity={0.7}
+            >
+              <View style={[styles.rowIconBox, { backgroundColor: '#EDE9FE' }]}>
+                <MessageCircle size={18} color='#7B2FBE' />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>My Forum Questions & Posts</Text>
+                <Text style={styles.rowValue}>
+                  {userPostsCount !== null
+                    ? `${userPostsCount} question${
+                        userPostsCount !== 1 ? 's' : ''
+                      } asked`
+                    : 'View all questions you asked'}
+                </Text>
+              </View>
+              <ChevronRight size={16} color='#ccc' />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.activityRow,
+                { borderTopWidth: 1, borderTopColor: '#F0F0F0' },
+              ]}
+              onPress={() => router.push('/create-post')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.rowIconBox, { backgroundColor: '#DCFCE7' }]}>
+                <Plus size={18} color='#15803D' />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowLabel}>Ask a New Question</Text>
+                <Text style={styles.rowValue}>
+                  Get help from your campus peers
+                </Text>
+              </View>
+              <ChevronRight size={16} color='#ccc' />
+            </TouchableOpacity>
           </SectionCard>
 
           {/* ─── Save / Cancel buttons (edit mode) ─── */}
@@ -1140,5 +1398,94 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#777',
+  },
+
+  // ─── Avatar Header Card ───
+  avatarCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+    gap: 16,
+  },
+  avatarWrapper: {
+    position: 'relative',
+    width: 72,
+    height: 72,
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  avatarFallback: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  avatarInitials: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#C4FF0E',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarTextMeta: {
+    flex: 1,
+  },
+  avatarName: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0D0D0D',
+  },
+  avatarRole: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  changePhotoBtn: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  changePhotoBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#7B2FBE',
+    textDecorationLine: 'underline',
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
   },
 });

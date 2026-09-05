@@ -15,6 +15,8 @@ export interface QuestionDetail {
   courseCode?: string;
   viewCount?: number;
   reactionCount?: number;
+  likes?: number;
+  isLiked?: boolean;
   answerCount?: number;
   author?: {
     id: string;
@@ -97,6 +99,7 @@ export interface UpdateProfileRequest {
   nin?: string; // added
   university?: string;
   programme?: string;
+  avatarUrl?: string;
 }
 
 export interface UniversityHierarchyItem {
@@ -223,4 +226,23 @@ export interface MapApiClient {
   ) => Promise<import('@/types/api').ApiResponse<MapLocation>>;
 }
 
-// ... existing code below stays the same ...
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  body: string;
+  type: 'FORUM_ANSWER' | 'FORUM_LIKE' | 'GUIDE_LIKE' | 'SYSTEM' | 'COURSE_UPDATE';
+  read: boolean;
+  targetUrl?: string;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationItem[];
+  total: number;
+  unreadCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+

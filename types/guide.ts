@@ -1,4 +1,4 @@
-export type Category = 'Academics' | 'Social Life' | 'Budgeting' | 'Safety';
+export type Category = string;
 
 export interface Guide {
   id: string;
@@ -8,9 +8,11 @@ export interface Guide {
   category: Category;
   readTime: string;
   likes: number;
-  author?: string;
+  isLiked: boolean;
+  author: string;
   createdAt: string;
-  status: 'Draft' | 'Cleared' | 'Published';
+  status: string;
+  isFeatured?: boolean;
 }
 
 export interface GuidesResponse {

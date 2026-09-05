@@ -1,6 +1,7 @@
 import React, { ReactNode } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import { LoadingState } from '@/components/LoadingState';
 const ROLE_HIERARCHY: Record<string, number> = {
   GUEST: 0,
   STUDENT: 1,
@@ -52,12 +53,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Show loading state
   if (isLoading && showLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size='large' color='#667eea' />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
+    return <LoadingState />;
   }
 
   // Check if user is authenticated
@@ -180,38 +176,24 @@ export const ModerateRoute: React.FC<{
 );
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
-    fontFamily: 'Inter_400Regular',
-  },
   accessDeniedContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#EDE9F8',
   },
   accessDeniedTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontWeight: '900',
+    color: '#0D0D0D',
     marginBottom: 12,
-    fontFamily: 'Inter_700Bold',
     textAlign: 'center',
   },
   accessDeniedMessage: {
     fontSize: 16,
-    color: '#6b7280',
+    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
-    fontFamily: 'Inter_400Regular',
   },
 });

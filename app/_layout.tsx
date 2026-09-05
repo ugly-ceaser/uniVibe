@@ -1,13 +1,56 @@
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Stack, Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import FlashMessage from 'react-native-flash-message';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+function RootNavigator() {
+  const { isAuthenticated, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading) {
+      void SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loading]);
+
+  if (loading) {
+    return null;
+  }
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name='index' />
+
+      <Stack.Protected guard={!isAuthenticated}>
+        <Stack.Screen name='onboarding' />
+        <Stack.Screen name='login' />
+        <Stack.Screen name='register' />
+        <Stack.Screen name='forgot-password' />
+      </Stack.Protected>
+
+      <Stack.Protected guard={isAuthenticated}>
+        <Stack.Screen name='(tabs)' />
+        <Stack.Screen name='course-detail' />
+        <Stack.Screen name='create-post' />
+        <Stack.Screen name='guide' />
+        <Stack.Screen name='post-detail' />
+        <Stack.Screen name='post/[id]' />
+        <Stack.Screen name='profile' />
+        <Stack.Screen name='request-courses' />
+        <Stack.Screen name='submit-course' />
+        <Stack.Screen name='tip-detail' />
+      </Stack.Protected>
+
+      <Stack.Screen name='+not-found' />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -21,21 +64,17 @@ export default function RootLayout() {
     'Poppins-Bold': require('@expo-google-fonts/poppins/700Bold/Poppins_700Bold.ttf'),
   });
 
-  useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
-
   if (!fontsLoaded && !fontError) {
     return null;
   }
 
   return (
-    <AuthProvider>
-      <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style='auto' />
-      <FlashMessage position='bottom' />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <RootNavigator />
+        <StatusBar style='auto' />
+        <FlashMessage position='bottom' />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

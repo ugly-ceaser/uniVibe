@@ -18,6 +18,7 @@ import { Heart, Share, Clock, User, ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useGuide } from '@/hooks/useGuide';
 import { ErrorMessage } from '@/components/ErrorMessage';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { guideApi, useApi } from '@/utils/api';
 
 export default function GuideDetailScreen() {
@@ -89,7 +90,7 @@ export default function GuideDetailScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/(tabs)');
+      router.navigate('/(tabs)');
     }
   };
 
@@ -182,7 +183,7 @@ export default function GuideDetailScreen() {
 
           {/* Body Section */}
           <View style={styles.guideContent}>
-            <Text style={styles.contentText}>{guide.content}</Text>
+            <MarkdownRenderer content={guide.content} />
           </View>
         </ScrollView>
       )}

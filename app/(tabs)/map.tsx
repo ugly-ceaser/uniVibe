@@ -8,6 +8,7 @@ import React, {
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -17,8 +18,14 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Navigation, ExternalLink, Plus } from 'lucide-react-native';
+import {
+  MapPin,
+  Navigation,
+  ExternalLink,
+  Search,
+  X,
+  RefreshCw,
+} from 'lucide-react-native';
 import { useApi, mapApi } from '@/utils/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { HeroBanner } from '@/components/HeroBanner';
@@ -71,6 +78,7 @@ export default function MapScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const hasInitialLoaded = useRef(false);
   const isMountedRef = useRef(true);
@@ -184,38 +192,7 @@ export default function MapScreen() {
     }
   };
 
-  const addSampleLocation = () => {
-    Alert.alert(
-      'Add Sample Location',
-      'Add a sample location to test the map?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Add Sample',
-          onPress: async () => {
-            if (!apiClient?.create) {
-              Alert.alert('Error', 'API not available');
-              return;
-            }
-            try {
-              await apiClient.create({
-                name: `Sample Location ${Date.now()}`,
-                coordinates: { latitude: 40.7589, longitude: -73.9851 },
-                description: 'Sample campus location for testing',
-                category: 'Recreation',
-              });
-              Alert.alert('Success', 'Sample location added!');
-              handleRefresh();
-            } catch {
-              Alert.alert('Error', 'Failed to create sample location');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // ─── Derived data ─────────────────────────────────────────────────────────────
+  // ─── Derived data & Filtering ────────────────────────────────────────────────
   const categories = useMemo(
     () => [
       ...new Set(locations.map(l => l.category).filter(Boolean) as string[]),
@@ -223,13 +200,19 @@ export default function MapScreen() {
     [locations]
   );
 
-  const filteredLocations = useMemo(
-    () =>
-      selectedCategory
-        ? locations.filter(l => l.category === selectedCategory)
-        : locations,
-    [locations, selectedCategory]
-  );
+  const filteredLocations = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return locations.filter(l => {
+      const matchesCategory =
+        !selectedCategory || l.category === selectedCategory;
+      const matchesQuery =
+        !query ||
+        l.name.toLowerCase().includes(query) ||
+        (l.description && l.description.toLowerCase().includes(query)) ||
+        (l.category && l.category.toLowerCase().includes(query));
+      return matchesCategory && matchesQuery;
+    });
+  }, [locations, selectedCategory, searchQuery]);
 
   // ── Hero banner ──────────────────────────────────────────────────────────────
   const hero = (
@@ -238,6 +221,32 @@ export default function MapScreen() {
       title={'Where to\nnext? 📍'}
       subtitle="Every building, office, and hangout spot on campus."
     />
+  );
+
+  // ── Search & Filter section header ───────────────────────────────────────────
+  const searchSection = (
+    <View style={styles.searchSectionWrapper}>
+      <View style={styles.searchContainer}>
+        <Search size={18} color="#6B7280" strokeWidth={2.2} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search campus buildings, labs, hostels…"
+          placeholderTextColor="#9CA3AF"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="never"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setSearchQuery('')}
+            style={styles.clearSearchBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <X size={15} color="#4B5563" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   );
 
   // ── Filter chip row ──────────────────────────────────────────────────────────
@@ -273,7 +282,7 @@ export default function MapScreen() {
   // ── Empty / error state ───────────────────────────────────────────────────────
   const emptyComponent = loading ? (
     <View style={styles.loadingBox}>
-      <ActivityIndicator size='large' color='#7B2FBE' />
+      <ActivityIndicator size="large" color="#7B2FBE" />
       <Text style={styles.loadingText}>Loading locations…</Text>
     </View>
   ) : error ? (
@@ -286,20 +295,38 @@ export default function MapScreen() {
         <Text style={styles.retryButtonText}>Try again</Text>
       </TouchableOpacity>
     </View>
+  ) : searchQuery.trim().length > 0 || selectedCategory !== null ? (
+    <View style={styles.emptyCard}>
+      <Text style={styles.emptyEmoji}>🔍</Text>
+      <Text style={styles.emptyTitle}>No locations found</Text>
+      <Text style={styles.emptySubtitle}>
+        No campus spots match &ldquo;{searchQuery || selectedCategory}&rdquo;. Try another
+        search or reset filters.
+      </Text>
+      <TouchableOpacity
+        style={styles.resetFilterButton}
+        onPress={() => {
+          setSearchQuery('');
+          setSelectedCategory(null);
+        }}
+      >
+        <Text style={styles.resetFilterButtonText}>Clear Filters</Text>
+      </TouchableOpacity>
+    </View>
   ) : (
     <View style={styles.emptyCard}>
       <Text style={styles.emptyEmoji}>🗺️</Text>
-      <Text style={styles.emptyTitle}>No locations yet</Text>
+      <Text style={styles.emptyTitle}>No campus spots yet</Text>
       <Text style={styles.emptySubtitle}>
-        No campus spots have been added.{'\n'}Pull down to refresh or add a
-        sample.
+        Official campus landmarks and waypoints will appear here once added by
+        administrators.
       </Text>
       <TouchableOpacity
-        style={styles.sampleButton}
-        onPress={addSampleLocation}
+        style={styles.refreshButton}
+        onPress={() => fetchLocations(true)}
       >
-        <Plus size={16} color='#000' />
-        <Text style={styles.sampleButtonText}>Add Sample Location</Text>
+        <RefreshCw size={15} color="#000" strokeWidth={2.2} />
+        <Text style={styles.refreshButtonText}>Refresh Map</Text>
       </TouchableOpacity>
     </View>
   );
@@ -351,7 +378,7 @@ export default function MapScreen() {
               onPress={() => openInMaps(location)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <ExternalLink size={14} color='#666' />
+              <ExternalLink size={14} color="#666" />
             </TouchableOpacity>
           </View>
 
@@ -368,7 +395,7 @@ export default function MapScreen() {
               style={styles.actionBtn}
               onPress={() => openInMaps(location)}
             >
-              <MapPin size={13} color='#000' />
+              <MapPin size={13} color="#000" />
               <Text style={styles.actionBtnText}>View on map</Text>
             </TouchableOpacity>
 
@@ -376,14 +403,13 @@ export default function MapScreen() {
               style={[styles.actionBtn, styles.actionBtnSecondary]}
               onPress={() => getDirections(location)}
             >
-              <Navigation size={13} color='#000' />
+              <Navigation size={13} color="#000" />
               <Text style={styles.actionBtnText}>Directions</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </View>
     ),
-    // openInMaps / getDirections are stable (no deps change)
     []
   );
 
@@ -391,6 +417,7 @@ export default function MapScreen() {
     <TabTransitionWrapper>
       <ScrollableScreen
         hero={hero}
+        sectionHeader={searchSection}
         filterChips={filterChips ?? <View />}
         stickyChips={chipItems.length > 1}
         data={filteredLocations}
@@ -401,7 +428,7 @@ export default function MapScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor='#7B2FBE'
+            tintColor="#7B2FBE"
           />
         }
       />
@@ -410,6 +437,39 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ─── Search Bar ───
+  searchSectionWrapper: {
+    marginBottom: 8,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#000',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0D0D0D',
+    fontWeight: '600',
+    padding: 0,
+  },
+  clearSearchBtn: {
+    padding: 4,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+  },
+
   // ─── Filter Pills ───
   filterList: { gap: 10, paddingHorizontal: 16, paddingVertical: 2 },
 
@@ -472,24 +532,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 20,
   },
-  sampleButton: {
+  resetFilterButton: {
+    backgroundColor: '#C4FF0E',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  resetFilterButtonText: { fontSize: 13, fontWeight: '900', color: '#000' },
+  refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#C4FF0E',
     borderRadius: 20,
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     paddingVertical: 10,
     borderWidth: 2,
     borderColor: '#000',
   },
-  sampleButtonText: { fontSize: 13, fontWeight: '800', color: '#000' },
+  refreshButtonText: { fontSize: 13, fontWeight: '900', color: '#000' },
 
   // ─── Location Cards ───
   cardWrapper: {

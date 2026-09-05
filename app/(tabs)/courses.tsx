@@ -412,7 +412,11 @@ export default function CoursesScreen() {
 
     markCoursePending(course.id, true);
     setSelectedError(null);
-    setSelectedCourses(current => addCourseOnce(current, course));
+    const optimisticCourse = { ...course, isEnrolled: true };
+    setSelectedCourses(current => addCourseOnce(current, optimisticCourse));
+    setCatalogCourses(current =>
+      current.map(c => (c.id === course.id ? { ...c, isEnrolled: true } : c))
+    );
     try {
       await client.enroll(course.id);
       showMessage({
@@ -426,6 +430,9 @@ export default function CoursesScreen() {
       }
     } catch (error) {
       setSelectedCourses(current => removeCourseById(current, course.id));
+      setCatalogCourses(current =>
+        current.map(c => (c.id === course.id ? { ...c, isEnrolled: false } : c))
+      );
       showMessage({
         message: 'Could not add course',
         description: errorMessage(error),
@@ -444,6 +451,9 @@ export default function CoursesScreen() {
     markCoursePending(course.id, true);
     setSelectedError(null);
     setSelectedCourses(current => removeCourseById(current, course.id));
+    setCatalogCourses(current =>
+      current.map(c => (c.id === course.id ? { ...c, isEnrolled: false } : c))
+    );
     try {
       await client.unenroll(course.id);
       showMessage({
@@ -458,7 +468,10 @@ export default function CoursesScreen() {
         );
       }
     } catch (error) {
-      setSelectedCourses(current => addCourseOnce(current, course));
+      setSelectedCourses(current => addCourseOnce(current, { ...course, isEnrolled: true }));
+      setCatalogCourses(current =>
+        current.map(c => (c.id === course.id ? { ...c, isEnrolled: true } : c))
+      );
       showMessage({
         message: 'Failed to unselect course',
         description: errorMessage(error),
@@ -500,11 +513,10 @@ export default function CoursesScreen() {
         !uniName ||
         !facName ||
         !deptName ||
-        !programmeName ||
         !userProfile.level ||
         !userProfile.semester;
-      setIsProfileIncomplete(incomplete);
       if (incomplete) {
+        setIsProfileIncomplete(true);
         return;
       }
 
@@ -533,6 +545,7 @@ export default function CoursesScreen() {
       };
 
       if (!uniName) {
+        setIsProfileIncomplete(true);
         return;
       }
 
@@ -565,6 +578,7 @@ export default function CoursesScreen() {
         setFaculties(rawFacs.map((f: any) => ({ id: f.id, label: f.name })));
 
         if (!facName) {
+          setIsProfileIncomplete(true);
           return;
         }
 
@@ -606,15 +620,19 @@ export default function CoursesScreen() {
               sublabel: p.degreeType,
             }))
           );
-          matchedProg =
-            rawProgs.find(
-              (p: any) =>
-                p.name.toLowerCase().includes(programmeName.toLowerCase()) ||
-                programmeName.toLowerCase().includes(p.name.toLowerCase())
-            ) || null;
+          if (programmeName) {
+            matchedProg =
+              rawProgs.find(
+                (p: any) =>
+                  p.name.toLowerCase().includes(programmeName.toLowerCase()) ||
+                  programmeName.toLowerCase().includes(p.name.toLowerCase())
+              ) || null;
+          } else if (rawProgs.length > 0) {
+            matchedProg = rawProgs[0];
+          }
         }
 
-        if (!matchedProg) {
+        if (!matchedProg && programmeName) {
           // Try searching for a programme match across all departments in this faculty
           for (const dept of rawDepts) {
             const progsRes = await client.getProgrammes(dept.id);
@@ -698,15 +716,30 @@ export default function CoursesScreen() {
           });
         }
 
-        const matchedSem = rawSems.find((s: any) =>
-          s.name
-            .toLowerCase()
-            .includes(userProfile.semester?.toLowerCase() || '')
-        );
+        const matchedSem = rawSems.find((s: any) => {
+          const sName = s.name.toLowerCase();
+          const pSem = (userProfile.semester || '').toLowerCase();
+          return (
+            sName.includes(pSem) ||
+            pSem.includes(sName) ||
+            (pSem.includes('first') && sName.includes('first')) ||
+            (pSem.includes('second') && sName.includes('second'))
+          );
+        });
         if (matchedSem) {
           setSelectedSemester({ id: matchedSem.id, label: matchedSem.name });
         }
-        if (!matchedLvl || !matchedSem) {
+
+        if (
+          matchedUni &&
+          matchedFac &&
+          matchedDept &&
+          matchedProg &&
+          matchedLvl &&
+          matchedSem
+        ) {
+          setIsProfileIncomplete(false);
+        } else {
           setIsProfileIncomplete(true);
         }
       } finally {
@@ -1218,16 +1251,24 @@ export default function CoursesScreen() {
           <View style={{ height: clearance }} />
         </ScrollView>
 
-        {activeView === 'selected' && (
-          <TouchableOpacity
-            style={[styles.fab, { bottom: fabBottom }]}
-            onPress={() => setActiveView('browse')}
-            activeOpacity={0.8}
-            accessibilityLabel='Browse course catalog'
-          >
-            <Plus size={24} color='#000' strokeWidth={2.5} />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[styles.fab, { bottom: fabBottom }]}
+          onPress={() => {
+            if (activeView === 'selected') {
+              setActiveView('browse');
+            } else {
+              router.push('/submit-course');
+            }
+          }}
+          activeOpacity={0.8}
+          accessibilityLabel={
+            activeView === 'selected'
+              ? 'Browse course catalog'
+              : 'Submit a new course request'
+          }
+        >
+          <Plus size={24} color='#000' strokeWidth={2.5} />
+        </TouchableOpacity>
 
         {/* ─── Select Modals ─── */}
         <SelectModal
