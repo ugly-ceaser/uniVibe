@@ -60,16 +60,19 @@ const AVATAR_COLORS = [
   '#8B5CF6',
 ];
 function avatarColor(name: string) {
+  if (!name) return AVATAR_COLORS[0];
   let h = 0;
   for (let i = 0; i < name.length; i++)
     h = (h * 31 + name.charCodeAt(i)) % AVATAR_COLORS.length;
   return AVATAR_COLORS[h];
 }
 function getInitials(name: string) {
-  const parts = name.trim().split(' ');
+  if (!name) return 'U';
+  const parts = name.trim().split(' ').filter(Boolean);
+  if (parts.length === 0) return 'U';
   return parts.length >= 2
     ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-    : name.slice(0, 2).toUpperCase();
+    : parts[0].slice(0, 2).toUpperCase();
 }
 
 // ─── Icon box colours ─────────────────────────────────────────────────────────
@@ -636,7 +639,7 @@ export default function ProfileScreen() {
                   value={profile?.email}
                   rightEl={
                     <VerificationBadge
-                      verified={!!profile?.verificationStatus.email}
+                      verified={!!profile?.verificationStatus?.email}
                     />
                   }
                 />
@@ -647,7 +650,7 @@ export default function ProfileScreen() {
                   value={profile?.phone}
                   rightEl={
                     <VerificationBadge
-                      verified={!!profile?.verificationStatus.phone}
+                      verified={!!profile?.verificationStatus?.phone}
                     />
                   }
                 />
@@ -659,7 +662,7 @@ export default function ProfileScreen() {
                   hasBorder={false}
                   rightEl={
                     <VerificationBadge
-                      verified={!!profile?.verificationStatus.nin}
+                      verified={!!profile?.verificationStatus?.nin}
                     />
                   }
                 />
@@ -909,7 +912,7 @@ export default function ProfileScreen() {
                   value={profile?.regNumber}
                   rightEl={
                     <VerificationBadge
-                      verified={!!profile?.verificationStatus.regNumber}
+                      verified={!!profile?.verificationStatus?.regNumber}
                     />
                   }
                 />

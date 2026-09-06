@@ -1722,6 +1722,9 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
 
   // Transform API response to match our strict UserProfile type
   const transformUserProfile = (apiData: any): UserProfile => {
+    if (!apiData || typeof apiData !== 'object') {
+      apiData = {};
+    }
     const validRoles: ('STUDENT' | 'ADMIN' | 'LECTURER')[] = [
       'STUDENT',
       'ADMIN',

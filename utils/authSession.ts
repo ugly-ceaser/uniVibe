@@ -54,7 +54,7 @@ export const parseStoredAuthSession = (
 
   try {
     const user: unknown = JSON.parse(storedUser);
-    if (!isRecord(user)) {
+    if (!isRecord(user) || (!user.id && !user.email)) {
       return null;
     }
 
