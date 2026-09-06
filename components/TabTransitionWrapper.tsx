@@ -5,11 +5,16 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   Easing,
+  runOnJS,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRoute, useNavigationState } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useTabHistory } from '@/contexts/TabHistoryContext';
 
 const { width } = Dimensions.get('window');
+
+const TAB_ROUTES = ['/(tabs)', '/(tabs)/map', '/(tabs)/forum', '/(tabs)/courses', '/(tabs)/profile'];
 
 interface TabTransitionWrapperProps {
   children: React.ReactNode;
@@ -17,9 +22,10 @@ interface TabTransitionWrapperProps {
 
 export function TabTransitionWrapper({ children }: TabTransitionWrapperProps) {
   const route = useRoute();
+  const router = useRouter();
   const { lastTabIndexRef } = useTabHistory();
 
-  // Retrieve the closest navigator state (which is the bottom tab navigator)
+  // Retrieve the closest navigator state (bottom tab navigator)
   const tabState = useNavigationState(state => state);
   
   // Extract active tab index and current screen index in the tab navigator
@@ -27,9 +33,36 @@ export function TabTransitionWrapper({ children }: TabTransitionWrapperProps) {
   const myIndex = tabState?.routeNames?.indexOf(route.name) ?? 0;
   
   const isFocused = activeIndex === myIndex;
+  const isMapTab = route.name === 'map';
 
   const translateX = useSharedValue(0);
   const opacity = useSharedValue(0);
+
+  const navigateToTab = (targetIndex: number) => {
+    if (targetIndex >= 0 && targetIndex < TAB_ROUTES.length) {
+      router.push(TAB_ROUTES[targetIndex] as any);
+    }
+  };
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-35, 35])
+    .failOffsetY([-15, 15])
+    .onEnd((event) => {
+      'worklet';
+      if (isMapTab) return; // Disable tab swipe on Map screen to preserve map panning
+
+      if (event.translationX < -60 || event.velocityX < -600) {
+        // Swiped left -> navigate to next tab on the right
+        if (myIndex < TAB_ROUTES.length - 1) {
+          runOnJS(navigateToTab)(myIndex + 1);
+        }
+      } else if (event.translationX > 60 || event.velocityX > 600) {
+        // Swiped right -> navigate to previous tab on the left
+        if (myIndex > 0) {
+          runOnJS(navigateToTab)(myIndex - 1);
+        }
+      }
+    });
 
   const animStyle = useAnimatedStyle(() => {
     return {
@@ -44,41 +77,37 @@ export function TabTransitionWrapper({ children }: TabTransitionWrapperProps) {
 
       // Determine slide direction based on index difference
       if (activeIndex > lastIndex) {
-        // Navigating to a tab on the right -> slide in from the right
         translateX.value = width;
       } else if (activeIndex < lastIndex) {
-        // Navigating to a tab on the left -> slide in from the left
         translateX.value = -width;
       } else {
-        // Initial load or same tab -> start at center
         translateX.value = 0;
       }
 
-      // Update the shared ref with the new index
       lastTabIndexRef.current = activeIndex;
 
-      // Perform slide and fade in
       translateX.value = withTiming(0, {
-        duration: 250,
+        duration: 220,
         easing: Easing.out(Easing.ease),
       });
       opacity.value = withTiming(1, {
-        duration: 250,
+        duration: 220,
         easing: Easing.out(Easing.ease),
       });
     } else {
-      // Screen is blurred: immediately hide it to prevent overlap
       opacity.value = 0;
     }
   }, [isFocused, activeIndex, myIndex, lastTabIndexRef]);
 
   return (
-    <Animated.View
-      style={[styles.container, animStyle]}
-      pointerEvents={isFocused ? 'auto' : 'none'}
-    >
-      {children}
-    </Animated.View>
+    <GestureDetector gesture={panGesture}>
+      <Animated.View
+        style={[styles.container, animStyle]}
+        pointerEvents={isFocused ? 'auto' : 'none'}
+      >
+        {children}
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -87,3 +116,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+

@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Home, Map, MessageCircle, BookOpen, User } from 'lucide-react-native';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TabHistoryProvider } from '@/contexts/TabHistoryContext';
 
@@ -9,30 +10,33 @@ const INACTIVE_COLOR = '#555577';
 const TAB_BG = '#0F0F16';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
+
   return (
     <ErrorBoundary>
       <TabHistoryProvider>
         <View style={styles.container}>
           <Tabs
-          screenOptions={{
-            headerShown: false,
-            tabBarHideOnKeyboard: true,
-            tabBarActiveTintColor: ACTIVE_COLOR,
-            tabBarInactiveTintColor: INACTIVE_COLOR,
-            tabBarStyle: {
-              backgroundColor: TAB_BG,
-              borderTopWidth: 0,
-              paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-              paddingTop: 10,
-              height: Platform.OS === 'ios' ? 88 : 74,
-            },
-            tabBarLabelStyle: {
-              fontSize: 11,
-              fontWeight: '600',
-              marginTop: 2,
-            },
-          }}
-        >
+            screenOptions={{
+              headerShown: false,
+              tabBarHideOnKeyboard: true,
+              tabBarActiveTintColor: ACTIVE_COLOR,
+              tabBarInactiveTintColor: INACTIVE_COLOR,
+              tabBarStyle: {
+                backgroundColor: TAB_BG,
+                borderTopWidth: 0,
+                paddingBottom: bottomInset,
+                paddingTop: 8,
+                height: 60 + bottomInset,
+              },
+              tabBarLabelStyle: {
+                fontSize: 11,
+                fontWeight: '600',
+                marginTop: 2,
+              },
+            }}
+          >
           <Tabs.Screen
             name='index'
             options={{
