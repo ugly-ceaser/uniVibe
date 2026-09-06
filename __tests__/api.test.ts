@@ -72,6 +72,46 @@ describe('ApiClient', () => {
     consoleLogSpy.mockRestore();
   });
 
+  it.each(['get', 'authGet', 'forceRefresh'] as const)(
+    'invalidates rejected credentials through %s', async method => {
+      fetchMock.mockResolvedValueOnce(createResponse({ status: 401, body: '{}' }));
+      const client = new ApiClient('https://example.test');
+      const invalidated = jest.fn();
+      client.setToken('expired');
+      client.setSessionInvalidationHandler(invalidated);
+      await expect(client[method]('/private')).rejects.toMatchObject({ status: 401 });
+      expect(invalidated).toHaveBeenCalledTimes(1);
+      await expect(client.authGet('/another')).rejects.toMatchObject({ status: 401 });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('does not invalidate a newer session after an old request fails', async () => {
+    let finish!: (response: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const client = new ApiClient('https://example.test');
+    const invalidated = jest.fn();
+    client.setSessionInvalidationHandler(invalidated);
+    client.setToken('old');
+    const request = client.authGet('/private');
+    const rejected = expect(request).rejects.toMatchObject({ status: 401 });
+    client.setToken('new');
+    finish(createResponse({ status: 401, body: '{}' }));
+    await rejected;
+    expect(invalidated).not.toHaveBeenCalled();
+    expect(client.getDebugInfo()).toMatchObject({ hasToken: true });
+  });
+
+  it.each([403, 500])('does not expire a session for HTTP %s', async status => {
+    fetchMock.mockResolvedValue(createResponse({ status, body: '{}' }));
+    const client = new ApiClient('https://example.test');
+    const invalidated = jest.fn();
+    client.setToken('valid');
+    client.setSessionInvalidationHandler(invalidated);
+    await expect(client.authGet('/private')).rejects.toMatchObject({ status });
+    expect(invalidated).not.toHaveBeenCalled();
+  });
+
   it('parses JSON responses', async () => {
     fetchMock.mockResolvedValueOnce(
       createResponse({ body: JSON.stringify({ data: { id: '1' } }) })

@@ -125,11 +125,11 @@ export default function CreatePostScreen() {
     : 'Student';
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+    <KeyboardAvoidingView
+      style={styles.safeArea}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* ── Toast ── */}
         {toast && (
           <View
@@ -350,8 +350,8 @@ export default function CreatePostScreen() {
             </LinearGradient>
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

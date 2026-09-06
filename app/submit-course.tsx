@@ -61,7 +61,10 @@ function SelectModal({
       transparent
       onRequestClose={onClose}
     >
-      <View style={sm.overlay}>
+      <KeyboardAvoidingView
+        style={sm.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={sm.sheet}>
           <View style={sm.header}>
             <Text style={sm.title}>{title}</Text>
@@ -90,6 +93,7 @@ function SelectModal({
             />
           ) : (
             <FlatList
+              keyboardShouldPersistTaps='handled'
               data={filtered}
               keyExtractor={i => i.id}
               contentContainerStyle={{ paddingBottom: 24 }}
@@ -111,7 +115,7 @@ function SelectModal({
             />
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -563,11 +567,11 @@ export default function SubmitCourseScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         {/* Header */}
         <LinearGradient
           colors={['#6B21A8', '#9333EA', '#C026D3', '#DB2777']}
@@ -768,7 +772,7 @@ export default function SubmitCourseScreen() {
 
           <View style={{ height: 40 }} />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {/* Modals */}
       <SelectModal
@@ -848,7 +852,7 @@ export default function SubmitCourseScreen() {
           </View>
         </Modal>
       )}
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

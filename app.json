@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.uglyceaser.univibes",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",

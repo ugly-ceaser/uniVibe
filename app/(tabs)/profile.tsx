@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   Modal,
   FlatList,
@@ -448,6 +450,10 @@ export default function ProfileScreen() {
   }, [profile, editForm, hierarchy.selection, profileClient, updateUser]);
 
   const handleLogout = useCallback(() => {
+    if (Platform.OS === 'web') {
+      void logout();
+      return;
+    }
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -487,612 +493,618 @@ export default function ProfileScreen() {
   // ─── Main Render ──────────────────────────────────────────────────────────
   return (
     <TabTransitionWrapper>
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor='#7B2FBE'
-            />
-          }
-        >
-          {/* ─── Hero Banner ─── */}
-          <HeroBanner
-            badgeText="YOUR CORNER"
-            title={`That's you,\n${firstName} ✦`}
-            subtitle="Your academic profile and details."
-            rightAction={
-              <TouchableOpacity
-                style={styles.editIconBtn}
-                onPress={editing ? cancelEditing : beginEditing}
-              >
-                {editing ? (
-                  <X size={18} color='#000' />
-                ) : (
-                  <Edit3 size={18} color='#000' />
-                )}
-              </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <ScrollView
+            keyboardShouldPersistTaps='handled'
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor='#7B2FBE'
+              />
             }
-          />
-
-          {/* ─── Avatar Header Card ─── */}
-          <View style={styles.avatarCard}>
-            <TouchableOpacity
-              style={styles.avatarWrapper}
-              onPress={handleAvatarPick}
-              activeOpacity={0.8}
-              disabled={updatingAvatar}
-            >
-              {profile?.avatarUrl ? (
-                <Image
-                  source={{ uri: profile.avatarUrl }}
-                  style={styles.avatarImage}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.avatarFallback,
-                    { backgroundColor: avatarColor(displayName) },
-                  ]}
+          >
+            {/* ─── Hero Banner ─── */}
+            <HeroBanner
+              badgeText="YOUR CORNER"
+              title={`That's you,\n${firstName} ✦`}
+              subtitle="Your academic profile and details."
+              rightAction={
+                <TouchableOpacity
+                  style={styles.editIconBtn}
+                  onPress={editing ? cancelEditing : beginEditing}
                 >
-                  <Text style={styles.avatarInitials}>
-                    {getInitials(displayName)}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.cameraBadge}>
-                {updatingAvatar ? (
-                  <ActivityIndicator size='small' color='#000' />
-                ) : (
-                  <Camera size={14} color='#000' strokeWidth={2.5} />
-                )}
-              </View>
-            </TouchableOpacity>
+                  {editing ? (
+                    <X size={18} color='#000' />
+                  ) : (
+                    <Edit3 size={18} color='#000' />
+                  )}
+                </TouchableOpacity>
+              }
+            />
 
-            <View style={styles.avatarTextMeta}>
-              <Text style={styles.avatarName}>
-                {profile?.fullname || 'Student'}
-              </Text>
-              <Text style={styles.avatarRole}>
-                {profile?.department
-                  ? `${profile.department}${
-                      profile.level ? ` • ${profile.level}L` : ''
-                    }`
-                  : profile?.email || 'Student'}
-              </Text>
+            {/* ─── Avatar Header Card ─── */}
+            <View style={styles.avatarCard}>
               <TouchableOpacity
+                style={styles.avatarWrapper}
                 onPress={handleAvatarPick}
-                style={styles.changePhotoBtn}
+                activeOpacity={0.8}
                 disabled={updatingAvatar}
               >
-                <Text style={styles.changePhotoBtnText}>
-                  {updatingAvatar ? 'Updating photo…' : 'Change profile photo'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* ─── Error ─── */}
-          {error && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity
-                style={styles.retryBtn}
-                onPress={() => fetchProfile()}
-              >
-                <Text style={styles.retryBtnText}>Try again</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ─── Personal Information ─── */}
-          <SectionCard title='Personal Information'>
-            {editing ? (
-              <View style={styles.editBlock}>
-                <Text style={styles.editLabel}>Full name</Text>
-                <TextInput
-                  style={styles.editInput}
-                  value={editForm.fullName}
-                  onChangeText={v => setEditForm(f => ({ ...f, fullName: v }))}
-                  placeholder='Your full name'
-                />
-                <Text style={styles.editLabel}>Phone</Text>
-                <TextInput
-                  style={styles.editInput}
-                  value={editForm.phone}
-                  onChangeText={v => setEditForm(f => ({ ...f, phone: v }))}
-                  placeholder='+234...'
-                  keyboardType='phone-pad'
-                />
-                <Text style={styles.editLabel}>Registration number</Text>
-                <TextInput
-                  style={styles.editInput}
-                  value={editForm.regNumber}
-                  onChangeText={v => setEditForm(f => ({ ...f, regNumber: v }))}
-                  placeholder='Your registration number'
-                  autoCapitalize='characters'
-                />
-                <Text style={styles.editLabel}>National ID number (NIN)</Text>
-                <TextInput
-                  style={styles.editInput}
-                  value={editForm.nin}
-                  onChangeText={v => setEditForm(f => ({ ...f, nin: v }))}
-                  placeholder='Your NIN'
-                  keyboardType='number-pad'
-                />
-              </View>
-            ) : (
-              <>
-                <InfoRow
-                  iconBg={ICON_COLORS.person}
-                  icon={<User size={18} color='#000' />}
-                  label='Full name'
-                  value={profile?.fullname}
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.id}
-                  icon={<CreditCard size={18} color='#000' />}
-                  label='Email'
-                  value={profile?.email}
-                  rightEl={
-                    <VerificationBadge
-                      verified={!!profile?.verificationStatus?.email}
-                    />
-                  }
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.sem}
-                  icon={<Phone size={18} color='#000' />}
-                  label='Phone'
-                  value={profile?.phone}
-                  rightEl={
-                    <VerificationBadge
-                      verified={!!profile?.verificationStatus?.phone}
-                    />
-                  }
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.id}
-                  icon={<CreditCard size={18} color='#000' />}
-                  label='National ID number (NIN)'
-                  value={profile?.nin}
-                  hasBorder={false}
-                  rightEl={
-                    <VerificationBadge
-                      verified={!!profile?.verificationStatus?.nin}
-                    />
-                  }
-                />
-              </>
-            )}
-          </SectionCard>
-
-          {/* ─── Academic Information ─── */}
-          <SectionCard title='Academic Information'>
-            {editing ? (
-              <View style={styles.editBlock}>
-                <Text style={styles.editLabel}>University</Text>
-                <TouchableOpacity
-                  style={[styles.editInput, styles.selectButton]}
-                  disabled={hierarchy.loading}
-                  onPress={() =>
-                    showPicker(
-                      'Select University',
-                      hierarchy.universities.map(item => ({
-                        id: item.id,
-                        label: item.name,
-                        sublabel: [item.shortName, item.state]
-                          .filter(Boolean)
-                          .join(' · '),
-                      })),
-                      id => {
-                        const item = hierarchy.universities.find(
-                          option => option.id === id
-                        );
-                        if (item) {
-                          void hierarchy.selectUniversity(item);
-                        }
-                      }
-                    )
-                  }
-                >
-                  <Text style={styles.selectButtonText}>
-                    {hierarchy.selection.university?.name ||
-                      'Select University'}
-                  </Text>
-                  <ChevronRight size={18} color='#555' />
-                </TouchableOpacity>
-
-                <Text style={styles.editLabel}>Faculty</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.editInput,
-                    styles.selectButton,
-                    !hierarchy.selection.university &&
-                      styles.selectButtonDisabled,
-                  ]}
-                  disabled={
-                    !hierarchy.selection.university || hierarchy.loading
-                  }
-                  onPress={() =>
-                    showPicker(
-                      'Select Faculty',
-                      hierarchy.faculties.map(item => ({
-                        id: item.id,
-                        label: item.name,
-                      })),
-                      id => {
-                        const item = hierarchy.faculties.find(
-                          option => option.id === id
-                        );
-                        if (item) {
-                          void hierarchy.selectFaculty(item);
-                        }
-                      }
-                    )
-                  }
-                >
-                  <Text style={styles.selectButtonText}>
-                    {hierarchy.selection.faculty?.name || 'Select Faculty'}
-                  </Text>
-                  <ChevronRight size={18} color='#555' />
-                </TouchableOpacity>
-
-                <Text style={styles.editLabel}>Department</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.editInput,
-                    styles.selectButton,
-                    !hierarchy.selection.faculty && styles.selectButtonDisabled,
-                  ]}
-                  disabled={!hierarchy.selection.faculty || hierarchy.loading}
-                  onPress={() =>
-                    showPicker(
-                      'Select Department',
-                      hierarchy.departments.map(item => ({
-                        id: item.id,
-                        label: item.name,
-                      })),
-                      id => {
-                        const item = hierarchy.departments.find(
-                          option => option.id === id
-                        );
-                        if (item) {
-                          void hierarchy.selectDepartment(item);
-                        }
-                      }
-                    )
-                  }
-                >
-                  <Text style={styles.selectButtonText}>
-                    {hierarchy.selection.department?.name ||
-                      'Select Department'}
-                  </Text>
-                  <ChevronRight size={18} color='#555' />
-                </TouchableOpacity>
-
-                <Text style={styles.editLabel}>Programme</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.editInput,
-                    styles.selectButton,
-                    !hierarchy.selection.department &&
-                      styles.selectButtonDisabled,
-                  ]}
-                  disabled={
-                    !hierarchy.selection.department || hierarchy.loading
-                  }
-                  onPress={() =>
-                    showPicker(
-                      'Select Programme',
-                      hierarchy.programmes.map(item => ({
-                        id: item.id,
-                        label: item.name,
-                      })),
-                      id => {
-                        const item = hierarchy.programmes.find(
-                          option => option.id === id
-                        );
-                        if (item) {
-                          void hierarchy.selectProgramme(item);
-                        }
-                      }
-                    )
-                  }
-                >
-                  <Text style={styles.selectButtonText}>
-                    {hierarchy.selection.programme?.name || 'Select Programme'}
-                  </Text>
-                  <ChevronRight size={18} color='#555' />
-                </TouchableOpacity>
-
-                <Text style={styles.editLabel}>Level</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.editInput,
-                    styles.selectButton,
-                    !hierarchy.selection.programme &&
-                      styles.selectButtonDisabled,
-                  ]}
-                  disabled={!hierarchy.selection.programme || hierarchy.loading}
-                  onPress={() =>
-                    showPicker(
-                      'Select Level',
-                      hierarchy.levels.map(item => ({
-                        id: item.id,
-                        label: `${item.level} Level`,
-                      })),
-                      id => {
-                        const item = hierarchy.levels.find(
-                          option => option.id === id
-                        );
-                        if (item) {
-                          hierarchy.selectLevel(item);
-                        }
-                      }
-                    )
-                  }
-                >
-                  <Text style={styles.selectButtonText}>
-                    {hierarchy.selection.level
-                      ? `${hierarchy.selection.level.level} Level`
-                      : 'Select Level'}
-                  </Text>
-                  <ChevronRight size={18} color='#555' />
-                </TouchableOpacity>
-
-                <Text style={styles.editLabel}>Semester</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.editInput,
-                    styles.selectButton,
-                    !hierarchy.selection.programme &&
-                      styles.selectButtonDisabled,
-                  ]}
-                  disabled={!hierarchy.selection.programme || hierarchy.loading}
-                  onPress={() =>
-                    showPicker(
-                      'Select Semester',
-                      hierarchy.semesters.map(item => ({
-                        id: item.id,
-                        label: item.name,
-                      })),
-                      id => {
-                        const item = hierarchy.semesters.find(
-                          option => option.id === id
-                        );
-                        if (item) {
-                          hierarchy.selectSemester(item);
-                        }
-                      }
-                    )
-                  }
-                >
-                  <Text style={styles.selectButtonText}>
-                    {hierarchy.selection.semester?.name || 'Select Semester'}
-                  </Text>
-                  <ChevronRight size={18} color='#555' />
-                </TouchableOpacity>
-
-                {hierarchy.loading && (
-                  <View style={styles.hierarchyStatus}>
-                    <ActivityIndicator size='small' color='#7B2FBE' />
-                    <Text style={styles.hierarchyStatusText}>
-                      Loading academic options…
+                {profile?.avatarUrl ? (
+                  <Image
+                    source={{ uri: profile.avatarUrl }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.avatarFallback,
+                      { backgroundColor: avatarColor(displayName) },
+                    ]}
+                  >
+                    <Text style={styles.avatarInitials}>
+                      {getInitials(displayName)}
                     </Text>
                   </View>
                 )}
-                {hierarchy.error && (
-                  <View style={styles.hierarchyErrorRow}>
-                    <Text style={styles.hierarchyError}>{hierarchy.error}</Text>
-                    <TouchableOpacity
-                      style={styles.hierarchyRetryButton}
-                      onPress={() => profile && void hierarchy.hydrate(profile)}
-                    >
-                      <Text style={styles.hierarchyRetryText}>Retry</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <>
-                <InfoRow
-                  iconBg={ICON_COLORS.uni}
-                  icon={<Building size={18} color='#000' />}
-                  label='University'
-                  value={profile?.university}
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.id}
-                  icon={<CreditCard size={18} color='#000' />}
-                  label='Registration number'
-                  value={profile?.regNumber}
-                  rightEl={
-                    <VerificationBadge
-                      verified={!!profile?.verificationStatus?.regNumber}
-                    />
-                  }
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.faculty}
-                  icon={<Building size={18} color='#000' />}
-                  label='Faculty'
-                  value={profile?.faculty}
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.dept}
-                  icon={<GraduationCap size={18} color='#000' />}
-                  label='Department'
-                  value={profile?.department}
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.person}
-                  icon={<BookOpen size={18} color='#000' />}
-                  label='Programme'
-                  value={profile?.programme}
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.level}
-                  icon={<Calendar size={18} color='#000' />}
-                  label='Level'
-                  value={profile?.level ? `${profile.level} Level` : null}
-                />
-                <InfoRow
-                  iconBg={ICON_COLORS.sem}
-                  icon={<Calendar size={18} color='#000' />}
-                  label='Semester'
-                  value={profile?.semester}
-                  hasBorder={false}
-                />
-              </>
-            )}
-          </SectionCard>
-
-          {/* ─── Community & Activity ─── */}
-          <SectionCard title='Community & Activity'>
-            <TouchableOpacity
-              style={styles.activityRow}
-              onPress={() =>
-                router.push({
-                  pathname: '/(tabs)/forum',
-                  params: { myPosts: 'true' },
-                })
-              }
-              activeOpacity={0.7}
-            >
-              <View style={[styles.rowIconBox, { backgroundColor: '#EDE9FE' }]}>
-                <MessageCircle size={18} color='#7B2FBE' />
-              </View>
-              <View style={styles.rowContent}>
-                <Text style={styles.rowLabel}>My Forum Questions & Posts</Text>
-                <Text style={styles.rowValue}>
-                  {userPostsCount !== null
-                    ? `${userPostsCount} question${
-                        userPostsCount !== 1 ? 's' : ''
-                      } asked`
-                    : 'View all questions you asked'}
-                </Text>
-              </View>
-              <ChevronRight size={16} color='#ccc' />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.activityRow,
-                { borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-              ]}
-              onPress={() => router.push('/create-post')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.rowIconBox, { backgroundColor: '#DCFCE7' }]}>
-                <Plus size={18} color='#15803D' />
-              </View>
-              <View style={styles.rowContent}>
-                <Text style={styles.rowLabel}>Ask a New Question</Text>
-                <Text style={styles.rowValue}>
-                  Get help from your campus peers
-                </Text>
-              </View>
-              <ChevronRight size={16} color='#ccc' />
-            </TouchableOpacity>
-          </SectionCard>
-
-          {/* ─── Save / Cancel buttons (edit mode) ─── */}
-          {editing && (
-            <View style={styles.editActionRow}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={cancelEditing}
-              >
-                <X size={16} color='#000' />
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <View style={styles.cameraBadge}>
+                  {updatingAvatar ? (
+                    <ActivityIndicator size='small' color='#000' />
+                  ) : (
+                    <Camera size={14} color='#000' strokeWidth={2.5} />
+                  )}
+                </View>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveBtn}
-                onPress={handleUpdateProfile}
-                disabled={updating}
-              >
-                {updating ? (
-                  <ActivityIndicator size='small' color='#000' />
-                ) : (
-                  <>
-                    <Check size={16} color='#000' />
-                    <Text style={styles.saveBtnText}>Save changes</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
 
-          {/* ─── Logout ─── */}
-          <View style={styles.logoutWrapper}>
-            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-              <View
-                style={[
-                  styles.rowIconBox,
-                  { backgroundColor: ICON_COLORS.logout },
-                ]}
-              >
-                <LogOut size={18} color='#fff' />
-              </View>
-              <Text style={styles.logoutText}>Log out</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ height: 100 }} />
-        </ScrollView>
-
-        <Modal
-          visible={pickerModal.visible}
-          transparent={true}
-          animationType='fade'
-          onRequestClose={() => setPickerModal(p => ({ ...p, visible: false }))}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{pickerModal.title}</Text>
+              <View style={styles.avatarTextMeta}>
+                <Text style={styles.avatarName}>
+                  {profile?.fullname || 'Student'}
+                </Text>
+                <Text style={styles.avatarRole}>
+                  {profile?.department
+                    ? `${profile.department}${
+                        profile.level ? ` • ${profile.level}L` : ''
+                      }`
+                    : profile?.email || 'Student'}
+                </Text>
                 <TouchableOpacity
-                  onPress={() =>
-                    setPickerModal(p => ({ ...p, visible: false }))
-                  }
+                  onPress={handleAvatarPick}
+                  style={styles.changePhotoBtn}
+                  disabled={updatingAvatar}
                 >
-                  <X size={20} color='#000' />
+                  <Text style={styles.changePhotoBtnText}>
+                    {updatingAvatar ? 'Updating photo…' : 'Change profile photo'}
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <FlatList
-                data={pickerModal.options}
-                keyExtractor={item => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.modalOption}
-                    onPress={() => {
-                      pickerModal.onSelect(item.id);
-                      setPickerModal(p => ({ ...p, visible: false }));
-                    }}
-                  >
-                    <Text style={styles.modalOptionText}>{item.label}</Text>
-                    {!!item.sublabel && (
-                      <Text style={styles.modalOptionSublabel}>
-                        {item.sublabel}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <Text style={styles.modalEmptyText}>
-                    No options are available for this selection.
-                  </Text>
-                }
-                contentContainerStyle={{ paddingBottom: 20 }}
-              />
             </View>
-          </View>
-        </Modal>
-      </SafeAreaView>
+
+            {/* ─── Error ─── */}
+            {error && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={() => fetchProfile()}
+                >
+                  <Text style={styles.retryBtnText}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ─── Personal Information ─── */}
+            <SectionCard title='Personal Information'>
+              {editing ? (
+                <View style={styles.editBlock}>
+                  <Text style={styles.editLabel}>Full name</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editForm.fullName}
+                    onChangeText={v => setEditForm(f => ({ ...f, fullName: v }))}
+                    placeholder='Your full name'
+                  />
+                  <Text style={styles.editLabel}>Phone</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editForm.phone}
+                    onChangeText={v => setEditForm(f => ({ ...f, phone: v }))}
+                    placeholder='+234...'
+                    keyboardType='phone-pad'
+                  />
+                  <Text style={styles.editLabel}>Registration number</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editForm.regNumber}
+                    onChangeText={v => setEditForm(f => ({ ...f, regNumber: v }))}
+                    placeholder='Your registration number'
+                    autoCapitalize='characters'
+                  />
+                  <Text style={styles.editLabel}>National ID number (NIN)</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editForm.nin}
+                    onChangeText={v => setEditForm(f => ({ ...f, nin: v }))}
+                    placeholder='Your NIN'
+                    keyboardType='number-pad'
+                  />
+                </View>
+              ) : (
+                <>
+                  <InfoRow
+                    iconBg={ICON_COLORS.person}
+                    icon={<User size={18} color='#000' />}
+                    label='Full name'
+                    value={profile?.fullname}
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.id}
+                    icon={<CreditCard size={18} color='#000' />}
+                    label='Email'
+                    value={profile?.email}
+                    rightEl={
+                      <VerificationBadge
+                        verified={!!profile?.verificationStatus?.email}
+                      />
+                    }
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.sem}
+                    icon={<Phone size={18} color='#000' />}
+                    label='Phone'
+                    value={profile?.phone}
+                    rightEl={
+                      <VerificationBadge
+                        verified={!!profile?.verificationStatus?.phone}
+                      />
+                    }
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.id}
+                    icon={<CreditCard size={18} color='#000' />}
+                    label='National ID number (NIN)'
+                    value={profile?.nin}
+                    hasBorder={false}
+                    rightEl={
+                      <VerificationBadge
+                        verified={!!profile?.verificationStatus?.nin}
+                      />
+                    }
+                  />
+                </>
+              )}
+            </SectionCard>
+
+            {/* ─── Academic Information ─── */}
+            <SectionCard title='Academic Information'>
+              {editing ? (
+                <View style={styles.editBlock}>
+                  <Text style={styles.editLabel}>University</Text>
+                  <TouchableOpacity
+                    style={[styles.editInput, styles.selectButton]}
+                    disabled={hierarchy.loading}
+                    onPress={() =>
+                      showPicker(
+                        'Select University',
+                        hierarchy.universities.map(item => ({
+                          id: item.id,
+                          label: item.name,
+                          sublabel: [item.shortName, item.state]
+                            .filter(Boolean)
+                            .join(' · '),
+                        })),
+                        id => {
+                          const item = hierarchy.universities.find(
+                            option => option.id === id
+                          );
+                          if (item) {
+                            void hierarchy.selectUniversity(item);
+                          }
+                        }
+                      )
+                    }
+                  >
+                    <Text style={styles.selectButtonText}>
+                      {hierarchy.selection.university?.name ||
+                        'Select University'}
+                    </Text>
+                    <ChevronRight size={18} color='#555' />
+                  </TouchableOpacity>
+
+                  <Text style={styles.editLabel}>Faculty</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.editInput,
+                      styles.selectButton,
+                      !hierarchy.selection.university &&
+                        styles.selectButtonDisabled,
+                    ]}
+                    disabled={
+                      !hierarchy.selection.university || hierarchy.loading
+                    }
+                    onPress={() =>
+                      showPicker(
+                        'Select Faculty',
+                        hierarchy.faculties.map(item => ({
+                          id: item.id,
+                          label: item.name,
+                        })),
+                        id => {
+                          const item = hierarchy.faculties.find(
+                            option => option.id === id
+                          );
+                          if (item) {
+                            void hierarchy.selectFaculty(item);
+                          }
+                        }
+                      )
+                    }
+                  >
+                    <Text style={styles.selectButtonText}>
+                      {hierarchy.selection.faculty?.name || 'Select Faculty'}
+                    </Text>
+                    <ChevronRight size={18} color='#555' />
+                  </TouchableOpacity>
+
+                  <Text style={styles.editLabel}>Department</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.editInput,
+                      styles.selectButton,
+                      !hierarchy.selection.faculty && styles.selectButtonDisabled,
+                    ]}
+                    disabled={!hierarchy.selection.faculty || hierarchy.loading}
+                    onPress={() =>
+                      showPicker(
+                        'Select Department',
+                        hierarchy.departments.map(item => ({
+                          id: item.id,
+                          label: item.name,
+                        })),
+                        id => {
+                          const item = hierarchy.departments.find(
+                            option => option.id === id
+                          );
+                          if (item) {
+                            void hierarchy.selectDepartment(item);
+                          }
+                        }
+                      )
+                    }
+                  >
+                    <Text style={styles.selectButtonText}>
+                      {hierarchy.selection.department?.name ||
+                        'Select Department'}
+                    </Text>
+                    <ChevronRight size={18} color='#555' />
+                  </TouchableOpacity>
+
+                  <Text style={styles.editLabel}>Programme</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.editInput,
+                      styles.selectButton,
+                      !hierarchy.selection.department &&
+                        styles.selectButtonDisabled,
+                    ]}
+                    disabled={
+                      !hierarchy.selection.department || hierarchy.loading
+                    }
+                    onPress={() =>
+                      showPicker(
+                        'Select Programme',
+                        hierarchy.programmes.map(item => ({
+                          id: item.id,
+                          label: item.name,
+                        })),
+                        id => {
+                          const item = hierarchy.programmes.find(
+                            option => option.id === id
+                          );
+                          if (item) {
+                            void hierarchy.selectProgramme(item);
+                          }
+                        }
+                      )
+                    }
+                  >
+                    <Text style={styles.selectButtonText}>
+                      {hierarchy.selection.programme?.name || 'Select Programme'}
+                    </Text>
+                    <ChevronRight size={18} color='#555' />
+                  </TouchableOpacity>
+
+                  <Text style={styles.editLabel}>Level</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.editInput,
+                      styles.selectButton,
+                      !hierarchy.selection.programme &&
+                        styles.selectButtonDisabled,
+                    ]}
+                    disabled={!hierarchy.selection.programme || hierarchy.loading}
+                    onPress={() =>
+                      showPicker(
+                        'Select Level',
+                        hierarchy.levels.map(item => ({
+                          id: item.id,
+                          label: `${item.level} Level`,
+                        })),
+                        id => {
+                          const item = hierarchy.levels.find(
+                            option => option.id === id
+                          );
+                          if (item) {
+                            hierarchy.selectLevel(item);
+                          }
+                        }
+                      )
+                    }
+                  >
+                    <Text style={styles.selectButtonText}>
+                      {hierarchy.selection.level
+                        ? `${hierarchy.selection.level.level} Level`
+                        : 'Select Level'}
+                    </Text>
+                    <ChevronRight size={18} color='#555' />
+                  </TouchableOpacity>
+
+                  <Text style={styles.editLabel}>Semester</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.editInput,
+                      styles.selectButton,
+                      !hierarchy.selection.programme &&
+                        styles.selectButtonDisabled,
+                    ]}
+                    disabled={!hierarchy.selection.programme || hierarchy.loading}
+                    onPress={() =>
+                      showPicker(
+                        'Select Semester',
+                        hierarchy.semesters.map(item => ({
+                          id: item.id,
+                          label: item.name,
+                        })),
+                        id => {
+                          const item = hierarchy.semesters.find(
+                            option => option.id === id
+                          );
+                          if (item) {
+                            hierarchy.selectSemester(item);
+                          }
+                        }
+                      )
+                    }
+                  >
+                    <Text style={styles.selectButtonText}>
+                      {hierarchy.selection.semester?.name || 'Select Semester'}
+                    </Text>
+                    <ChevronRight size={18} color='#555' />
+                  </TouchableOpacity>
+
+                  {hierarchy.loading && (
+                    <View style={styles.hierarchyStatus}>
+                      <ActivityIndicator size='small' color='#7B2FBE' />
+                      <Text style={styles.hierarchyStatusText}>
+                        Loading academic options…
+                      </Text>
+                    </View>
+                  )}
+                  {hierarchy.error && (
+                    <View style={styles.hierarchyErrorRow}>
+                      <Text style={styles.hierarchyError}>{hierarchy.error}</Text>
+                      <TouchableOpacity
+                        style={styles.hierarchyRetryButton}
+                        onPress={() => profile && void hierarchy.hydrate(profile)}
+                      >
+                        <Text style={styles.hierarchyRetryText}>Retry</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <>
+                  <InfoRow
+                    iconBg={ICON_COLORS.uni}
+                    icon={<Building size={18} color='#000' />}
+                    label='University'
+                    value={profile?.university}
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.id}
+                    icon={<CreditCard size={18} color='#000' />}
+                    label='Registration number'
+                    value={profile?.regNumber}
+                    rightEl={
+                      <VerificationBadge
+                        verified={!!profile?.verificationStatus?.regNumber}
+                      />
+                    }
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.faculty}
+                    icon={<Building size={18} color='#000' />}
+                    label='Faculty'
+                    value={profile?.faculty}
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.dept}
+                    icon={<GraduationCap size={18} color='#000' />}
+                    label='Department'
+                    value={profile?.department}
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.person}
+                    icon={<BookOpen size={18} color='#000' />}
+                    label='Programme'
+                    value={profile?.programme}
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.level}
+                    icon={<Calendar size={18} color='#000' />}
+                    label='Level'
+                    value={profile?.level ? `${profile.level} Level` : null}
+                  />
+                  <InfoRow
+                    iconBg={ICON_COLORS.sem}
+                    icon={<Calendar size={18} color='#000' />}
+                    label='Semester'
+                    value={profile?.semester}
+                    hasBorder={false}
+                  />
+                </>
+              )}
+            </SectionCard>
+
+            {/* ─── Community & Activity ─── */}
+            <SectionCard title='Community & Activity'>
+              <TouchableOpacity
+                style={styles.activityRow}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/forum',
+                    params: { myPosts: 'true' },
+                  })
+                }
+                activeOpacity={0.7}
+              >
+                <View style={[styles.rowIconBox, { backgroundColor: '#EDE9FE' }]}>
+                  <MessageCircle size={18} color='#7B2FBE' />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowLabel}>My Forum Questions & Posts</Text>
+                  <Text style={styles.rowValue}>
+                    {userPostsCount !== null
+                      ? `${userPostsCount} question${
+                          userPostsCount !== 1 ? 's' : ''
+                        } asked`
+                      : 'View all questions you asked'}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color='#ccc' />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.activityRow,
+                  { borderTopWidth: 1, borderTopColor: '#F0F0F0' },
+                ]}
+                onPress={() => router.push('/create-post')}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.rowIconBox, { backgroundColor: '#DCFCE7' }]}>
+                  <Plus size={18} color='#15803D' />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowLabel}>Ask a New Question</Text>
+                  <Text style={styles.rowValue}>
+                    Get help from your campus peers
+                  </Text>
+                </View>
+                <ChevronRight size={16} color='#ccc' />
+              </TouchableOpacity>
+            </SectionCard>
+
+            {/* ─── Save / Cancel buttons (edit mode) ─── */}
+            {editing && (
+              <View style={styles.editActionRow}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={cancelEditing}
+                >
+                  <X size={16} color='#000' />
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveBtn}
+                  onPress={handleUpdateProfile}
+                  disabled={updating}
+                >
+                  {updating ? (
+                    <ActivityIndicator size='small' color='#000' />
+                  ) : (
+                    <>
+                      <Check size={16} color='#000' />
+                      <Text style={styles.saveBtnText}>Save changes</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ─── Logout ─── */}
+            <View style={styles.logoutWrapper}>
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                <View
+                  style={[
+                    styles.rowIconBox,
+                    { backgroundColor: ICON_COLORS.logout },
+                  ]}
+                >
+                  <LogOut size={18} color='#fff' />
+                </View>
+                <Text style={styles.logoutText}>Log out</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+
+          <Modal
+            visible={pickerModal.visible}
+            transparent={true}
+            animationType='fade'
+            onRequestClose={() => setPickerModal(p => ({ ...p, visible: false }))}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{pickerModal.title}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setPickerModal(p => ({ ...p, visible: false }))
+                    }
+                  >
+                    <X size={20} color='#000' />
+                  </TouchableOpacity>
+                </View>
+                <FlatList
+                  data={pickerModal.options}
+                  keyExtractor={item => item.id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.modalOption}
+                      onPress={() => {
+                        pickerModal.onSelect(item.id);
+                        setPickerModal(p => ({ ...p, visible: false }));
+                      }}
+                    >
+                      <Text style={styles.modalOptionText}>{item.label}</Text>
+                      {!!item.sublabel && (
+                        <Text style={styles.modalOptionSublabel}>
+                          {item.sublabel}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={
+                    <Text style={styles.modalEmptyText}>
+                      No options are available for this selection.
+                    </Text>
+                  }
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                />
+              </View>
+            </View>
+          </Modal>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </TabTransitionWrapper>
   );
 }

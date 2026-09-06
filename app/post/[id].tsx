@@ -816,199 +816,201 @@ export default function PostDetailScreenInner() {
   const answersCount = post.answers?.length ?? 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={handleBack}
-          activeOpacity={0.8}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <ArrowLeft size={20} color='#0D0D0D' strokeWidth={2.5} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          Discussion
-        </Text>
-        {canManagePost ? (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {/* ── Header ── */}
+        <View style={styles.header}>
           <TouchableOpacity
-            style={styles.deleteTopBtn}
-            onPress={handleDeletePost}
+            style={styles.backButton}
+            onPress={handleBack}
             activeOpacity={0.8}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Trash2 size={18} color='#EF4444' strokeWidth={2} />
+            <ArrowLeft size={20} color='#0D0D0D' strokeWidth={2.5} />
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 36 }} />
-        )}
-      </View>
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps='handled'
-        >
-          {/* ── Main Question Card ── */}
-          <View style={styles.questionCard}>
-            {/* Author Row */}
-            <View style={styles.authorHeaderRow}>
-              <View style={styles.authorInfoLeft}>
-                <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-                  <Text style={styles.avatarText}>{abbr}</Text>
-                </View>
-                <View style={styles.authorDetails}>
-                  <View style={styles.authorNameRow}>
-                    <Text style={styles.authorName}>{authorName}</Text>
-                    {peerTag && (
-                      <View style={styles.peerBadge}>
-                        <Text style={styles.peerBadgeText}>
-                          {peerTag}
-                          {levelTag}
-                        </Text>
-                      </View>
-                    )}
-                    {post.courseCode ? (
-                      <View style={styles.courseTagBadge}>
-                        <BookOpen size={10} color='#0D0D0D' />
-                        <Text style={styles.courseTagBadgeText} numberOfLines={1}>
-                          {post.courseCode}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.postMetaText}>
-                    {formatRelativeTime(post.createdAt)} • 👀 {views} view
-                    {views !== 1 ? 's' : ''}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Title & Body */}
-            <Text style={styles.questionTitle}>{post.title}</Text>
-            <Text style={styles.questionBody}>{post.body}</Text>
-
-            {/* Quick Reactions Bar on Question */}
-            <View style={styles.questionReactionBar}>
-              <Text style={styles.reactionPrompt}>React:</Text>
-              <View style={styles.emojiReactionRow}>
-                {['🔥', '💡', '❤️', '👏', '😂'].map(emoji => {
-                  const active = questionReactions.userReacted === emoji;
-                  const count = questionReactions.counts?.[emoji] || 0;
-                  return (
-                    <TouchableOpacity
-                      key={emoji}
-                      style={[
-                        styles.emojiPillLarge,
-                        active && styles.emojiPillActive,
-                      ]}
-                      onPress={() => handleReactQuestion(emoji)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.emojiIconLarge}>{emoji}</Text>
-                      {count > 0 && (
-                        <Text
-                          style={[
-                            styles.emojiCountLarge,
-                            active && styles.emojiCountActive,
-                          ]}
-                        >
-                          {count}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
-
-          {/* ── Answers Section Header ── */}
-          <View style={styles.answersSectionHeader}>
-            <Text style={styles.answersSectionTitle}>
-              Answers ({answersCount})
-            </Text>
-            {answersCount === 0 && (
-              <View style={styles.beFirstPill}>
-                <Text style={styles.beFirstPillText}>Be first to answer 💬</Text>
-              </View>
-            )}
-          </View>
-
-          {/* ── Answers List ── */}
-          {answersCount === 0 ? (
-            <View style={styles.emptyAnswersCard}>
-              <Text style={styles.emptyAnswersEmoji}>✍️</Text>
-              <Text style={styles.emptyAnswersTitle}>No answers yet</Text>
-              <Text style={styles.emptyAnswersSubtitle}>
-                Know the answer or have advice? Use the quick composer below!
-              </Text>
-            </View>
-          ) : (
-            post.answers.map(ans => renderAnswer(ans))
-          )}
-        </ScrollView>
-
-        {/* ── Sticky Inline Quick Reply Composer ── */}
-        <View
-          style={[
-            styles.composerWrapper,
-            { paddingBottom: Math.max(insets.bottom, 12) },
-          ]}
-        >
-          {/* Replying Banner */}
-          {replyingTo && (
-            <View style={styles.replyingToBanner}>
-              <Text style={styles.replyingToText}>
-                Replying to <Text style={{ fontWeight: '800' }}>{replyingTo.authorName}</Text>
-              </Text>
-              <TouchableOpacity
-                onPress={() => setReplyingTo(null)}
-                style={styles.cancelReplyBtn}
-              >
-                <X size={14} color='#6B7280' />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.composerInputRow}>
-            <TextInput
-              ref={replyInputRef}
-              style={styles.composerInput}
-              placeholder={
-                replyingTo
-                  ? `Write a response to ${replyingTo.authorName}…`
-                  : 'Add your take or answer…'
-              }
-              placeholderTextColor='#9CA3AF'
-              value={inputText}
-              onChangeText={setInputText}
-              multiline
-              maxLength={2000}
-            />
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Discussion
+          </Text>
+          {canManagePost ? (
             <TouchableOpacity
-              style={[
-                styles.sendButton,
-                (!inputText.trim() || submitting) && styles.sendButtonDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={!inputText.trim() || submitting}
+              style={styles.deleteTopBtn}
+              onPress={handleDeletePost}
               activeOpacity={0.8}
             >
-              {submitting ? (
-                <ActivityIndicator size='small' color='#000' />
-              ) : (
-                <Send size={16} color='#000' strokeWidth={2.5} />
-              )}
+              <Trash2 size={18} color='#EF4444' strokeWidth={2} />
             </TouchableOpacity>
+          ) : (
+            <View style={{ width: 36 }} />
+          )}
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps='handled'
+          >
+            {/* ── Main Question Card ── */}
+            <View style={styles.questionCard}>
+              {/* Author Row */}
+              <View style={styles.authorHeaderRow}>
+                <View style={styles.authorInfoLeft}>
+                  <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+                    <Text style={styles.avatarText}>{abbr}</Text>
+                  </View>
+                  <View style={styles.authorDetails}>
+                    <View style={styles.authorNameRow}>
+                      <Text style={styles.authorName}>{authorName}</Text>
+                      {peerTag && (
+                        <View style={styles.peerBadge}>
+                          <Text style={styles.peerBadgeText}>
+                            {peerTag}
+                            {levelTag}
+                          </Text>
+                        </View>
+                      )}
+                      {post.courseCode ? (
+                        <View style={styles.courseTagBadge}>
+                          <BookOpen size={10} color='#0D0D0D' />
+                          <Text style={styles.courseTagBadgeText} numberOfLines={1}>
+                            {post.courseCode}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.postMetaText}>
+                      {formatRelativeTime(post.createdAt)} • 👀 {views} view
+                      {views !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Title & Body */}
+              <Text style={styles.questionTitle}>{post.title}</Text>
+              <Text style={styles.questionBody}>{post.body}</Text>
+
+              {/* Quick Reactions Bar on Question */}
+              <View style={styles.questionReactionBar}>
+                <Text style={styles.reactionPrompt}>React:</Text>
+                <View style={styles.emojiReactionRow}>
+                  {['🔥', '💡', '❤️', '👏', '😂'].map(emoji => {
+                    const active = questionReactions.userReacted === emoji;
+                    const count = questionReactions.counts?.[emoji] || 0;
+                    return (
+                      <TouchableOpacity
+                        key={emoji}
+                        style={[
+                          styles.emojiPillLarge,
+                          active && styles.emojiPillActive,
+                        ]}
+                        onPress={() => handleReactQuestion(emoji)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.emojiIconLarge}>{emoji}</Text>
+                        {count > 0 && (
+                          <Text
+                            style={[
+                              styles.emojiCountLarge,
+                              active && styles.emojiCountActive,
+                            ]}
+                          >
+                            {count}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* ── Answers Section Header ── */}
+            <View style={styles.answersSectionHeader}>
+              <Text style={styles.answersSectionTitle}>
+                Answers ({answersCount})
+              </Text>
+              {answersCount === 0 && (
+                <View style={styles.beFirstPill}>
+                  <Text style={styles.beFirstPillText}>Be first to answer 💬</Text>
+                </View>
+              )}
+            </View>
+
+            {/* ── Answers List ── */}
+            {answersCount === 0 ? (
+              <View style={styles.emptyAnswersCard}>
+                <Text style={styles.emptyAnswersEmoji}>✍️</Text>
+                <Text style={styles.emptyAnswersTitle}>No answers yet</Text>
+                <Text style={styles.emptyAnswersSubtitle}>
+                  Know the answer or have advice? Use the quick composer below!
+                </Text>
+              </View>
+            ) : (
+              post.answers.map(ans => renderAnswer(ans))
+            )}
+          </ScrollView>
+
+          {/* ── Sticky Inline Quick Reply Composer ── */}
+          <View
+            style={[
+              styles.composerWrapper,
+              { paddingBottom: Math.max(insets.bottom, 12) },
+            ]}
+          >
+            {/* Replying Banner */}
+            {replyingTo && (
+              <View style={styles.replyingToBanner}>
+                <Text style={styles.replyingToText}>
+                  Replying to <Text style={{ fontWeight: '800' }}>{replyingTo.authorName}</Text>
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setReplyingTo(null)}
+                  style={styles.cancelReplyBtn}
+                >
+                  <X size={14} color='#6B7280' />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.composerInputRow}>
+              <TextInput
+                ref={replyInputRef}
+                style={styles.composerInput}
+                placeholder={
+                  replyingTo
+                    ? `Write a response to ${replyingTo.authorName}…`
+                    : 'Add your take or answer…'
+                }
+                placeholderTextColor='#9CA3AF'
+                value={inputText}
+                onChangeText={setInputText}
+                multiline
+                maxLength={2000}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!inputText.trim() || submitting) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSubmit}
+                disabled={!inputText.trim() || submitting}
+                activeOpacity={0.8}
+              >
+                {submitting ? (
+                  <ActivityIndicator size='small' color='#000' />
+                ) : (
+                  <Send size={16} color='#000' strokeWidth={2.5} />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

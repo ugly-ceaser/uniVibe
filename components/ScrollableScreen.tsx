@@ -21,6 +21,8 @@ import React from 'react';
 import {
   View,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   ListRenderItem,
   NativeSyntheticEvent,
@@ -134,30 +136,33 @@ function ScrollableScreenInner<T>(
   );
 
   return (
-    <SafeAreaView
+    <KeyboardAvoidingView
       style={[styles.container, { backgroundColor }]}
-      edges={['top']}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <FlatList
-        data={data}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent ?? null}
-        ListFooterComponent={ListFooterComponent ?? null}
-        onEndReached={onEndReached}
-        onEndReachedThreshold={onEndReachedThreshold}
-        refreshControl={refreshControl}
-        onScroll={onScroll}
-        scrollEventThrottle={scrollEventThrottle}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.contentContainer,
-          { paddingBottom: clearance },
-        ]}
-        // Keep native scroll physics — don't set decelerationRate
-      />
-    </SafeAreaView>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <FlatList
+          data={data}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={ListHeaderComponent}
+          ListEmptyComponent={ListEmptyComponent ?? null}
+          ListFooterComponent={ListFooterComponent ?? null}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={onEndReachedThreshold}
+          refreshControl={refreshControl}
+          onScroll={onScroll}
+          scrollEventThrottle={scrollEventThrottle}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps='handled'
+          contentContainerStyle={[
+            styles.contentContainer,
+            { paddingBottom: clearance },
+          ]}
+          // Keep native scroll physics — don't set decelerationRate
+        />
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

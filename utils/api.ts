@@ -112,6 +112,11 @@ const STATUS_MESSAGES: Record<number, string> = {
 export class ApiClient {
   private baseURL: string;
   private token?: string;
+  private sessionInvalidationHandler?: () => void;
+
+  setSessionInvalidationHandler(handler: (() => void) | undefined) {
+    this.sessionInvalidationHandler = handler;
+  }
   private readonly requestTimeout: number;
   private pendingRequests = new Map<string, Promise<any>>();
   private requestTimestamps = new Map<string, number>();
@@ -317,8 +322,9 @@ export class ApiClient {
     if (!mergedHeaders['Content-Type'] && !isFormData) {
       mergedHeaders['Content-Type'] = 'application/json';
     }
-    if (this.token) {
-      mergedHeaders['Authorization'] = `Bearer ${this.token}`;
+    const requestToken = this.token;
+    if (requestToken) {
+      mergedHeaders['Authorization'] = `Bearer ${requestToken}`;
     }
 
     const requestPath = endpoint.split('?')[0];
@@ -344,6 +350,12 @@ export class ApiClient {
       }
 
       if (!response.ok) {
+        // Invalidate only the session that sent this request. A late response
+        // from a previous account must never sign out a newly logged-in user.
+        if (response.status === 401 && requestToken && this.token === requestToken) {
+          this.clearToken();
+          this.sessionInvalidationHandler?.();
+        }
         const errorData = await this.parseResponseBody(response);
 
         throw new ApiError(
@@ -526,13 +538,12 @@ export class ApiClient {
 
 // Create a global instance of ApiClient
 const apiClient = new ApiClient();
-let isSessionExpiryAlertVisible = false;
 
 // ------------------------
 // useApi hook
 // ------------------------
 export const useApi = () => {
-  const { token, logout } = useAuth();
+  const { token } = useAuth();
 
   React.useEffect(() => {
     if (token) apiClient.setToken(token);
@@ -545,27 +556,9 @@ export const useApi = () => {
         return await fn();
       } catch (error: unknown) {
         if (error instanceof ApiError) {
-          // ── 401: Session expired ─────────────────────────────────────────
-          // Global interception: the user's token is invalid or has expired.
-          // We log them out and show a single, non-cancellable alert.
+          // Session invalidation happens in the shared client for every method.
           if (error.status === 401) {
-            await logout();
-            if (!isSessionExpiryAlertVisible) {
-              isSessionExpiryAlertVisible = true;
-              Alert.alert(
-                'Session Expired',
-                'Please log in again',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      isSessionExpiryAlertVisible = false;
-                    },
-                  },
-                ],
-                { cancelable: false }
-              );
-            }
+            // The root navigator returns the user to login without an alert.
           } else if (error.status === 403) {
             // ── 403: Access denied ────────────────────────────────────────
             // Global interception: user lacks permission for this resource.
@@ -597,7 +590,7 @@ export const useApi = () => {
         throw error; // always rethrow so screens can catch and react
       }
     },
-    [logout]
+    []
   );
 
   // Return a stable API object to avoid re-creating functions every render
@@ -1884,4 +1877,3 @@ export const notificationsApi = (apiInstance: ApiInstance = apiClient) => ({
     return { data: res.data, status: res.status ?? 200, message: res.message };
   },
 });
-

@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -238,7 +240,12 @@ export default function CourseDetailScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    // Keep keyboard avoidance at the screen root so headers and safe-area
+    // insets are included in the keyboard overlap calculation.
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity
@@ -366,7 +373,7 @@ export default function CourseDetailScreen() {
           </View>
         )}
       </SafeAreaView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

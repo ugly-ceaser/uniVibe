@@ -2,7 +2,7 @@ import React, { type ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 import { AuthContext } from '@/contexts/AuthContext';
-import { ApiError, useApi } from '@/utils/api';
+import { api, ApiError, useApi } from '@/utils/api';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
@@ -55,6 +55,7 @@ describe('useApi authentication handling', () => {
       </AuthContext.Provider>
     );
     const { result } = renderHook(() => useApi(), { wrapper });
+    api.setSessionInvalidationHandler(() => { void logout(); });
 
     await act(async () => {
       await expect(result.current.authGet('/private')).rejects.toEqual(
@@ -63,15 +64,8 @@ describe('useApi authentication handling', () => {
     });
 
     expect(logout).toHaveBeenCalledTimes(1);
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Session Expired',
-      'Please log in again',
-      expect.any(Array),
-      { cancelable: false }
-    );
-
-    const buttons = alertSpy.mock.calls[0]?.[2];
-    buttons?.[0]?.onPress?.();
+    expect(alertSpy).not.toHaveBeenCalled();
+    api.setSessionInvalidationHandler(undefined);
     alertSpy.mockRestore();
     consoleLogSpy.mockRestore();
   });

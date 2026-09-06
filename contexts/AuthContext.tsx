@@ -4,11 +4,13 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api, authApi } from '@/utils/api';
+import { AppState } from 'react-native';
+import { api, authApi, ApiError } from '@/utils/api';
 import {
   AUTH_STORAGE_KEYS,
   extractAuthSession,
@@ -67,6 +69,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const sessionVersion = useRef(0);
+  const signingIn = useRef(false);
 
   const clearSessionState = useCallback(() => {
     api.clearToken();
@@ -75,6 +79,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const checkAuth = useCallback(async () => {
+    if (signingIn.current) return;
+    const version = ++sessionVersion.current;
+    setLoading(true);
     try {
       const storedValues = await AsyncStorage.multiGet([
         AUTH_STORAGE_KEYS.user,
@@ -84,32 +91,50 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         storedValues[0]?.[1] ?? null,
         storedValues[1]?.[1] ?? null
       );
+      if (version !== sessionVersion.current) return;
 
       if (!storedSession) {
-        await clearStoredSession();
         clearSessionState();
+        await clearStoredSession();
         return;
       }
 
       api.setToken(storedSession.token);
+      // A saved token is only a candidate session until the server accepts it.
+      const response = await api.authGet<{ data: AuthUser | null }>(
+        '/user/profile',
+        false
+      );
+      if (version !== sessionVersion.current) return;
+      if (!response.data?.id ||
+          (storedSession.user.id && response.data.id !== storedSession.user.id)) {
+        throw new ApiError('Saved account is no longer available', 401);
+      }
       setUser(storedSession.user);
       setToken(storedSession.token);
     } catch (error) {
+      if (version !== sessionVersion.current) return;
       clearSessionState();
+      if (error instanceof ApiError && [401, 404].includes(error.status)) {
+        await clearStoredSession().catch(() => {});
+      }
       log.warn(
         'Unable to restore the saved session',
         error instanceof Error ? error.message : String(error)
       );
     } finally {
-      setLoading(false);
+      if (version === sessionVersion.current) setLoading(false);
     }
   }, [clearSessionState]);
 
   const login = useCallback(async (credentials: LoginRequest) => {
+    signingIn.current = true;
+    const version = ++sessionVersion.current;
     setIsLoading(true);
     try {
       const response = await authApi.login(credentials);
       const session = extractAuthSession(response);
+      if (version !== sessionVersion.current) return;
       if (!session) {
         throw new Error('The server returned an invalid login response.');
       }
@@ -118,12 +143,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         [AUTH_STORAGE_KEYS.user, JSON.stringify(session.user)],
         [AUTH_STORAGE_KEYS.token, session.token],
       ]);
+      if (version !== sessionVersion.current) return;
 
       api.setToken(session.token);
       setUser(session.user);
       setToken(session.token);
     } finally {
+      signingIn.current = false;
       setIsLoading(false);
+      if (version === sessionVersion.current) setLoading(false);
     }
   }, []);
 
@@ -154,6 +182,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const logout = useCallback(async () => {
+    sessionVersion.current += 1;
+    setLoading(false);
     // Clear in-memory credentials first so a storage failure can never leave
     // protected screens or authenticated API calls available in this session.
     clearSessionState();
@@ -169,8 +199,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [clearSessionState]);
 
   useEffect(() => {
+    api.setSessionInvalidationHandler(() => { void logout(); });
     void checkAuth();
-  }, [checkAuth]);
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', state => {
+      const returning = previousState !== 'active' && state === 'active';
+      previousState = state;
+      if (returning) void checkAuth();
+    });
+    return () => {
+      api.setSessionInvalidationHandler(undefined);
+      subscription.remove();
+    };
+  }, [checkAuth, logout]);
 
   const value = useMemo<AuthContextType>(
     () => ({

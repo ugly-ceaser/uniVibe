@@ -18,6 +18,7 @@ import {
   FlatList,
   TextInput,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { HeroBanner } from '@/components/HeroBanner';
 import { useRouter } from 'expo-router';
@@ -86,7 +87,10 @@ function SelectModal({
       transparent
       onRequestClose={onClose}
     >
-      <View style={sm.overlay}>
+      <KeyboardAvoidingView
+        style={sm.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={sm.sheet}>
           <View style={sm.header}>
             <Text style={sm.title}>{title}</Text>
@@ -115,6 +119,7 @@ function SelectModal({
             />
           ) : (
             <FlatList
+              keyboardShouldPersistTaps='handled'
               data={filtered}
               keyExtractor={i => i.id}
               contentContainerStyle={{ paddingBottom: 24 }}
@@ -136,7 +141,7 @@ function SelectModal({
             />
           )}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -975,369 +980,375 @@ export default function CoursesScreen() {
   // ─── Render ───────────────────────────────────────────────────────
   return (
     <TabTransitionWrapper>
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor='#7B2FBE'
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <ScrollView
+            keyboardShouldPersistTaps='handled'
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor='#7B2FBE'
+              />
+            }
+          >
+            {/* ─── Hero Banner ─── */}
+            <HeroBanner
+              badgeText="COURSE BROWSER"
+              title={'Courses &\nCatalog 📚'}
+              subtitle="Keep your enrolled courses close and discover what comes next."
             />
-          }
-        >
-          {/* ─── Hero Banner ─── */}
-          <HeroBanner
-            badgeText="COURSE BROWSER"
-            title={'Courses &\nCatalog 📚'}
-            subtitle="Keep your enrolled courses close and discover what comes next."
-          />
 
-          <View style={styles.tabContainer}>
-            <TouchableOpacity
-              style={[
-                styles.tabButton,
-                activeView === 'selected' && styles.activeTabButton,
-              ]}
-              onPress={() => setActiveView('selected')}
-            >
-              <Bookmark size={16} color='#000' />
-              <Text
-                style={[
-                  styles.tabButtonText,
-                  activeView === 'selected' && styles.activeTabButtonText,
-                ]}
-              >
-                My Courses
-              </Text>
-              <View style={styles.badgeCount}>
-                <Text style={styles.badgeCountText}>
-                  {selectedCourses.length}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tabButton,
-                activeView === 'browse' && styles.activeTabButton,
-              ]}
-              onPress={() => setActiveView('browse')}
-            >
-              <Search size={16} color='#000' />
-              <Text
-                style={[
-                  styles.tabButtonText,
-                  activeView === 'browse' && styles.activeTabButtonText,
-                ]}
-              >
-                Browse
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ─── Profile Incomplete Warning Banner ─── */}
-          {isProfileIncomplete && (
-            <View style={styles.warningCard}>
-              <View style={styles.warningHeader}>
-                <Text style={styles.warningTitle}>
-                  ⚠️ Complete Your Profile
-                </Text>
-              </View>
-              <Text style={styles.warningSubtitle}>
-                Set your university, faculty, department, programme, level, and
-                semester in your profile to automatically find your courses.
-              </Text>
+            <View style={styles.tabContainer}>
               <TouchableOpacity
-                style={styles.warningButton}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(tabs)/profile',
-                    params: { edit: 'true' },
-                  })
-                }
-                activeOpacity={0.8}
+                style={[
+                  styles.tabButton,
+                  activeView === 'selected' && styles.activeTabButton,
+                ]}
+                onPress={() => setActiveView('selected')}
               >
-                <Text style={styles.warningButtonText}>
-                  Update Profile Details
+                <Bookmark size={16} color='#000' />
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    activeView === 'selected' && styles.activeTabButtonText,
+                  ]}
+                >
+                  My Courses
+                </Text>
+                <View style={styles.badgeCount}>
+                  <Text style={styles.badgeCountText}>
+                    {selectedCourses.length}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.tabButton,
+                  activeView === 'browse' && styles.activeTabButton,
+                ]}
+                onPress={() => setActiveView('browse')}
+              >
+                <Search size={16} color='#000' />
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    activeView === 'browse' && styles.activeTabButtonText,
+                  ]}
+                >
+                  Browse
                 </Text>
               </TouchableOpacity>
             </View>
-          )}
 
-          {activeView === 'browse' && !isProfileIncomplete && (
-            <>
-              <View style={styles.searchWrapper}>
-                <Search size={18} color='#666' />
-                <TextInput
-                  style={styles.searchInput}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder='Search by code, title, or type'
-                  placeholderTextColor='#888'
-                  autoCapitalize='none'
-                  {...(Platform.OS === 'web'
-                    ? ({ outlineStyle: 'none' } as any)
-                    : {})}
-                />
-                {!!searchQuery && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <X size={17} color='#555' />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filtersRow}
-              >
-                <FilterChip
-                  label={selectedUniversity?.label || 'University'}
-                  onPress={() => setOpenModal('university')}
-                />
-                <FilterChip
-                  label={selectedFaculty?.label || 'Faculty'}
-                  onPress={() => setOpenModal('faculty')}
-                  disabled={!selectedUniversity}
-                />
-                <FilterChip
-                  label={selectedDepartment?.label || 'Department'}
-                  onPress={() => setOpenModal('department')}
-                  disabled={!selectedFaculty}
-                />
-                <FilterChip
-                  label={selectedProgramme?.label || 'Programme'}
-                  onPress={() => setOpenModal('programme')}
-                  disabled={!selectedDepartment}
-                />
-                <FilterChip
-                  label={selectedLevel?.label || 'Level'}
-                  onPress={() => setOpenModal('level')}
-                  disabled={!selectedProgramme}
-                />
-                <FilterChip
-                  label={selectedSemester?.label || 'Semester'}
-                  onPress={() => setOpenModal('semester')}
-                  disabled={!selectedProgramme}
-                />
-              </ScrollView>
-            </>
-          )}
-
-          {/* ─── Stats row ─── */}
-          {activeView === 'selected' && selectedCourses.length > 0 && (
-            <View style={styles.statsRow}>
-              <View style={styles.statChip}>
-                <Text style={styles.statValue}>{selectedCourses.length}</Text>
-                <Text style={styles.statLabel}>Courses</Text>
-              </View>
-              <View style={styles.statChip}>
-                <Text style={styles.statValue}>{totalUnits}</Text>
-                <Text style={styles.statLabel}>Total units</Text>
-              </View>
-            </View>
-          )}
-
-          {(selectedError && activeView === 'selected') ||
-          (browseError && activeView === 'browse') ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>
-                {activeView === 'selected' ? selectedError : browseError}
-              </Text>
-              <TouchableOpacity
-                style={styles.retryBtn}
-                onPress={() => {
-                  if (activeView === 'selected') {
-                    void fetchSelectedCourses();
-                  } else if (hierarchyError) {
-                    lastProfileRef.current = null;
-                    void autoSelectProfile();
-                  } else {
-                    void fetchCatalogCourses();
-                  }
-                }}
-              >
-                <Text style={styles.retryBtnText}>Try again</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {activeLoading && (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator size='large' color='#7B2FBE' />
-              <Text style={styles.loadingText}>
-                {activeView === 'browse'
-                  ? 'Loading course catalog…'
-                  : 'Loading your courses…'}
-              </Text>
-            </View>
-          )}
-
-          {!activeLoading &&
-            activeView === 'selected' &&
-            selectedCourses.length === 0 &&
-            !selectedError && (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyEmoji}>📥</Text>
-                <Text style={styles.emptyTitle}>No courses yet</Text>
-                <Text style={styles.emptySubtitle}>
-                  Browse the catalog to find courses for your programme, level,
-                  and semester.
+            {/* ─── Profile Incomplete Warning Banner ─── */}
+            {isProfileIncomplete && (
+              <View style={styles.warningCard}>
+                <View style={styles.warningHeader}>
+                  <Text style={styles.warningTitle}>
+                    ⚠️ Complete Your Profile
+                  </Text>
+                </View>
+                <Text style={styles.warningSubtitle}>
+                  Set your university, faculty, department, programme, level, and
+                  semester in your profile to automatically find your courses.
                 </Text>
                 <TouchableOpacity
-                  style={styles.requestButtonInline}
-                  onPress={() => setActiveView('browse')}
+                  style={styles.warningButton}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/profile',
+                      params: { edit: 'true' },
+                    })
+                  }
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.requestButtonInlineText}>
-                    Browse courses
+                  <Text style={styles.warningButtonText}>
+                    Update Profile Details
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
 
-          {!activeLoading &&
-            activeView === 'browse' &&
-            !catalogLoading &&
-            !browseError &&
-            !isProfileIncomplete &&
-            visibleCatalogCourses.length === 0 && (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyEmoji}>🔎</Text>
-                <Text style={styles.emptyTitle}>
-                  {searchQuery ? 'No matching courses' : 'No courses found'}
+            {activeView === 'browse' && !isProfileIncomplete && (
+              <>
+                <View style={styles.searchWrapper}>
+                  <Search size={18} color='#666' />
+                  <TextInput
+                    style={styles.searchInput}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder='Search by code, title, or type'
+                    placeholderTextColor='#888'
+                    autoCapitalize='none'
+                    {...(Platform.OS === 'web'
+                      ? ({ outlineStyle: 'none' } as any)
+                      : {})}
+                  />
+                  {!!searchQuery && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <X size={17} color='#555' />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filtersRow}
+                >
+                  <FilterChip
+                    label={selectedUniversity?.label || 'University'}
+                    onPress={() => setOpenModal('university')}
+                  />
+                  <FilterChip
+                    label={selectedFaculty?.label || 'Faculty'}
+                    onPress={() => setOpenModal('faculty')}
+                    disabled={!selectedUniversity}
+                  />
+                  <FilterChip
+                    label={selectedDepartment?.label || 'Department'}
+                    onPress={() => setOpenModal('department')}
+                    disabled={!selectedFaculty}
+                  />
+                  <FilterChip
+                    label={selectedProgramme?.label || 'Programme'}
+                    onPress={() => setOpenModal('programme')}
+                    disabled={!selectedDepartment}
+                  />
+                  <FilterChip
+                    label={selectedLevel?.label || 'Level'}
+                    onPress={() => setOpenModal('level')}
+                    disabled={!selectedProgramme}
+                  />
+                  <FilterChip
+                    label={selectedSemester?.label || 'Semester'}
+                    onPress={() => setOpenModal('semester')}
+                    disabled={!selectedProgramme}
+                  />
+                </ScrollView>
+              </>
+            )}
+
+            {/* ─── Stats row ─── */}
+            {activeView === 'selected' && selectedCourses.length > 0 && (
+              <View style={styles.statsRow}>
+                <View style={styles.statChip}>
+                  <Text style={styles.statValue}>{selectedCourses.length}</Text>
+                  <Text style={styles.statLabel}>Courses</Text>
+                </View>
+                <View style={styles.statChip}>
+                  <Text style={styles.statValue}>{totalUnits}</Text>
+                  <Text style={styles.statLabel}>Total units</Text>
+                </View>
+              </View>
+            )}
+
+            {(selectedError && activeView === 'selected') ||
+            (browseError && activeView === 'browse') ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>
+                  {activeView === 'selected' ? selectedError : browseError}
                 </Text>
-                <Text style={styles.emptySubtitle}>
-                  {searchQuery
-                    ? 'Try a different course code or title.'
-                    : 'There are no courses for these filters yet. You can submit a course request below.'}
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={() => {
+                    if (activeView === 'selected') {
+                      void fetchSelectedCourses();
+                    } else if (hierarchyError) {
+                      lastProfileRef.current = null;
+                      void autoSelectProfile();
+                    } else {
+                      void fetchCatalogCourses();
+                    }
+                  }}
+                >
+                  <Text style={styles.retryBtnText}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {activeLoading && (
+              <View style={styles.loadingBox}>
+                <ActivityIndicator size='large' color='#7B2FBE' />
+                <Text style={styles.loadingText}>
+                  {activeView === 'browse'
+                    ? 'Loading course catalog…'
+                    : 'Loading your courses…'}
                 </Text>
               </View>
             )}
 
-          {!activeLoading &&
-            (activeView === 'selected'
-              ? selectedCourses
-              : isProfileIncomplete || browseError
-              ? []
-              : visibleCatalogCourses
-            ).map(course => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                selected={isCourseSelected(course.id)}
-                pending={pendingCourseIds.has(course.id)}
-                view={activeView}
-                onOpen={() => handleCoursePress(course.id)}
-                onEnroll={() => handleEnroll(course)}
-                onUnenroll={() => handleUnenroll(course)}
-              />
-            ))}
+            {!activeLoading &&
+              activeView === 'selected' &&
+              selectedCourses.length === 0 &&
+              !selectedError && (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyEmoji}>📥</Text>
+                  <Text style={styles.emptyTitle}>No courses yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Browse the catalog to find courses for your programme, level,
+                    and semester.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.requestButtonInline}
+                    onPress={() => setActiveView('browse')}
+                  >
+                    <Text style={styles.requestButtonInlineText}>
+                      Browse courses
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-          {/* ─── Request footer card ─── */}
-          {(activeView === 'browse' || selectedCourses.length > 0) && (
-            <TouchableOpacity
-              style={styles.requestFooterCard}
-              onPress={() => router.push('/submit-course')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.requestFooterText}>
-                Can't find a course?{' '}
-                <Text style={styles.requestFooterLinkText}>Submit it 🚀</Text>
-              </Text>
-            </TouchableOpacity>
-          )}
+            {!activeLoading &&
+              activeView === 'browse' &&
+              !catalogLoading &&
+              !browseError &&
+              !isProfileIncomplete &&
+              visibleCatalogCourses.length === 0 && (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyEmoji}>🔎</Text>
+                  <Text style={styles.emptyTitle}>
+                    {searchQuery ? 'No matching courses' : 'No courses found'}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {searchQuery
+                      ? 'Try a different course code or title.'
+                      : 'There are no courses for these filters yet. You can submit a course request below.'}
+                  </Text>
+                </View>
+              )}
 
-          <View style={{ height: clearance }} />
-        </ScrollView>
+            {!activeLoading &&
+              (activeView === 'selected'
+                ? selectedCourses
+                : isProfileIncomplete || browseError
+                ? []
+                : visibleCatalogCourses
+              ).map(course => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  selected={isCourseSelected(course.id)}
+                  pending={pendingCourseIds.has(course.id)}
+                  view={activeView}
+                  onOpen={() => handleCoursePress(course.id)}
+                  onEnroll={() => handleEnroll(course)}
+                  onUnenroll={() => handleUnenroll(course)}
+                />
+              ))}
 
-        <TouchableOpacity
-          style={[styles.fab, { bottom: fabBottom }]}
-          onPress={() => {
-            if (activeView === 'selected') {
-              setActiveView('browse');
-            } else {
-              router.push('/submit-course');
+            {/* ─── Request footer card ─── */}
+            {(activeView === 'browse' || selectedCourses.length > 0) && (
+              <TouchableOpacity
+                style={styles.requestFooterCard}
+                onPress={() => router.push('/submit-course')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.requestFooterText}>
+                  Can't find a course?{' '}
+                  <Text style={styles.requestFooterLinkText}>Submit it 🚀</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={{ height: clearance }} />
+          </ScrollView>
+
+          <TouchableOpacity
+            style={[styles.fab, { bottom: fabBottom }]}
+            onPress={() => {
+              if (activeView === 'selected') {
+                setActiveView('browse');
+              } else {
+                router.push('/submit-course');
+              }
+            }}
+            activeOpacity={0.8}
+            accessibilityLabel={
+              activeView === 'selected'
+                ? 'Browse course catalog'
+                : 'Submit a new course request'
             }
-          }}
-          activeOpacity={0.8}
-          accessibilityLabel={
-            activeView === 'selected'
-              ? 'Browse course catalog'
-              : 'Submit a new course request'
-          }
-        >
-          <Plus size={24} color='#000' strokeWidth={2.5} />
-        </TouchableOpacity>
+          >
+            <Plus size={24} color='#000' strokeWidth={2.5} />
+          </TouchableOpacity>
 
-        {/* ─── Select Modals ─── */}
-        <SelectModal
-          visible={openModal === 'university'}
-          title='Select University'
-          items={universities}
-          onSelect={i => {
-            setSelectedUniversity(i);
-            setOpenModal(null);
-          }}
-          onClose={() => setOpenModal(null)}
-          loading={false}
-        />
-        <SelectModal
-          visible={openModal === 'faculty'}
-          title='Select Faculty'
-          items={faculties}
-          onSelect={i => {
-            setSelectedFaculty(i);
-            setOpenModal(null);
-          }}
-          onClose={() => setOpenModal(null)}
-          loading={modalLoading}
-        />
-        <SelectModal
-          visible={openModal === 'department'}
-          title='Select Department'
-          items={departments}
-          onSelect={i => {
-            setSelectedDepartment(i);
-            setOpenModal(null);
-          }}
-          onClose={() => setOpenModal(null)}
-          loading={modalLoading}
-        />
-        <SelectModal
-          visible={openModal === 'programme'}
-          title='Select Programme'
-          items={programmes}
-          onSelect={i => {
-            setSelectedProgramme(i);
-            setOpenModal(null);
-          }}
-          onClose={() => setOpenModal(null)}
-          loading={modalLoading}
-        />
-        <SelectModal
-          visible={openModal === 'level'}
-          title='Select Level'
-          items={levels}
-          onSelect={i => {
-            setSelectedLevel(i);
-            setOpenModal(null);
-          }}
-          onClose={() => setOpenModal(null)}
-          loading={modalLoading}
-        />
-        <SelectModal
-          visible={openModal === 'semester'}
-          title='Select Semester'
-          items={semesters}
-          onSelect={i => {
-            setSelectedSemester(i);
-            setOpenModal(null);
-          }}
-          onClose={() => setOpenModal(null)}
-          loading={false}
-        />
-      </SafeAreaView>
+          {/* ─── Select Modals ─── */}
+          <SelectModal
+            visible={openModal === 'university'}
+            title='Select University'
+            items={universities}
+            onSelect={i => {
+              setSelectedUniversity(i);
+              setOpenModal(null);
+            }}
+            onClose={() => setOpenModal(null)}
+            loading={false}
+          />
+          <SelectModal
+            visible={openModal === 'faculty'}
+            title='Select Faculty'
+            items={faculties}
+            onSelect={i => {
+              setSelectedFaculty(i);
+              setOpenModal(null);
+            }}
+            onClose={() => setOpenModal(null)}
+            loading={modalLoading}
+          />
+          <SelectModal
+            visible={openModal === 'department'}
+            title='Select Department'
+            items={departments}
+            onSelect={i => {
+              setSelectedDepartment(i);
+              setOpenModal(null);
+            }}
+            onClose={() => setOpenModal(null)}
+            loading={modalLoading}
+          />
+          <SelectModal
+            visible={openModal === 'programme'}
+            title='Select Programme'
+            items={programmes}
+            onSelect={i => {
+              setSelectedProgramme(i);
+              setOpenModal(null);
+            }}
+            onClose={() => setOpenModal(null)}
+            loading={modalLoading}
+          />
+          <SelectModal
+            visible={openModal === 'level'}
+            title='Select Level'
+            items={levels}
+            onSelect={i => {
+              setSelectedLevel(i);
+              setOpenModal(null);
+            }}
+            onClose={() => setOpenModal(null)}
+            loading={modalLoading}
+          />
+          <SelectModal
+            visible={openModal === 'semester'}
+            title='Select Semester'
+            items={semesters}
+            onSelect={i => {
+              setSelectedSemester(i);
+              setOpenModal(null);
+            }}
+            onClose={() => setOpenModal(null)}
+            loading={false}
+          />
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </TabTransitionWrapper>
   );
 }

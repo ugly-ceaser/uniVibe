@@ -142,12 +142,13 @@ export default function RegisterScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <SafeAreaView style={styles.keyboardView}>
         <ScrollView
+          keyboardShouldPersistTaps='handled'
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
@@ -398,7 +399,7 @@ export default function RegisterScreen() {
             </View>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {/* Custom Alert */}
       <AwesomeAlert
@@ -416,7 +417,7 @@ export default function RegisterScreen() {
           if (alert.onConfirm) alert.onConfirm();
         }}
       />
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

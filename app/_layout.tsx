@@ -51,16 +51,18 @@ function RootNavigator() {
       <Stack.Screen name='login' />
       <Stack.Screen name='register' />
       <Stack.Screen name='forgot-password' />
-      <Stack.Screen name='(tabs)' />
-      <Stack.Screen name='course-detail' />
-      <Stack.Screen name='create-post' />
-      <Stack.Screen name='guide' />
-      <Stack.Screen name='post-detail' />
-      <Stack.Screen name='post/[id]' />
-      <Stack.Screen name='profile' />
-      <Stack.Screen name='request-courses' />
-      <Stack.Screen name='submit-course' />
-      <Stack.Screen name='tip-detail' />
+      <Stack.Protected guard={isAuthenticated}>
+        <Stack.Screen name='(tabs)' />
+        <Stack.Screen name='course-detail' />
+        <Stack.Screen name='create-post' />
+        <Stack.Screen name='guide' />
+        <Stack.Screen name='post-detail' />
+        <Stack.Screen name='post/[id]' />
+        <Stack.Screen name='profile' />
+        <Stack.Screen name='request-courses' />
+        <Stack.Screen name='submit-course' />
+        <Stack.Screen name='tip-detail' />
+      </Stack.Protected>
       <Stack.Screen name='+not-found' />
     </Stack>
   );
