@@ -165,6 +165,14 @@ export class ApiClient {
     this.token = token;
   }
 
+  getToken(): string | undefined {
+    return this.token;
+  }
+
+  getBaseURL(): string {
+    return this.baseURL;
+  }
+
   clearToken() {
     this.token = undefined;
     this.clearCache(); // Clear cache on logout
@@ -624,6 +632,8 @@ export const useApi = () => {
         authenticatedRequest(fn),
       forceRefresh: <T>(endpoint: string) =>
         apiClient.forceRefresh<T>(endpoint),
+      getBaseURL: () => apiClient.getBaseURL(),
+      getToken: () => apiClient.getToken(),
 
       // 🐛 Debug methods
       clearCache: () => apiClient.clearCache(),
@@ -846,6 +856,70 @@ export const courseMaterialsApi = (api: ReturnType<typeof useApi>) => ({
       data: normalizeCourseMaterial(payload?.material ?? response.data),
     };
   },
+
+  uploadWithProgress: async (
+    courseId: string,
+    file: CourseMaterialUpload,
+    onProgress?: (pct: number) => void
+  ): Promise<{ data: CourseMaterial }> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const url = `${api.getBaseURL()}/courses/${courseId}/materials`;
+
+      xhr.open('POST', url);
+
+      const token = api.getToken();
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = event => {
+          if (event.lengthComputable && event.total > 0) {
+            const pct = Math.min(99, Math.round((event.loaded / event.total) * 100));
+            onProgress(pct);
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            const payload = parsed.data || parsed;
+            onProgress?.(100);
+            resolve({
+              data: normalizeCourseMaterial(payload?.material ?? payload),
+            });
+          } catch {
+            onProgress?.(100);
+            resolve({
+              data: normalizeCourseMaterial({ name: file.name }),
+            });
+          }
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Network error during file upload'));
+      };
+
+      const body = new FormData();
+      if (file.webFile) {
+        body.append('file', file.webFile, file.name);
+      } else {
+        body.append('file', {
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType,
+        } as any);
+      }
+
+      xhr.send(body);
+    });
+  },
 });
 
 // ------------------------
@@ -896,6 +970,7 @@ export interface AIChatResponse {
   model: string;
   tokensUsed?: number;
   estimatedCost?: number;
+  is_supplementary?: boolean;
 }
 
 // Backend API response wrapper

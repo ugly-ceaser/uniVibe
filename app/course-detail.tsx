@@ -21,9 +21,14 @@ import {
   RefreshCw,
   Search,
   Upload,
+  Eye,
+  Filter,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CourseAIChat from '@/components/CourseAIChat';
+import { MaterialViewerModal } from '@/components/MaterialViewerModal';
+import { useUpload } from '@/contexts/UploadContext';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Course, CourseMaterial } from '@/types/course';
 import { courseMaterialsApi, coursesApi, useApi } from '@/utils/api';
 
@@ -142,31 +147,29 @@ export default function CourseDetailScreen() {
     void loadMaterials();
   }, [loadCourse, loadMaterials]);
 
+  const { startUpload, tasks } = useUpload();
+  const { user } = useAuth();
+  const [selectedMaterial, setSelectedMaterial] = useState<CourseMaterial | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'my'>('all');
+
   const filteredMaterials = useMemo(() => {
+    let result = materials;
+    if (filterType === 'my' && user?.id) {
+      result = result.filter(m => (m as any).uploadedBy === user.id || (m as any).uploaderId === user.id);
+    }
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return materials;
-    return materials.filter(material =>
+    if (!query) return result;
+    return result.filter(material =>
       material.name.toLowerCase().includes(query)
     );
-  }, [materials, searchQuery]);
+  }, [materials, searchQuery, filterType, user]);
 
-  const openMaterial = useCallback(async (material: CourseMaterial) => {
-    if (!material.url) {
-      Alert.alert(
-        'File unavailable',
-        'This material does not include a download link.'
-      );
-      return;
-    }
-    try {
-      await Linking.openURL(material.url);
-    } catch {
-      Alert.alert('Could not open file', 'Check the link and try again.');
-    }
+  const openMaterial = useCallback((material: CourseMaterial) => {
+    setSelectedMaterial(material);
   }, []);
 
   const uploadMaterial = useCallback(async () => {
-    if (!courseId || uploading) return;
+    if (!courseId) return;
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
@@ -177,20 +180,28 @@ export default function CourseDetailScreen() {
 
       const asset = result.assets[0];
       setUploading(true);
-      await materialsClient.upload(courseId, {
-        uri: asset.uri,
-        name: asset.name,
-        mimeType: asset.mimeType || 'application/octet-stream',
-        webFile: asset.file,
+      void startUpload(
+        courseId,
+        course?.courseCode || 'Course',
+        {
+          uri: asset.uri,
+          name: asset.name,
+          mimeType: asset.mimeType || 'application/octet-stream',
+          webFile: asset.file,
+        },
+        async (cId, fAsset, onProgress) => {
+          const res = await materialsClient.uploadWithProgress(cId, fAsset, onProgress);
+          await loadMaterials();
+          return res;
+        }
+      ).finally(() => {
+        setUploading(false);
       });
-      await loadMaterials();
-      Alert.alert('Upload complete', `${asset.name} is now available.`);
     } catch (error) {
       setMaterialsError(`Upload failed. ${errorMessage(error)}`);
-    } finally {
       setUploading(false);
     }
-  }, [courseId, loadMaterials, materialsClient, uploading]);
+  }, [course, courseId, loadMaterials, materialsClient, startUpload]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -323,6 +334,24 @@ export default function CourseDetailScreen() {
               </View>
             ) : (
               <>
+                <View style={styles.filterChipRow}>
+                  <TouchableOpacity
+                    style={[styles.filterChip, filterType === 'all' && styles.filterChipActive]}
+                    onPress={() => setFilterType('all')}
+                  >
+                    <Text style={[styles.filterChipText, filterType === 'all' && styles.filterChipTextActive]}>
+                      All Materials ({materials.length})
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.filterChip, filterType === 'my' && styles.filterChipActive]}
+                    onPress={() => setFilterType('my')}
+                  >
+                    <Text style={[styles.filterChipText, filterType === 'my' && styles.filterChipTextActive]}>
+                      My Uploads
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 {materialsError ? (
                   <Text style={styles.inlineError}>{materialsError}</Text>
                 ) : null}
@@ -342,12 +371,14 @@ export default function CourseDetailScreen() {
                     <View style={styles.emptyMaterials}>
                       <FileText size={30} color='#77778F' />
                       <Text style={styles.emptyTitle}>
-                        {searchQuery.trim()
+                        {searchQuery.trim() || filterType === 'my'
                           ? 'No matching materials'
                           : 'No course materials yet'}
                       </Text>
                       <Text style={styles.stateText}>
-                        {searchQuery.trim()
+                        {filterType === 'my'
+                          ? 'You have not uploaded materials for this course yet.'
+                          : searchQuery.trim()
                           ? 'Try a different file name.'
                           : 'Upload the first file for this course.'}
                       </Text>
@@ -373,6 +404,11 @@ export default function CourseDetailScreen() {
           </View>
         )}
       </SafeAreaView>
+      <MaterialViewerModal
+        visible={!!selectedMaterial}
+        material={selectedMaterial}
+        onClose={() => setSelectedMaterial(null)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -474,6 +510,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#252540',
   },
   searchInput: { flex: 1, color: '#fff', paddingVertical: 11, fontSize: 14 },
+  filterChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#252540',
+    borderWidth: 1,
+    borderColor: '#3A3A55',
+  },
+  filterChipActive: {
+    backgroundColor: '#C4FF0E',
+    borderColor: '#C4FF0E',
+  },
+  filterChipText: {
+    color: '#8D8DA8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterChipTextActive: {
+    color: '#111',
+  },
   materialsList: { paddingBottom: 95, flexGrow: 1 },
   materialRow: {
     flexDirection: 'row',

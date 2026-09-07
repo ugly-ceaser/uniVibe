@@ -15,8 +15,8 @@
       "softwareKeyboardLayoutMode": "resize",
       "package": "com.uglyceaser.univibes",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0D0D18"
       }
     },
     "web": {

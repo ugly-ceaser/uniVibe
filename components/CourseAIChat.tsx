@@ -21,11 +21,18 @@ import {
   Lightbulb,
   RefreshCw,
   Send,
+  Trash2,
+  Sparkles,
 } from 'lucide-react-native';
 import type { ChatMessage } from '@/types';
 import type { Course } from '@/types/course';
 import { aiApi, useApi } from '@/utils/api';
 import { validateChatMessage } from '@/utils/validation';
+import { BookFlippingLoader } from './BookFlippingLoader';
+
+interface ExtendedChatMessage extends ChatMessage {
+  isSupplementary?: boolean;
+}
 
 interface CourseAIChatProps {
   course: Course;
@@ -45,6 +52,16 @@ const formatTime = (value?: string): string => {
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Please try again.';
 
+const sanitizeText = (text: string): { cleanText: string; isSupplementary: boolean } => {
+  let isSupplementary = false;
+  let cleanText = text;
+  if (cleanText.includes('**Supplementary Info**:') || cleanText.includes('**Supplementary Info**')) {
+    isSupplementary = true;
+    cleanText = cleanText.replace(/\*\*Supplementary Info\*\*:?\s*/gi, '');
+  }
+  return { cleanText, isSupplementary };
+};
+
 export default function CourseAIChat({
   course,
   onMessageSent,
@@ -54,7 +71,7 @@ export default function CourseAIChat({
   const api = useApi();
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [failedMessage, setFailedMessage] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -73,12 +90,16 @@ export default function CourseAIChat({
       setMessages(
         session.messages
           .filter(message => message.role !== 'system')
-          .map(message => ({
-            id: message.id,
-            text: message.content,
-            isUser: message.role === 'user',
-            timestamp: formatTime(message.createdAt),
-          }))
+          .map(message => {
+            const { cleanText, isSupplementary } = sanitizeText(message.content);
+            return {
+              id: message.id,
+              text: cleanText,
+              isUser: message.role === 'user',
+              timestamp: formatTime(message.createdAt),
+              isSupplementary,
+            };
+          })
       );
       setSessionState('ready');
     } catch (error) {
@@ -106,9 +127,9 @@ export default function CourseAIChat({
 
   const handleSend = useCallback(async () => {
     const originalText = inputText.trim();
-    if (!originalText || sending || sessionState !== 'ready') return;
+    if (!originalText || sending) return;
 
-    const userMessage: ChatMessage = {
+    const userMessage: ExtendedChatMessage = {
       id: `local-${Date.now()}`,
       text: originalText,
       isUser: true,
@@ -156,18 +177,23 @@ export default function CourseAIChat({
         userMode: 'balanced',
       });
 
-      const responseText = response.data.response?.trim();
-      if (!responseText) {
+      const rawResponseText = response.data.response?.trim();
+      if (!rawResponseText) {
         throw new Error('The AI service returned an empty response.');
       }
+
+      const isSupplementary = response.data.is_supplementary || rawResponseText.includes('**Supplementary Info');
+      const { cleanText } = sanitizeText(rawResponseText);
+
       if (response.sessionId) setSessionId(response.sessionId);
       setMessages(current => [
         ...current,
         {
           id: `assistant-${Date.now()}`,
-          text: responseText,
+          text: cleanText,
           isUser: false,
           timestamp: formatTime(),
+          isSupplementary,
         },
       ]);
     } catch (error) {
@@ -188,7 +214,6 @@ export default function CourseAIChat({
     onError,
     onMessageSent,
     sending,
-    sessionState,
   ]);
 
   const deleteSession = useCallback(async () => {
@@ -220,38 +245,38 @@ export default function CourseAIChat({
   }, [deleteSession]);
 
   const canSend = useMemo(
-    () => inputText.trim().length > 0 && !sending && sessionState === 'ready',
-    [inputText, sending, sessionState]
+    () => inputText.trim().length > 0 && !sending,
+    [inputText, sending]
   );
-
-  if (sessionState === 'loading') {
-    return (
-      <View style={styles.centerState}>
-        <ActivityIndicator size='large' color='#C4FF0E' />
-        <Text style={styles.stateTitle}>Loading saved conversation…</Text>
-      </View>
-    );
-  }
-
-  if (sessionState === 'error') {
-    return (
-      <View style={styles.centerState}>
-        <Text style={styles.stateTitle}>Chat history could not be loaded</Text>
-        <Text style={styles.stateText}>{sessionError}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadSession}>
-          <RefreshCw size={16} color='#111' />
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
-        <Text style={styles.savedText}>
-          {sessionId ? 'History saved' : 'Starting conversation'}
-        </Text>
+        <View style={styles.statusBadgeRow}>
+          {sessionState === 'loading' ? (
+            <>
+              <ActivityIndicator size="small" color="#C4FF0E" style={{ marginRight: 6 }} />
+              <Text style={styles.savedText}>Syncing history...</Text>
+            </>
+          ) : sessionState === 'error' ? (
+            <Text style={styles.errorHeaderText}>Offline · Retry below</Text>
+          ) : (
+            <Text style={styles.savedText}>
+              {sessionId ? 'Connected · History saved' : 'Connected'}
+            </Text>
+          )}
+        </View>
+
+        {sessionId ? (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={confirmDelete}
+            disabled={deleting}
+          >
+            <Trash2 size={13} color="#FF8A80" />
+            <Text style={styles.clearText}>Clear</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <ScrollView
@@ -261,43 +286,79 @@ export default function CourseAIChat({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps='handled'
       >
-        {messages.length === 0 ? (
-          <View style={styles.emptyState}>
-            <BookOpen size={30} color='#C4FF0E' />
-            <Text style={styles.emptyTitle}>Ask about {course.courseCode}</Text>
-            <Text style={styles.emptyText}>
-              Replies come from the course AI service and this conversation is
-              saved to your account.
-            </Text>
+        {sessionState === 'loading' ? (
+          <BookFlippingLoader courseCode={course.courseCode} message="Opening course notes & history..." />
+        ) : sessionState === 'error' ? (
+          <View style={styles.centerState}>
+            <Text style={styles.stateTitle}>Chat history could not be loaded</Text>
+            <Text style={styles.stateText}>{sessionError}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadSession}>
+              <RefreshCw size={16} color="#111" />
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
           </View>
-        ) : null}
-        {messages.map(message => (
-          <View
-            key={message.id}
-            style={[
-              styles.messageBubble,
-              message.isUser ? styles.userBubble : styles.assistantBubble,
-            ]}
-          >
-            <Text
-              style={[
-                styles.messageText,
-                message.isUser ? styles.userText : styles.assistantText,
-              ]}
-            >
-              {message.text}
-            </Text>
-            {message.timestamp ? (
-              <Text style={styles.messageTime}>{message.timestamp}</Text>
+        ) : (
+          <>
+            {messages.length === 0 ? (
+              <View style={styles.emptyState}>
+                <BookOpen size={30} color='#C4FF0E' />
+                <Text style={styles.emptyTitle}>Ask about {course.courseCode}</Text>
+                <Text style={styles.emptyText}>
+                  Replies come from the course AI service and this conversation is
+                  saved to your account.
+                </Text>
+              </View>
             ) : null}
-          </View>
-        ))}
-        {sending ? (
-          <View style={[styles.messageBubble, styles.assistantBubble]}>
-            <ActivityIndicator size='small' color='#C4FF0E' />
-            <Text style={styles.assistantText}>Thinking…</Text>
-          </View>
-        ) : null}
+            {messages.map(message => (
+              <View
+                key={message.id}
+                style={[
+                  styles.messageBubble,
+                  message.isUser
+                    ? styles.userBubble
+                    : message.isSupplementary
+                    ? styles.supplementaryBubble
+                    : styles.assistantBubble,
+                ]}
+              >
+                {message.isSupplementary ? (
+                  <View style={styles.supplementaryHeader}>
+                    <Sparkles size={13} color="#C4FF0E" />
+                    <Text style={styles.supplementaryTag}>Supplementary Info</Text>
+                  </View>
+                ) : null}
+                <Text
+                  style={[
+                    styles.messageText,
+                    message.isUser
+                      ? styles.userText
+                      : message.isSupplementary
+                      ? styles.supplementaryText
+                      : styles.assistantText,
+                  ]}
+                >
+                  {message.text}
+                </Text>
+                {message.timestamp ? (
+                  <Text
+                    style={[
+                      styles.messageTime,
+                      message.isSupplementary ? styles.supplementaryTime : null,
+                    ]}
+                  >
+                    {message.timestamp}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+            {sending ? (
+              <View style={[styles.messageBubble, styles.assistantBubble]}>
+                <ActivityIndicator size='small' color='#C4FF0E' />
+                <Text style={styles.assistantText}>Thinking…</Text>
+              </View>
+            ) : null}
+          </>
+        )}
       </ScrollView>
 
       <ScrollView
@@ -395,7 +456,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  statusBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   savedText: { color: '#8D8DA8', fontSize: 12, fontWeight: '600' },
+  errorHeaderText: { color: '#FF8A80', fontSize: 12, fontWeight: '600' },
   clearButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -428,10 +494,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#3A3A55',
   },
+  supplementaryBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#1C2618',
+    borderWidth: 1.5,
+    borderColor: '#C4FF0E',
+  },
+  supplementaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  supplementaryTag: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#C4FF0E',
+    letterSpacing: 0.4,
+  },
   messageText: { fontSize: 14, lineHeight: 20 },
   userText: { color: '#111' },
   assistantText: { color: '#F1F1FA' },
+  supplementaryText: { color: '#C4FF0E', fontWeight: '500' },
   messageTime: { color: '#77778F', fontSize: 10, marginTop: 6 },
+  supplementaryTime: { color: '#A0D800' },
   quickActionsScroller: { flexGrow: 0, maxHeight: 50 },
   quickActions: { paddingHorizontal: 12, paddingVertical: 7, gap: 8 },
   quickAction: {

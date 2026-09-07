@@ -33,10 +33,12 @@ import {
   BarChart,
   RotateCcw,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react-native';
 import { ChatMessage } from '@/types';
 import { validateChatMessage } from '@/utils/validation';
 import { gradients, shadows } from '@/constants/theme';
+import { BookFlippingLoader } from './BookFlippingLoader';
 import {
   useApi,
   aiApi,
@@ -359,8 +361,12 @@ export default function UnifiedAIChat({
           });
         }
 
+        const rawResponse = response.data.response || '';
+        const isSupplementary = (response.data as any).is_supplementary || rawResponse.includes('**Supplementary Info');
+        const cleanResponse = rawResponse.replace(/\*\*Supplementary Info\*\*:?\s*/gi, '');
+
         const aiResponseId = (Date.now() + 1).toString();
-        const aiResponse: ChatMessage = {
+        const aiResponse: ChatMessage & { isSupplementary?: boolean } = {
           id: aiResponseId,
           text: '',
           isUser: false,
@@ -368,12 +374,13 @@ export default function UnifiedAIChat({
             hour: '2-digit',
             minute: '2-digit',
           }),
+          isSupplementary,
         };
 
         setMessages(prev => [...prev, aiResponse]);
         setTypingMessageId(aiResponseId);
         setShowCursor(true);
-        animateTyping(aiResponseId, response.data.response);
+        animateTyping(aiResponseId, cleanResponse);
       } catch (apiError) {
         console.error('AI API failed:', apiError);
         setFailedMessage(textToSend.trim());
@@ -667,47 +674,70 @@ export default function UnifiedAIChat({
               scrollEventThrottle={16}
               keyboardShouldPersistTaps='handled'
             >
-              {messages.map(message => (
-                <View
-                  key={message.id}
-                  style={[
-                    styles.messageContainer,
-                    message.isUser ? styles.userMessage : styles.aiMessage,
-                  ]}
-                  accessibilityRole='text'
-                  accessibilityLabel={`${
-                    message.isUser ? 'You' : 'AI Assistant'
-                  }: ${message.text}`}
-                >
-                  <Text
+              {messages.map(message => {
+                const isSupp = (message as any).isSupplementary || message.text.includes('**Supplementary Info');
+                const cleanText = message.text.replace(/\*\*Supplementary Info\*\*:?\s*/gi, '');
+
+                return (
+                  <View
+                    key={message.id}
                     style={[
-                      styles.messageText,
+                      styles.messageContainer,
                       message.isUser
-                        ? styles.userMessageText
-                        : styles.aiMessageText,
+                        ? styles.userMessage
+                        : isSupp
+                        ? styles.supplementaryMessage
+                        : styles.aiMessage,
                     ]}
+                    accessibilityRole='text'
+                    accessibilityLabel={`${
+                      message.isUser ? 'You' : 'AI Assistant'
+                    }: ${cleanText}`}
                   >
-                    {message.text}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.messageTime,
-                      message.isUser
-                        ? styles.userMessageTime
-                        : styles.aiMessageTime,
-                    ]}
-                  >
-                    {message.timestamp}
-                  </Text>
-                </View>
-              ))}
+                    {isSupp && !message.isUser ? (
+                      <View style={styles.supplementaryHeader}>
+                        <Sparkles size={13} color="#65A30D" />
+                        <Text style={styles.supplementaryTag}>Supplementary Info</Text>
+                      </View>
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.messageText,
+                        message.isUser
+                          ? styles.userMessageText
+                          : isSupp
+                          ? styles.supplementaryText
+                          : styles.aiMessageText,
+                      ]}
+                    >
+                      {cleanText}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.messageTime,
+                        message.isUser
+                          ? styles.userMessageTime
+                          : isSupp
+                          ? styles.supplementaryTime
+                          : styles.aiMessageTime,
+                      ]}
+                    >
+                      {message.timestamp}
+                    </Text>
+                  </View>
+                );
+              })}
               {isLoading && !typingMessageId && (
-                <View style={[styles.messageContainer, styles.aiMessage]}>
-                  <ActivityIndicator size='small' color={colors[0]} />
-                  <Text style={styles.aiMessageText}>
-                    AI is analyzing your question...
-                  </Text>
-                </View>
+                contextType === 'course' ? (
+                  <BookFlippingLoader courseCode={courseContext?.courseCode} message="Searching course materials..." />
+                ) : (
+                  <View style={[styles.messageContainer, styles.aiMessage]}>
+                    <ActivityIndicator size='small' color={colors[0]} />
+                    <Text style={styles.aiMessageText}>
+                      AI is analyzing your question...
+                    </Text>
+                  </View>
+                )
               )}
               {typingMessageId && (
                 <View style={[styles.messageContainer, styles.aiMessage]}>
@@ -918,6 +948,28 @@ const styles = StyleSheet.create({
     padding: 12,
     ...shadows.sm,
   },
+  supplementaryMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F7FEE7',
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#A3E635',
+    ...shadows.sm,
+  },
+  supplementaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  supplementaryTag: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#65A30D',
+    letterSpacing: 0.3,
+  },
   messageText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
@@ -929,10 +981,17 @@ const styles = StyleSheet.create({
   aiMessageText: {
     color: '#374151',
   },
+  supplementaryText: {
+    color: '#3F6212',
+    fontFamily: 'Inter-Medium',
+  },
   messageTime: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
     marginTop: 4,
+  },
+  supplementaryTime: {
+    color: '#65A30D',
   },
   userMessageTime: {
     color: 'rgba(255, 255, 255, 0.7)',

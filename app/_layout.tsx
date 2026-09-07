@@ -4,6 +4,8 @@ import { Stack, useSegments, useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { UploadProvider } from '@/contexts/UploadContext';
+import { GlobalUploadToast } from '@/components/GlobalUploadToast';
 import FlashMessage from 'react-native-flash-message';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -87,9 +89,12 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <RootNavigator />
-        <StatusBar style='auto' />
-        <FlashMessage position='bottom' />
+        <UploadProvider>
+          <RootNavigator />
+          <GlobalUploadToast />
+          <StatusBar style='auto' />
+          <FlashMessage position='bottom' />
+        </UploadProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

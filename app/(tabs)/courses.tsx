@@ -396,7 +396,9 @@ export default function CoursesScreen() {
   // ─── Fetch selected courses list ───────────────────────────
   const fetchSelectedCourses = useCallback(async () => {
     try {
-      setSelectedLoading(true);
+      if (selectedCourses.length === 0) {
+        setSelectedLoading(true);
+      }
       setSelectedError(null);
       await loadSelectedCourses();
     } catch (error) {
@@ -404,7 +406,7 @@ export default function CoursesScreen() {
     } finally {
       setSelectedLoading(false);
     }
-  }, [loadSelectedCourses]);
+  }, [loadSelectedCourses, selectedCourses.length]);
 
   // ─── Enroll / Unenroll handlers ─────────────────────────────
   const handleEnroll = async (course: Course) => {

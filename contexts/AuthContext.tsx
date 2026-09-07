@@ -78,10 +78,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setToken(null);
   }, []);
 
-  const checkAuth = useCallback(async () => {
+  const checkAuth = useCallback(async (isResume = false) => {
     if (signingIn.current) return;
     const version = ++sessionVersion.current;
-    setLoading(true);
+    if (!isResume) {
+      setLoading(true);
+    }
     try {
       const storedValues = await AsyncStorage.multiGet([
         AUTH_STORAGE_KEYS.user,
@@ -114,16 +116,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setToken(storedSession.token);
     } catch (error) {
       if (version !== sessionVersion.current) return;
-      clearSessionState();
-      if (error instanceof ApiError && [401, 404].includes(error.status)) {
-        await clearStoredSession().catch(() => {});
+      if (isResume) {
+        if (error instanceof ApiError && [401, 404].includes(error.status)) {
+          clearSessionState();
+          await clearStoredSession().catch(() => {});
+        }
+      } else {
+        clearSessionState();
+        if (error instanceof ApiError && [401, 404].includes(error.status)) {
+          await clearStoredSession().catch(() => {});
+        }
       }
       log.warn(
         'Unable to restore the saved session',
         error instanceof Error ? error.message : String(error)
       );
     } finally {
-      if (version === sessionVersion.current) setLoading(false);
+      if (!isResume && version === sessionVersion.current) setLoading(false);
     }
   }, [clearSessionState]);
 
@@ -205,7 +214,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const subscription = AppState.addEventListener('change', state => {
       const returning = previousState !== 'active' && state === 'active';
       previousState = state;
-      if (returning) void checkAuth();
+      if (returning) void checkAuth(true);
     });
     return () => {
       api.setSessionInvalidationHandler(undefined);
