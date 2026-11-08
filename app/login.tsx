@@ -62,7 +62,8 @@ export default function LoginScreen() {
       if (error?.status === 429) {
         showMessage({
           message: 'Too Many Attempts',
-          description: 'Please wait a moment before trying again.',
+          description:
+            error?.message || 'Please wait a moment before trying again.',
           type: 'danger',
           icon: 'danger',
         });
