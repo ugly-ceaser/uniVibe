@@ -20,6 +20,7 @@ type MockResponseOptions = {
   body?: string;
   contentType?: string;
   requestId?: string;
+  headers?: Record<string, string>;
 };
 
 const createResponse = ({
@@ -28,12 +29,16 @@ const createResponse = ({
   body = '',
   contentType = 'application/json',
   requestId,
+  headers: extraHeaders = {},
 }: MockResponseOptions = {}): Response => {
   const headers = new Map<string, string>();
   headers.set('content-type', contentType);
   if (requestId) {
     headers.set('x-request-id', requestId);
   }
+  Object.entries(extraHeaders).forEach(([name, value]) => {
+    headers.set(name.toLowerCase(), value);
+  });
 
   return {
     ok: status >= 200 && status < 300,
@@ -179,6 +184,154 @@ describe('ApiClient', () => {
       status: 422,
       message: 'Invalid item',
       requestId: 'request-123',
+    });
+  });
+
+  describe('429 rate limit errors', () => {
+    const rateLimited = (options: MockResponseOptions = {}) =>
+      createResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        ...options,
+      });
+
+    it('uses retryAfter from the JSON body', async () => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({
+          body: JSON.stringify({
+            status: 429,
+            message: 'Too many attempts. Try again in 42 seconds.',
+            retryAfter: 42,
+          }),
+        })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      const request = client.post('/auth/login', {});
+      await expect(request).rejects.toBeInstanceOf(ApiError);
+      await expect(request).rejects.toMatchObject({
+        status: 429,
+        retryAfterSeconds: 42,
+        message: 'Too many attempts. Try again in 42 seconds.',
+      });
+    });
+
+    it('prefers the body over the Retry-After header', async () => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({
+          body: JSON.stringify({ status: 429, retryAfter: 42 }),
+          headers: { 'Retry-After': '7' },
+        })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      await expect(client.post('/auth/login', {})).rejects.toMatchObject({
+        retryAfterSeconds: 42,
+      });
+    });
+
+    it('falls back to the Retry-After header', async () => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({
+          body: JSON.stringify({ status: 429, message: 'Slow down' }),
+          headers: { 'Retry-After': '7' },
+        })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      await expect(client.post('/auth/login', {})).rejects.toMatchObject({
+        status: 429,
+        retryAfterSeconds: 7,
+        message: 'Too many attempts. Try again in 7 seconds.',
+      });
+    });
+
+    it('reads the header when the body is plain text', async () => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({
+          body: 'Too many requests, please try again later.',
+          contentType: 'text/html; charset=utf-8',
+          headers: { 'Retry-After': '900' },
+        })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      await expect(client.get('/courses', false)).rejects.toMatchObject({
+        status: 429,
+        retryAfterSeconds: 900,
+        message: 'Too many attempts. Try again in 900 seconds.',
+      });
+    });
+
+    it('uses the singular for 1 second', async () => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({ body: JSON.stringify({ status: 429, retryAfter: 1 }) })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      await expect(client.post('/auth/login', {})).rejects.toMatchObject({
+        retryAfterSeconds: 1,
+        message: 'Too many attempts. Try again in 1 second.',
+      });
+    });
+
+    it('keeps the generic message when no retry value is given', async () => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({ body: JSON.stringify({ status: 429 }) })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      const request = client.post('/auth/login', {});
+      await expect(request).rejects.toMatchObject({
+        status: 429,
+        message: 'Rate limit reached. Please wait a moment and try again.',
+      });
+      const error = (await request.catch((e: unknown) => e)) as ApiError;
+      expect(error.retryAfterSeconds).toBeUndefined();
+    });
+
+    it.each([
+      ['zero', { retryAfter: 0 }, undefined],
+      ['negative', { retryAfter: -5 }, undefined],
+      ['fractional', { retryAfter: 2.5 }, undefined],
+      ['string', { retryAfter: '42' }, undefined],
+      ['HTTP-date header', {}, 'Wed, 21 Oct 2026 07:28:00 GMT'],
+    ])('ignores a %s retry value', async (_label, body, retryAfterHeader) => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({
+          body: JSON.stringify({ status: 429, ...body }),
+          headers: retryAfterHeader ? { 'Retry-After': retryAfterHeader } : {},
+        })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      const error = (await client
+        .post('/auth/login', {})
+        .catch((e: unknown) => e)) as ApiError;
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.status).toBe(429);
+      expect(error.retryAfterSeconds).toBeUndefined();
+      expect(error.message).toBe(
+        'Rate limit reached. Please wait a moment and try again.'
+      );
+    });
+
+    it('stays a 429 when the body is malformed JSON', async () => {
+      fetchMock.mockResolvedValueOnce(
+        rateLimited({ body: '{not json', headers: { 'Retry-After': '3' } })
+      );
+      const client = new ApiClient('https://example.test/api/v1');
+
+      await expect(client.post('/auth/login', {})).rejects.toMatchObject({
+        status: 429,
+        retryAfterSeconds: 3,
+      });
+    });
+
+    it('keeps existing ApiError callers working without the 4th argument', () => {
+      const error = new ApiError('Nope', 400, 'req-1');
+      expect(error.retryAfterSeconds).toBeUndefined();
+      expect(error.requestId).toBe('req-1');
     });
   });
 

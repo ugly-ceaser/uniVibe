@@ -47,11 +47,19 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 export class ApiError extends Error {
   public status: number;
   public requestId: string | undefined;
-  constructor(message: string, status: number, requestId?: string) {
+  /** Seconds until a rate limit resets (429 only), when the server said so. */
+  public retryAfterSeconds: number | undefined;
+  constructor(
+    message: string,
+    status: number,
+    requestId?: string,
+    retryAfterSeconds?: number
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.requestId = requestId;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -348,10 +356,7 @@ export class ApiClient {
       const response = await fetch(url, fetchOptions);
 
       if (response.status === 429) {
-        throw new ApiError(
-          'Rate limit reached. Please wait a moment and try again.',
-          429
-        );
+        throw await this.createRateLimitError(response);
       }
 
       if (!response.ok) {
@@ -406,6 +411,54 @@ export class ApiClient {
     } finally {
       clearTimeout(timeoutId);
     }
+  }
+
+  private async createRateLimitError(response: Response): Promise<ApiError> {
+    let errorData: unknown;
+    try {
+      errorData = await this.parseResponseBody(response);
+    } catch {
+      // A malformed body must not turn a 429 into a different error.
+      errorData = undefined;
+    }
+
+    // Body first: on web the Retry-After header may be hidden by CORS.
+    const fromBody = this.isRecord(errorData)
+      ? this.toPositiveInteger(errorData.retryAfter)
+      : undefined;
+    const retryAfterSeconds =
+      fromBody ??
+      this.parseRetryAfterHeader(response.headers.get('retry-after'));
+
+    const message =
+      retryAfterSeconds === undefined
+        ? 'Rate limit reached. Please wait a moment and try again.'
+        : `Too many attempts. Try again in ${retryAfterSeconds} ${
+            retryAfterSeconds === 1 ? 'second' : 'seconds'
+          }.`;
+
+    return new ApiError(
+      message,
+      429,
+      response.headers.get('x-request-id') || undefined,
+      retryAfterSeconds
+    );
+  }
+
+  /** Returns the value only if it is a positive integer number. */
+  private toPositiveInteger(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+      ? value
+      : undefined;
+  }
+
+  /** Retry-After in delay-seconds form only; HTTP-date values are ignored. */
+  private parseRetryAfterHeader(value: string | null): number | undefined {
+    const trimmed = value?.trim();
+    if (!trimmed || !/^\d+$/.test(trimmed)) {
+      return undefined;
+    }
+    return this.toPositiveInteger(Number(trimmed));
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {
