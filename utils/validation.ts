@@ -179,10 +179,7 @@ export const validateCourse = (
     errors.push('Course name is required');
   }
 
-  if (
-    course.creditUnit &&
-    (course.creditUnit < 1 || course.creditUnit > 30)
-  ) {
+  if (course.creditUnit && (course.creditUnit < 1 || course.creditUnit > 30)) {
     errors.push('Course credits must be between 1 and 30');
   }
 

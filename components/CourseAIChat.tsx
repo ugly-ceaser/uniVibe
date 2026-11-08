@@ -52,10 +52,15 @@ const formatTime = (value?: string): string => {
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Please try again.';
 
-const sanitizeText = (text: string): { cleanText: string; isSupplementary: boolean } => {
+const sanitizeText = (
+  text: string
+): { cleanText: string; isSupplementary: boolean } => {
   let isSupplementary = false;
   let cleanText = text;
-  if (cleanText.includes('**Supplementary Info**:') || cleanText.includes('**Supplementary Info**')) {
+  if (
+    cleanText.includes('**Supplementary Info**:') ||
+    cleanText.includes('**Supplementary Info**')
+  ) {
     isSupplementary = true;
     cleanText = cleanText.replace(/\*\*Supplementary Info\*\*:?\s*/gi, '');
   }
@@ -91,7 +96,9 @@ export default function CourseAIChat({
         session.messages
           .filter(message => message.role !== 'system')
           .map(message => {
-            const { cleanText, isSupplementary } = sanitizeText(message.content);
+            const { cleanText, isSupplementary } = sanitizeText(
+              message.content
+            );
             return {
               id: message.id,
               text: cleanText,
@@ -182,7 +189,9 @@ export default function CourseAIChat({
         throw new Error('The AI service returned an empty response.');
       }
 
-      const isSupplementary = response.data.is_supplementary || rawResponseText.includes('**Supplementary Info');
+      const isSupplementary =
+        response.data.is_supplementary ||
+        rawResponseText.includes('**Supplementary Info');
       const { cleanText } = sanitizeText(rawResponseText);
 
       if (response.sessionId) setSessionId(response.sessionId);
@@ -255,7 +264,11 @@ export default function CourseAIChat({
         <View style={styles.statusBadgeRow}>
           {sessionState === 'loading' ? (
             <>
-              <ActivityIndicator size="small" color="#C4FF0E" style={{ marginRight: 6 }} />
+              <ActivityIndicator
+                size='small'
+                color='#C4FF0E'
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.savedText}>Syncing history...</Text>
             </>
           ) : sessionState === 'error' ? (
@@ -273,7 +286,7 @@ export default function CourseAIChat({
             onPress={confirmDelete}
             disabled={deleting}
           >
-            <Trash2 size={13} color="#FF8A80" />
+            <Trash2 size={13} color='#FF8A80' />
             <Text style={styles.clearText}>Clear</Text>
           </TouchableOpacity>
         ) : null}
@@ -287,13 +300,18 @@ export default function CourseAIChat({
         keyboardShouldPersistTaps='handled'
       >
         {sessionState === 'loading' ? (
-          <BookFlippingLoader courseCode={course.courseCode} message="Opening course notes & history..." />
+          <BookFlippingLoader
+            courseCode={course.courseCode}
+            message='Opening course notes & history...'
+          />
         ) : sessionState === 'error' ? (
           <View style={styles.centerState}>
-            <Text style={styles.stateTitle}>Chat history could not be loaded</Text>
+            <Text style={styles.stateTitle}>
+              Chat history could not be loaded
+            </Text>
             <Text style={styles.stateText}>{sessionError}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={loadSession}>
-              <RefreshCw size={16} color="#111" />
+              <RefreshCw size={16} color='#111' />
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>
@@ -302,10 +320,12 @@ export default function CourseAIChat({
             {messages.length === 0 ? (
               <View style={styles.emptyState}>
                 <BookOpen size={30} color='#C4FF0E' />
-                <Text style={styles.emptyTitle}>Ask about {course.courseCode}</Text>
+                <Text style={styles.emptyTitle}>
+                  Ask about {course.courseCode}
+                </Text>
                 <Text style={styles.emptyText}>
-                  Replies come from the course AI service and this conversation is
-                  saved to your account.
+                  Replies come from the course AI service and this conversation
+                  is saved to your account.
                 </Text>
               </View>
             ) : null}
@@ -323,8 +343,10 @@ export default function CourseAIChat({
               >
                 {message.isSupplementary ? (
                   <View style={styles.supplementaryHeader}>
-                    <Sparkles size={13} color="#C4FF0E" />
-                    <Text style={styles.supplementaryTag}>Supplementary Info</Text>
+                    <Sparkles size={13} color='#C4FF0E' />
+                    <Text style={styles.supplementaryTag}>
+                      Supplementary Info
+                    </Text>
                   </View>
                 ) : null}
                 <Text
@@ -412,7 +434,9 @@ export default function CourseAIChat({
           onPress={handleSend}
           disabled={!canSend}
           accessibilityLabel='Send message'
-          {...(Platform.OS === 'web' ? ({ onMouseDown: (e: any) => e.preventDefault() } as any) : {})}
+          {...(Platform.OS === 'web'
+            ? ({ onMouseDown: (e: any) => e.preventDefault() } as any)
+            : {})}
         >
           <Send size={18} color={canSend ? '#111' : '#666'} />
         </TouchableOpacity>

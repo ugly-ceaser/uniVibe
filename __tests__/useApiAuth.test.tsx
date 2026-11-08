@@ -55,7 +55,9 @@ describe('useApi authentication handling', () => {
       </AuthContext.Provider>
     );
     const { result } = renderHook(() => useApi(), { wrapper });
-    api.setSessionInvalidationHandler(() => { void logout(); });
+    api.setSessionInvalidationHandler(() => {
+      void logout();
+    });
 
     await act(async () => {
       await expect(result.current.authGet('/private')).rejects.toEqual(

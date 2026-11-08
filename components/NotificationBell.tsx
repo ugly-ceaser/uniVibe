@@ -42,12 +42,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({
       style={styles.bellButton}
       onPress={() => router.push('/notifications' as any)}
       activeOpacity={0.7}
-      accessibilityLabel="Notifications"
-      accessibilityRole="button"
+      accessibilityLabel='Notifications'
+      accessibilityRole='button'
     >
       <Bell size={size} color={color} strokeWidth={2.2} />
       {unreadCount > 0 ? (
-        <View style={[styles.badgeContainer, { backgroundColor: badgeBgColor }]}>
+        <View
+          style={[styles.badgeContainer, { backgroundColor: badgeBgColor }]}
+        >
           <Text style={[styles.badgeText, { color: badgeTextColor }]}>
             {unreadCount > 99 ? '99+' : unreadCount}
           </Text>

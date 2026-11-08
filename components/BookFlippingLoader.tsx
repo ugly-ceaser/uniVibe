@@ -67,7 +67,7 @@ export function BookFlippingLoader({
       <View style={styles.iconWrapper}>
         <Animated.View style={[styles.glowRing, glowStyle]} />
         <Animated.View style={[styles.bookBox, animatedPageStyle]}>
-          <BookOpen size={36} color="#C4FF0E" strokeWidth={2.4} />
+          <BookOpen size={36} color='#C4FF0E' strokeWidth={2.4} />
         </Animated.View>
       </View>
 

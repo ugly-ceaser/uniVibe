@@ -231,7 +231,12 @@ export interface NotificationItem {
   userId: string;
   title: string;
   body: string;
-  type: 'FORUM_ANSWER' | 'FORUM_LIKE' | 'GUIDE_LIKE' | 'SYSTEM' | 'COURSE_UPDATE';
+  type:
+    | 'FORUM_ANSWER'
+    | 'FORUM_LIKE'
+    | 'GUIDE_LIKE'
+    | 'SYSTEM'
+    | 'COURSE_UPDATE';
   read: boolean;
   targetUrl?: string;
   createdAt: string;
@@ -245,4 +250,3 @@ export interface NotificationListResponse {
   pageSize: number;
   totalPages: number;
 }
-

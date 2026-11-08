@@ -6,7 +6,11 @@ interface TabHistoryContextType {
 
 const TabHistoryContext = createContext<TabHistoryContextType | null>(null);
 
-export function TabHistoryProvider({ children }: { children: React.ReactNode }) {
+export function TabHistoryProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const lastTabIndexRef = useRef(0);
 
   return (

@@ -21,4 +21,3 @@ export function useTabBarClearance(extraPadding = 0): number {
 
 /** Exposed for consumers that want the base height. */
 export { BASE_TAB_BAR_HEIGHT };
-

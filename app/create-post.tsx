@@ -178,7 +178,11 @@ export default function CreatePostScreen() {
           <View style={styles.peerBanner}>
             <Sparkles size={16} color='#7B2FBE' />
             <Text style={styles.peerBannerText}>
-              Posting as <Text style={{ fontWeight: '800' }}>{user?.fullname || 'Student'}</Text> ({peerTag})
+              Posting as{' '}
+              <Text style={{ fontWeight: '800' }}>
+                {user?.fullname || 'Student'}
+              </Text>{' '}
+              ({peerTag})
             </Text>
           </View>
 
@@ -199,7 +203,9 @@ export default function CreatePostScreen() {
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.input}
-              placeholder={'E.g. What is the best way to prepare for finals? 📋'}
+              placeholder={
+                'E.g. What is the best way to prepare for finals? 📋'
+              }
               placeholderTextColor='#9CA3AF'
               value={title}
               onChangeText={t => setTitle(t.slice(0, TITLE_MAX))}
@@ -266,7 +272,8 @@ export default function CreatePostScreen() {
           {/* Additional Context (Optional) */}
           <View style={[styles.fieldHeader, { marginTop: 20 }]}>
             <Text style={styles.label}>
-              Additional details <Text style={styles.optionalTag}>(Optional)</Text>
+              Additional details{' '}
+              <Text style={styles.optionalTag}>(Optional)</Text>
             </Text>
             <Text
               style={[

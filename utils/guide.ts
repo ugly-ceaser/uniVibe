@@ -6,10 +6,12 @@ const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null;
 
 const firstString = (...values: unknown[]): string | undefined =>
-  values.find(
-    (value): value is string =>
-      typeof value === 'string' && value.trim().length > 0
-  )?.trim();
+  values
+    .find(
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0
+    )
+    ?.trim();
 
 const firstNumber = (...values: unknown[]): number | undefined => {
   for (const value of values) {
@@ -46,14 +48,18 @@ export const normalizeGuide = (value: unknown): Guide => {
     title: firstString(record.title, record.name) ?? 'Untitled guide',
     content,
     description: description ?? content.slice(0, 120),
-    category: firstString(record.category, record.categoryName) ?? 'Uncategorized',
+    category:
+      firstString(record.category, record.categoryName) ?? 'Uncategorized',
     readTime:
-      firstString(record.readTime, record.read_time) ?? estimateReadTime(content),
+      firstString(record.readTime, record.read_time) ??
+      estimateReadTime(content),
     likes: Math.max(
       0,
       firstNumber(record.likes, record.likesCount, record.likeCount) ?? 0
     ),
-    isLiked: Boolean(record.isLiked ?? record.likedByUser ?? record.userHasLiked),
+    isLiked: Boolean(
+      record.isLiked ?? record.likedByUser ?? record.userHasLiked
+    ),
     author: getAuthor(record.author ?? record.createdBy),
     createdAt: firstString(record.createdAt, record.publishedAt) ?? '',
     status: firstString(record.status) ?? 'Unknown',

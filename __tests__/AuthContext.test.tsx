@@ -113,20 +113,27 @@ describe('AuthProvider', () => {
     expect(asyncStorage.multiRemove).not.toHaveBeenCalled();
   });
 
-  it.each([401, 404])('removes a saved session rejected with %s', async status => {
-    asyncStorage.multiGet.mockResolvedValue([
-      ['user', '{"id":"user-1"}'], ['token', 'old-token'],
-    ]);
-    apiModule.api.authGet.mockRejectedValueOnce(new ApiError('Invalid session', status));
-    renderAuthProvider();
-    await waitFor(() => expect(currentAuth?.loading).toBe(false));
-    expect(currentAuth?.isAuthenticated).toBe(false);
-    expect(asyncStorage.multiRemove).toHaveBeenCalledWith(['user', 'token']);
-  });
+  it.each([401, 404])(
+    'removes a saved session rejected with %s',
+    async status => {
+      asyncStorage.multiGet.mockResolvedValue([
+        ['user', '{"id":"user-1"}'],
+        ['token', 'old-token'],
+      ]);
+      apiModule.api.authGet.mockRejectedValueOnce(
+        new ApiError('Invalid session', status)
+      );
+      renderAuthProvider();
+      await waitFor(() => expect(currentAuth?.loading).toBe(false));
+      expect(currentAuth?.isAuthenticated).toBe(false);
+      expect(asyncStorage.multiRemove).toHaveBeenCalledWith(['user', 'token']);
+    }
+  );
 
   it('does not open protected screens or erase credentials on a network failure', async () => {
     asyncStorage.multiGet.mockResolvedValue([
-      ['user', '{"id":"user-1"}'], ['token', 'saved-token'],
+      ['user', '{"id":"user-1"}'],
+      ['token', 'saved-token'],
     ]);
     apiModule.api.authGet.mockRejectedValueOnce(new ApiError('Offline', 0));
     renderAuthProvider();
@@ -137,23 +144,33 @@ describe('AuthProvider', () => {
 
   it('cannot restore an old session after logout during validation', async () => {
     asyncStorage.multiGet.mockResolvedValue([
-      ['user', '{"id":"user-1"}'], ['token', 'saved-token'],
+      ['user', '{"id":"user-1"}'],
+      ['token', 'saved-token'],
     ]);
     let finish!: (response: unknown) => void;
-    apiModule.api.authGet.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    apiModule.api.authGet.mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve;
+      })
+    );
     renderAuthProvider();
     await waitFor(() => expect(apiModule.api.authGet).toHaveBeenCalled());
     expect(currentAuth?.loading).toBe(true);
     expect(currentAuth?.isAuthenticated).toBe(false);
-    await act(async () => { await currentAuth?.logout(); });
-    await act(async () => { finish({ data: { id: 'user-1' } }); });
+    await act(async () => {
+      await currentAuth?.logout();
+    });
+    await act(async () => {
+      finish({ data: { id: 'user-1' } });
+    });
     expect(currentAuth?.isAuthenticated).toBe(false);
     expect(currentAuth?.loading).toBe(false);
   });
 
   it('clears storage and authentication when the shared client invalidates a session', async () => {
     asyncStorage.multiGet.mockResolvedValue([
-      ['user', '{"id":"user-1"}'], ['token', 'saved-token'],
+      ['user', '{"id":"user-1"}'],
+      ['token', 'saved-token'],
     ]);
     renderAuthProvider();
     await waitFor(() => expect(currentAuth?.isAuthenticated).toBe(true));

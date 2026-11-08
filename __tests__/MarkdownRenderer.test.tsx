@@ -1,10 +1,13 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { MarkdownRenderer, FormattedText } from '../components/MarkdownRenderer';
+import {
+  MarkdownRenderer,
+  FormattedText,
+} from '../components/MarkdownRenderer';
 
 describe('MarkdownRenderer', () => {
   it('renders null when content is empty', () => {
-    const { toJSON } = render(<MarkdownRenderer content="" />);
+    const { toJSON } = render(<MarkdownRenderer content='' />);
     expect(toJSON()).toBeNull();
   });
 
@@ -32,7 +35,7 @@ describe('MarkdownRenderer', () => {
 
   it('renders inline bold and code formatting', () => {
     const { getByText } = render(
-      <FormattedText text="Hello **world** and `code`" />
+      <FormattedText text='Hello **world** and `code`' />
     );
     expect(getByText('world')).toBeTruthy();
     expect(getByText('code')).toBeTruthy();

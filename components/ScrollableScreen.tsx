@@ -59,7 +59,10 @@ interface ScrollableScreenProps<T> {
   ListEmptyComponent?: React.ReactElement | null;
 
   /** Rendered below the last item (e.g. a loading-more spinner). */
-  ListFooterComponent?: React.ReactElement | (() => React.ReactElement | null) | null;
+  ListFooterComponent?:
+    | React.ReactElement
+    | (() => React.ReactElement | null)
+    | null;
 
   /** Called when the user scrolls within `onEndReachedThreshold` of the bottom. */
   onEndReached?: () => void;

@@ -14,7 +14,13 @@ import { useTabHistory } from '@/contexts/TabHistoryContext';
 
 const { width } = Dimensions.get('window');
 
-const TAB_ROUTES = ['/(tabs)', '/(tabs)/map', '/(tabs)/forum', '/(tabs)/courses', '/(tabs)/profile'];
+const TAB_ROUTES = [
+  '/(tabs)',
+  '/(tabs)/map',
+  '/(tabs)/forum',
+  '/(tabs)/courses',
+  '/(tabs)/profile',
+];
 
 interface TabTransitionWrapperProps {
   children: React.ReactNode;
@@ -27,11 +33,11 @@ export function TabTransitionWrapper({ children }: TabTransitionWrapperProps) {
 
   // Retrieve the closest navigator state (bottom tab navigator)
   const tabState = useNavigationState(state => state);
-  
+
   // Extract active tab index and current screen index in the tab navigator
   const activeIndex = tabState?.index ?? 0;
   const myIndex = tabState?.routeNames?.indexOf(route.name) ?? 0;
-  
+
   const isFocused = activeIndex === myIndex;
   const isMapTab = route.name === 'map';
 
@@ -47,7 +53,7 @@ export function TabTransitionWrapper({ children }: TabTransitionWrapperProps) {
   const panGesture = Gesture.Pan()
     .activeOffsetX([-35, 35])
     .failOffsetY([-15, 15])
-    .onEnd((event) => {
+    .onEnd(event => {
       'worklet';
       if (isMapTab) return; // Disable tab swipe on Map screen to preserve map panning
 
@@ -116,4 +122,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-

@@ -149,13 +149,17 @@ export default function CourseDetailScreen() {
 
   const { startUpload, tasks } = useUpload();
   const { user } = useAuth();
-  const [selectedMaterial, setSelectedMaterial] = useState<CourseMaterial | null>(null);
+  const [selectedMaterial, setSelectedMaterial] =
+    useState<CourseMaterial | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'my'>('all');
 
   const filteredMaterials = useMemo(() => {
     let result = materials;
     if (filterType === 'my' && user?.id) {
-      result = result.filter(m => (m as any).uploadedBy === user.id || (m as any).uploaderId === user.id);
+      result = result.filter(
+        m =>
+          (m as any).uploadedBy === user.id || (m as any).uploaderId === user.id
+      );
     }
     const query = searchQuery.trim().toLowerCase();
     if (!query) return result;
@@ -190,7 +194,11 @@ export default function CourseDetailScreen() {
           webFile: asset.file,
         },
         async (cId, fAsset, onProgress) => {
-          const res = await materialsClient.uploadWithProgress(cId, fAsset, onProgress);
+          const res = await materialsClient.uploadWithProgress(
+            cId,
+            fAsset,
+            onProgress
+          );
           await loadMaterials();
           return res;
         }
@@ -336,18 +344,34 @@ export default function CourseDetailScreen() {
               <>
                 <View style={styles.filterChipRow}>
                   <TouchableOpacity
-                    style={[styles.filterChip, filterType === 'all' && styles.filterChipActive]}
+                    style={[
+                      styles.filterChip,
+                      filterType === 'all' && styles.filterChipActive,
+                    ]}
                     onPress={() => setFilterType('all')}
                   >
-                    <Text style={[styles.filterChipText, filterType === 'all' && styles.filterChipTextActive]}>
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        filterType === 'all' && styles.filterChipTextActive,
+                      ]}
+                    >
                       All Materials ({materials.length})
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.filterChip, filterType === 'my' && styles.filterChipActive]}
+                    style={[
+                      styles.filterChip,
+                      filterType === 'my' && styles.filterChipActive,
+                    ]}
                     onPress={() => setFilterType('my')}
                   >
-                    <Text style={[styles.filterChipText, filterType === 'my' && styles.filterChipTextActive]}>
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        filterType === 'my' && styles.filterChipTextActive,
+                      ]}
+                    >
                       My Uploads
                     </Text>
                   </TouchableOpacity>

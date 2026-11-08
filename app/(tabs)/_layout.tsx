@@ -37,55 +37,55 @@ export default function TabLayout() {
               },
             }}
           >
-          <Tabs.Screen
-            name='index'
-            options={{
-              title: 'Home',
-              tabBarIcon: ({ size, color }) => (
-                <Home size={size - 2} color={color} strokeWidth={2.2} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name='map'
-            options={{
-              title: 'Map',
-              tabBarIcon: ({ size, color }) => (
-                <Map size={size - 2} color={color} strokeWidth={2.2} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name='forum'
-            options={{
-              title: 'Forum',
-              tabBarIcon: ({ size, color }) => (
-                <MessageCircle
-                  size={size - 2}
-                  color={color}
-                  strokeWidth={2.2}
-                />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name='courses'
-            options={{
-              title: 'Courses',
-              tabBarIcon: ({ size, color }) => (
-                <BookOpen size={size - 2} color={color} strokeWidth={2.2} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name='profile'
-            options={{
-              title: 'Profile',
-              tabBarIcon: ({ size, color }) => (
-                <User size={size - 2} color={color} strokeWidth={2.2} />
-              ),
-            }}
-          />
+            <Tabs.Screen
+              name='index'
+              options={{
+                title: 'Home',
+                tabBarIcon: ({ size, color }) => (
+                  <Home size={size - 2} color={color} strokeWidth={2.2} />
+                ),
+              }}
+            />
+            <Tabs.Screen
+              name='map'
+              options={{
+                title: 'Map',
+                tabBarIcon: ({ size, color }) => (
+                  <Map size={size - 2} color={color} strokeWidth={2.2} />
+                ),
+              }}
+            />
+            <Tabs.Screen
+              name='forum'
+              options={{
+                title: 'Forum',
+                tabBarIcon: ({ size, color }) => (
+                  <MessageCircle
+                    size={size - 2}
+                    color={color}
+                    strokeWidth={2.2}
+                  />
+                ),
+              }}
+            />
+            <Tabs.Screen
+              name='courses'
+              options={{
+                title: 'Courses',
+                tabBarIcon: ({ size, color }) => (
+                  <BookOpen size={size - 2} color={color} strokeWidth={2.2} />
+                ),
+              }}
+            />
+            <Tabs.Screen
+              name='profile'
+              options={{
+                title: 'Profile',
+                tabBarIcon: ({ size, color }) => (
+                  <User size={size - 2} color={color} strokeWidth={2.2} />
+                ),
+              }}
+            />
           </Tabs>
         </View>
       </TabHistoryProvider>

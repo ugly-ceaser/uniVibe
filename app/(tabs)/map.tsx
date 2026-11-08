@@ -217,9 +217,9 @@ export default function MapScreen() {
   // ── Hero banner ──────────────────────────────────────────────────────────────
   const hero = (
     <HeroBanner
-      badgeText="WAYFINDING"
+      badgeText='WAYFINDING'
       title={'Where to\nnext? 📍'}
-      subtitle="Every building, office, and hangout spot on campus."
+      subtitle='Every building, office, and hangout spot on campus.'
     />
   );
 
@@ -227,14 +227,14 @@ export default function MapScreen() {
   const searchSection = (
     <View style={styles.searchSectionWrapper}>
       <View style={styles.searchContainer}>
-        <Search size={18} color="#6B7280" strokeWidth={2.2} />
+        <Search size={18} color='#6B7280' strokeWidth={2.2} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search campus buildings, labs, hostels…"
-          placeholderTextColor="#9CA3AF"
+          placeholder='Search campus buildings, labs, hostels…'
+          placeholderTextColor='#9CA3AF'
           value={searchQuery}
           onChangeText={setSearchQuery}
-          clearButtonMode="never"
+          clearButtonMode='never'
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity
@@ -242,7 +242,7 @@ export default function MapScreen() {
             style={styles.clearSearchBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <X size={15} color="#4B5563" />
+            <X size={15} color='#4B5563' />
           </TouchableOpacity>
         )}
       </View>
@@ -282,7 +282,7 @@ export default function MapScreen() {
   // ── Empty / error state ───────────────────────────────────────────────────────
   const emptyComponent = loading ? (
     <View style={styles.loadingBox}>
-      <ActivityIndicator size="large" color="#7B2FBE" />
+      <ActivityIndicator size='large' color='#7B2FBE' />
       <Text style={styles.loadingText}>Loading locations…</Text>
     </View>
   ) : error ? (
@@ -300,8 +300,8 @@ export default function MapScreen() {
       <Text style={styles.emptyEmoji}>🔍</Text>
       <Text style={styles.emptyTitle}>No locations found</Text>
       <Text style={styles.emptySubtitle}>
-        No campus spots match &ldquo;{searchQuery || selectedCategory}&rdquo;. Try another
-        search or reset filters.
+        No campus spots match &ldquo;{searchQuery || selectedCategory}&rdquo;.
+        Try another search or reset filters.
       </Text>
       <TouchableOpacity
         style={styles.resetFilterButton}
@@ -325,7 +325,7 @@ export default function MapScreen() {
         style={styles.refreshButton}
         onPress={() => fetchLocations(true)}
       >
-        <RefreshCw size={15} color="#000" strokeWidth={2.2} />
+        <RefreshCw size={15} color='#000' strokeWidth={2.2} />
         <Text style={styles.refreshButtonText}>Refresh Map</Text>
       </TouchableOpacity>
     </View>
@@ -378,7 +378,7 @@ export default function MapScreen() {
               onPress={() => openInMaps(location)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <ExternalLink size={14} color="#666" />
+              <ExternalLink size={14} color='#666' />
             </TouchableOpacity>
           </View>
 
@@ -395,7 +395,7 @@ export default function MapScreen() {
               style={styles.actionBtn}
               onPress={() => openInMaps(location)}
             >
-              <MapPin size={13} color="#000" />
+              <MapPin size={13} color='#000' />
               <Text style={styles.actionBtnText}>View on map</Text>
             </TouchableOpacity>
 
@@ -403,7 +403,7 @@ export default function MapScreen() {
               style={[styles.actionBtn, styles.actionBtnSecondary]}
               onPress={() => getDirections(location)}
             >
-              <Navigation size={13} color="#000" />
+              <Navigation size={13} color='#000' />
               <Text style={styles.actionBtnText}>Directions</Text>
             </TouchableOpacity>
           </View>
@@ -428,7 +428,7 @@ export default function MapScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#7B2FBE"
+            tintColor='#7B2FBE'
           />
         }
       />

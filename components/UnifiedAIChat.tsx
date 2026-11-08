@@ -362,8 +362,13 @@ export default function UnifiedAIChat({
         }
 
         const rawResponse = response.data.response || '';
-        const isSupplementary = (response.data as any).is_supplementary || rawResponse.includes('**Supplementary Info');
-        const cleanResponse = rawResponse.replace(/\*\*Supplementary Info\*\*:?\s*/gi, '');
+        const isSupplementary =
+          (response.data as any).is_supplementary ||
+          rawResponse.includes('**Supplementary Info');
+        const cleanResponse = rawResponse.replace(
+          /\*\*Supplementary Info\*\*:?\s*/gi,
+          ''
+        );
 
         const aiResponseId = (Date.now() + 1).toString();
         const aiResponse: ChatMessage & { isSupplementary?: boolean } = {
@@ -450,8 +455,6 @@ export default function UnifiedAIChat({
     setShowScrollButton(false);
   }, []);
 
-
-
   // Cursor blinking effect
   useEffect(() => {
     if (typingMessageId) {
@@ -469,11 +472,16 @@ export default function UnifiedAIChat({
 
   // Smooth keyboard animation listener
   useEffect(() => {
-    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    if (
+      Platform.OS === 'android' &&
+      UIManager.setLayoutAnimationEnabledExperimental
+    ) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
     }
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, () => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -675,8 +683,13 @@ export default function UnifiedAIChat({
               keyboardShouldPersistTaps='handled'
             >
               {messages.map(message => {
-                const isSupp = (message as any).isSupplementary || message.text.includes('**Supplementary Info');
-                const cleanText = message.text.replace(/\*\*Supplementary Info\*\*:?\s*/gi, '');
+                const isSupp =
+                  (message as any).isSupplementary ||
+                  message.text.includes('**Supplementary Info');
+                const cleanText = message.text.replace(
+                  /\*\*Supplementary Info\*\*:?\s*/gi,
+                  ''
+                );
 
                 return (
                   <View
@@ -696,8 +709,10 @@ export default function UnifiedAIChat({
                   >
                     {isSupp && !message.isUser ? (
                       <View style={styles.supplementaryHeader}>
-                        <Sparkles size={13} color="#65A30D" />
-                        <Text style={styles.supplementaryTag}>Supplementary Info</Text>
+                        <Sparkles size={13} color='#65A30D' />
+                        <Text style={styles.supplementaryTag}>
+                          Supplementary Info
+                        </Text>
                       </View>
                     ) : null}
                     <Text
@@ -727,9 +742,13 @@ export default function UnifiedAIChat({
                   </View>
                 );
               })}
-              {isLoading && !typingMessageId && (
-                contextType === 'course' ? (
-                  <BookFlippingLoader courseCode={courseContext?.courseCode} message="Searching course materials..." />
+              {isLoading &&
+                !typingMessageId &&
+                (contextType === 'course' ? (
+                  <BookFlippingLoader
+                    courseCode={courseContext?.courseCode}
+                    message='Searching course materials...'
+                  />
                 ) : (
                   <View style={[styles.messageContainer, styles.aiMessage]}>
                     <ActivityIndicator size='small' color={colors[0]} />
@@ -737,8 +756,7 @@ export default function UnifiedAIChat({
                       AI is analyzing your question...
                     </Text>
                   </View>
-                )
-              )}
+                ))}
               {typingMessageId && (
                 <View style={[styles.messageContainer, styles.aiMessage]}>
                   <View style={styles.typingIndicator}>
@@ -764,26 +782,26 @@ export default function UnifiedAIChat({
 
           {failedMessage && !isLoading && (
             <View style={styles.retryBanner}>
-              <AlertCircle size={18} color="#dc2626" />
+              <AlertCircle size={18} color='#dc2626' />
               <Text style={styles.retryBannerText} numberOfLines={1}>
                 Message failed to send
               </Text>
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={handleRetry}
-                accessibilityRole="button"
-                accessibilityLabel="Retry sending message"
+                accessibilityRole='button'
+                accessibilityLabel='Retry sending message'
               >
-                <RotateCcw size={14} color="#ffffff" />
+                <RotateCcw size={14} color='#ffffff' />
                 <Text style={styles.retryButtonLabel}>Try again</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => setFailedMessage(null)}
                 style={styles.dismissRetryButton}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss error"
+                accessibilityRole='button'
+                accessibilityLabel='Dismiss error'
               >
-                <X size={16} color="#9ca3af" />
+                <X size={16} color='#9ca3af' />
               </TouchableOpacity>
             </View>
           )}
@@ -834,7 +852,9 @@ export default function UnifiedAIChat({
               accessibilityRole='button'
               accessibilityLabel='Send message'
               accessibilityState={{ disabled: !isInputValid }}
-              {...(Platform.OS === 'web' ? ({ onMouseDown: (e: any) => e.preventDefault() } as any) : {})}
+              {...(Platform.OS === 'web'
+                ? ({ onMouseDown: (e: any) => e.preventDefault() } as any)
+                : {})}
             >
               <Send size={20} color='#ffffff' strokeWidth={2} />
             </TouchableOpacity>

@@ -1,7 +1,19 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { UploadCloud, CheckCircle2, AlertCircle, X, ArrowRight } from 'lucide-react-native';
+import {
+  UploadCloud,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  ArrowRight,
+} from 'lucide-react-native';
 import { useUpload } from '@/contexts/UploadContext';
 
 export function GlobalUploadToast(): React.JSX.Element | null {
@@ -12,7 +24,8 @@ export function GlobalUploadToast(): React.JSX.Element | null {
 
   const isCompleted = activeTask.status === 'completed';
   const isError = activeTask.status === 'error';
-  const isUploading = activeTask.status === 'uploading' || activeTask.status === 'processing';
+  const isUploading =
+    activeTask.status === 'uploading' || activeTask.status === 'processing';
 
   const handleOpenCourse = () => {
     if (activeTask.courseId) {
@@ -26,15 +39,24 @@ export function GlobalUploadToast(): React.JSX.Element | null {
 
   return (
     <View style={styles.toastContainer}>
-      <View style={[styles.card, isCompleted ? styles.completedCard : isError ? styles.errorCard : styles.uploadingCard]}>
+      <View
+        style={[
+          styles.card,
+          isCompleted
+            ? styles.completedCard
+            : isError
+            ? styles.errorCard
+            : styles.uploadingCard,
+        ]}
+      >
         <View style={styles.headerRow}>
           <View style={styles.iconBadge}>
             {isCompleted ? (
-              <CheckCircle2 size={18} color="#C4FF0E" />
+              <CheckCircle2 size={18} color='#C4FF0E' />
             ) : isError ? (
-              <AlertCircle size={18} color="#FF8A80" />
+              <AlertCircle size={18} color='#FF8A80' />
             ) : (
-              <UploadCloud size={18} color="#C4FF0E" />
+              <UploadCloud size={18} color='#C4FF0E' />
             )}
           </View>
 
@@ -53,21 +75,29 @@ export function GlobalUploadToast(): React.JSX.Element | null {
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.closeBtn} onPress={() => dismissTask(activeTask.id)}>
-            <X size={16} color="#AAAAC0" />
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={() => dismissTask(activeTask.id)}
+          >
+            <X size={16} color='#AAAAC0' />
           </TouchableOpacity>
         </View>
 
         {isUploading ? (
           <View style={styles.progressTrack}>
-            <View style={[styles.progressBar, { width: `${Math.max(5, activeTask.progress)}%` }]} />
+            <View
+              style={[
+                styles.progressBar,
+                { width: `${Math.max(5, activeTask.progress)}%` },
+              ]}
+            />
           </View>
         ) : null}
 
         {isCompleted ? (
           <TouchableOpacity style={styles.actionBtn} onPress={handleOpenCourse}>
             <Text style={styles.actionBtnText}>View in course materials</Text>
-            <ArrowRight size={14} color="#111" />
+            <ArrowRight size={14} color='#111' />
           </TouchableOpacity>
         ) : null}
       </View>

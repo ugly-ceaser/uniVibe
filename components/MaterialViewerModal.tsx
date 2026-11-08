@@ -9,7 +9,15 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { X, ExternalLink, FileText, Download, Share2, Calendar, HardDrive } from 'lucide-react-native';
+import {
+  X,
+  ExternalLink,
+  FileText,
+  Download,
+  Share2,
+  Calendar,
+  HardDrive,
+} from 'lucide-react-native';
 import type { CourseMaterial } from '@/types/course';
 
 interface MaterialViewerModalProps {
@@ -29,7 +37,11 @@ const formatDate = (dateStr?: string): string => {
   if (!dateStr) return 'Recently uploaded';
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return 'Recently uploaded';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 };
 
 export function MaterialViewerModal({
@@ -43,18 +55,29 @@ export function MaterialViewerModal({
 
   const handleOpenExternal = async () => {
     if (!material.url) {
-      Alert.alert('Download unavailable', 'No direct URL is available for this material.');
+      Alert.alert(
+        'Download unavailable',
+        'No direct URL is available for this material.'
+      );
       return;
     }
     try {
       await Linking.openURL(material.url);
     } catch {
-      Alert.alert('Cannot open file', 'Unable to open file in external browser.');
+      Alert.alert(
+        'Cannot open file',
+        'Unable to open file in external browser.'
+      );
     }
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType='slide'
+      transparent
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
         <View style={styles.container}>
           <View style={styles.header}>
@@ -67,24 +90,28 @@ export function MaterialViewerModal({
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color="#AAAAC0" />
+              <X size={20} color='#AAAAC0' />
             </TouchableOpacity>
           </View>
 
           <View style={styles.metaBox}>
             <View style={styles.metaRow}>
-              <HardDrive size={14} color="#8D8DA8" />
-              <Text style={styles.metaText}>{formatSize(material.sizeBytes)}</Text>
+              <HardDrive size={14} color='#8D8DA8' />
+              <Text style={styles.metaText}>
+                {formatSize(material.sizeBytes)}
+              </Text>
             </View>
             <View style={styles.metaDivider} />
             <View style={styles.metaRow}>
-              <Calendar size={14} color="#8D8DA8" />
-              <Text style={styles.metaText}>{formatDate(material.uploadedAt)}</Text>
+              <Calendar size={14} color='#8D8DA8' />
+              <Text style={styles.metaText}>
+                {formatDate(material.uploadedAt)}
+              </Text>
             </View>
           </View>
 
           <View style={styles.previewPlaceholder}>
-            <FileText size={48} color="#C4FF0E" />
+            <FileText size={48} color='#C4FF0E' />
             <Text style={styles.previewTitle}>{material.name}</Text>
             <Text style={styles.previewSub}>
               Course material ready for reading & AI tutoring context.
@@ -92,8 +119,11 @@ export function MaterialViewerModal({
           </View>
 
           <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.primaryActionBtn} onPress={handleOpenExternal}>
-              <ExternalLink size={16} color="#111" />
+            <TouchableOpacity
+              style={styles.primaryActionBtn}
+              onPress={handleOpenExternal}
+            >
+              <ExternalLink size={16} color='#111' />
               <Text style={styles.primaryActionText}>Open File / Download</Text>
             </TouchableOpacity>
           </View>

@@ -242,7 +242,9 @@ export default function PostDetailScreenInner() {
       setQuestionReactions(prev => ({
         counts: {
           ...prev.counts,
-          [emoji]: isCurrentlyReacted ? curCount + 1 : Math.max(0, curCount - 1),
+          [emoji]: isCurrentlyReacted
+            ? curCount + 1
+            : Math.max(0, curCount - 1),
         },
         userReacted: isCurrentlyReacted ? emoji : undefined,
       }));
@@ -421,7 +423,9 @@ export default function PostDetailScreenInner() {
         };
 
         // If replying to answer, append to answer's replies
-        const answerTargetId = isCommentReply ? post.answers[0]?.id : replyingTo.id;
+        const answerTargetId = isCommentReply
+          ? post.answers[0]?.id
+          : replyingTo.id;
         if (answerTargetId) {
           setRepliesByAnswer(prev => {
             const current = prev[answerTargetId] || {
@@ -493,18 +497,14 @@ export default function PostDetailScreenInner() {
           }`
         : null;
 
-      const hasReplies =
-        Array.isArray(node.replies) && node.replies.length > 0;
+      const hasReplies = Array.isArray(node.replies) && node.replies.length > 0;
       const isDeep = depth >= 1;
       const isExpanded = !!expandedDeepNodes[node.id];
 
       return (
         <View
           key={node.id}
-          style={[
-            styles.commentItem,
-            depth > 0 && styles.commentItemNested,
-          ]}
+          style={[styles.commentItem, depth > 0 && styles.commentItemNested]}
         >
           {/* Comment Author Header */}
           <View style={styles.commentHeader}>
@@ -585,9 +585,7 @@ export default function PostDetailScreenInner() {
                       activeOpacity={0.8}
                     >
                       <ChevronUp size={13} color='#6B7280' />
-                      <Text style={styles.collapseDeepText}>
-                        Hide replies
-                      </Text>
+                      <Text style={styles.collapseDeepText}>Hide replies</Text>
                     </TouchableOpacity>
                   )}
                 </>
@@ -663,15 +661,11 @@ export default function PostDetailScreenInner() {
               {['🔥', '💡', '❤️', '👏'].map(emoji => {
                 const active =
                   answerReactions[answer.id]?.userReacted === emoji;
-                const count =
-                  answerReactions[answer.id]?.counts?.[emoji] || 0;
+                const count = answerReactions[answer.id]?.counts?.[emoji] || 0;
                 return (
                   <TouchableOpacity
                     key={emoji}
-                    style={[
-                      styles.emojiPill,
-                      active && styles.emojiPillActive,
-                    ]}
+                    style={[styles.emojiPill, active && styles.emojiPillActive]}
                     onPress={() => handleReactAnswer(answer.id, emoji)}
                     activeOpacity={0.7}
                   >
@@ -700,8 +694,7 @@ export default function PostDetailScreenInner() {
               >
                 <MessageCircle size={13} color='#7B2FBE' />
                 <Text style={styles.replyCountText}>
-                  {commentCount}{' '}
-                  {commentCount === 1 ? 'reply' : 'replies'}
+                  {commentCount} {commentCount === 1 ? 'reply' : 'replies'}
                 </Text>
               </TouchableOpacity>
 
@@ -875,7 +868,10 @@ export default function PostDetailScreenInner() {
                       {post.courseCode ? (
                         <View style={styles.courseTagBadge}>
                           <BookOpen size={10} color='#0D0D0D' />
-                          <Text style={styles.courseTagBadgeText} numberOfLines={1}>
+                          <Text
+                            style={styles.courseTagBadgeText}
+                            numberOfLines={1}
+                          >
                             {post.courseCode}
                           </Text>
                         </View>
@@ -935,7 +931,9 @@ export default function PostDetailScreenInner() {
               </Text>
               {answersCount === 0 && (
                 <View style={styles.beFirstPill}>
-                  <Text style={styles.beFirstPillText}>Be first to answer 💬</Text>
+                  <Text style={styles.beFirstPillText}>
+                    Be first to answer 💬
+                  </Text>
                 </View>
               )}
             </View>
@@ -965,7 +963,10 @@ export default function PostDetailScreenInner() {
             {replyingTo && (
               <View style={styles.replyingToBanner}>
                 <Text style={styles.replyingToText}>
-                  Replying to <Text style={{ fontWeight: '800' }}>{replyingTo.authorName}</Text>
+                  Replying to{' '}
+                  <Text style={{ fontWeight: '800' }}>
+                    {replyingTo.authorName}
+                  </Text>
                 </Text>
                 <TouchableOpacity
                   onPress={() => setReplyingTo(null)}
@@ -994,7 +995,8 @@ export default function PostDetailScreenInner() {
               <TouchableOpacity
                 style={[
                   styles.sendButton,
-                  (!inputText.trim() || submitting) && styles.sendButtonDisabled,
+                  (!inputText.trim() || submitting) &&
+                    styles.sendButtonDisabled,
                 ]}
                 onPress={handleSubmit}
                 disabled={!inputText.trim() || submitting}

@@ -475,7 +475,9 @@ export default function CoursesScreen() {
         );
       }
     } catch (error) {
-      setSelectedCourses(current => addCourseOnce(current, { ...course, isEnrolled: true }));
+      setSelectedCourses(current =>
+        addCourseOnce(current, { ...course, isEnrolled: true })
+      );
       setCatalogCourses(current =>
         current.map(c => (c.id === course.id ? { ...c, isEnrolled: true } : c))
       );
@@ -1001,9 +1003,9 @@ export default function CoursesScreen() {
           >
             {/* ─── Hero Banner ─── */}
             <HeroBanner
-              badgeText="COURSE BROWSER"
+              badgeText='COURSE BROWSER'
               title={'Courses &\nCatalog 📚'}
-              subtitle="Keep your enrolled courses close and discover what comes next."
+              subtitle='Keep your enrolled courses close and discover what comes next.'
             />
 
             <View style={styles.tabContainer}>
@@ -1057,8 +1059,9 @@ export default function CoursesScreen() {
                   </Text>
                 </View>
                 <Text style={styles.warningSubtitle}>
-                  Set your university, faculty, department, programme, level, and
-                  semester in your profile to automatically find your courses.
+                  Set your university, faculty, department, programme, level,
+                  and semester in your profile to automatically find your
+                  courses.
                 </Text>
                 <TouchableOpacity
                   style={styles.warningButton}
@@ -1194,8 +1197,8 @@ export default function CoursesScreen() {
                   <Text style={styles.emptyEmoji}>📥</Text>
                   <Text style={styles.emptyTitle}>No courses yet</Text>
                   <Text style={styles.emptySubtitle}>
-                    Browse the catalog to find courses for your programme, level,
-                    and semester.
+                    Browse the catalog to find courses for your programme,
+                    level, and semester.
                   </Text>
                   <TouchableOpacity
                     style={styles.requestButtonInline}

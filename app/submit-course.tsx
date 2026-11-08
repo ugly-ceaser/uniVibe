@@ -544,13 +544,11 @@ export default function SubmitCourseScreen() {
         msg: result.message,
         type: 'success',
       };
-      
+
       setSuccessModal({
         visible: true,
         title:
-          result.type === 'CREATED'
-            ? 'Request Submitted! 🚀'
-            : 'Course Update',
+          result.type === 'CREATED' ? 'Request Submitted! 🚀' : 'Course Update',
         message: res.msg,
         courseCode: courseCode.trim().toUpperCase(),
         courseTitle: title.trim(),
@@ -748,10 +746,7 @@ export default function SubmitCourseScreen() {
 
           {/* ── Submit ── */}
           <TouchableOpacity
-            style={[
-              styles.submitButton,
-              submitting && { opacity: 0.6 },
-            ]}
+            style={[styles.submitButton, submitting && { opacity: 0.6 }]}
             onPress={handleSubmit}
             disabled={submitting}
             activeOpacity={0.85}
@@ -765,7 +760,9 @@ export default function SubmitCourseScreen() {
               {submitting ? (
                 <ActivityIndicator color='#000' />
               ) : (
-                <Text style={styles.submitButtonText}>Submit for Review 🚀</Text>
+                <Text style={styles.submitButtonText}>
+                  Submit for Review 🚀
+                </Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -816,18 +813,23 @@ export default function SubmitCourseScreen() {
                 <Sparkles size={32} color='#0D0D0D' />
               </View>
               <Text style={styles.successModalTitle}>{successModal.title}</Text>
-              <Text style={styles.successModalMessage}>{successModal.message}</Text>
+              <Text style={styles.successModalMessage}>
+                {successModal.message}
+              </Text>
 
               <View style={styles.successCourseChip}>
                 <BookOpen size={16} color='#7B2FBE' />
-                <Text style={styles.successCourseCode}>{successModal.courseCode}</Text>
+                <Text style={styles.successCourseCode}>
+                  {successModal.courseCode}
+                </Text>
                 <Text style={styles.successCourseTitle} numberOfLines={1}>
                   {successModal.courseTitle}
                 </Text>
               </View>
 
               <Text style={styles.successModalFootnote}>
-                Our moderators review new course requests daily. You'll see it in the catalog once approved!
+                Our moderators review new course requests daily. You'll see it
+                in the catalog once approved!
               </Text>
 
               <TouchableOpacity
@@ -845,7 +847,9 @@ export default function SubmitCourseScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.successModalBtnGradient}
                 >
-                  <Text style={styles.successModalBtnText}>Back to Courses 📚</Text>
+                  <Text style={styles.successModalBtnText}>
+                    Back to Courses 📚
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -1018,7 +1022,13 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
     elevation: 4,
   },
-  input: { flex: 1, fontSize: 14, color: '#0D0D0D', paddingVertical: 12, fontWeight: '600' },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0D0D0D',
+    paddingVertical: 12,
+    fontWeight: '600',
+  },
 
   submitButton: {
     borderRadius: 24,

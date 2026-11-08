@@ -229,7 +229,9 @@ export default function ForumScreen() {
             [postId]: {
               counts: {
                 ...current.counts,
-                [emoji]: isCurrentlyLiked ? curCount + 1 : Math.max(0, curCount - 1),
+                [emoji]: isCurrentlyLiked
+                  ? curCount + 1
+                  : Math.max(0, curCount - 1),
               },
               userReacted: isCurrentlyLiked ? emoji : undefined,
             },
@@ -239,7 +241,10 @@ export default function ForumScreen() {
           list.map(p => {
             if (p.id !== postId) return p;
             const currentCount = p.reactionCount ?? p.likes ?? 0;
-            const originalCount = Math.max(0, currentCount + (isCurrentlyLiked ? 1 : -1));
+            const originalCount = Math.max(
+              0,
+              currentCount + (isCurrentlyLiked ? 1 : -1)
+            );
             return {
               ...p,
               isLiked: isCurrentlyLiked,
@@ -698,7 +703,10 @@ export default function ForumScreen() {
                       {post.courseCode ? (
                         <View style={styles.courseTagBadge}>
                           <BookOpen size={10} color='#0D0D0D' />
-                          <Text style={styles.courseTagBadgeText} numberOfLines={1}>
+                          <Text
+                            style={styles.courseTagBadgeText}
+                            numberOfLines={1}
+                          >
                             {post.courseCode}
                           </Text>
                         </View>
@@ -784,7 +792,8 @@ export default function ForumScreen() {
                     const active =
                       postReactions[post.id]?.userReacted === emoji ||
                       (emoji === '❤️' && likedPostIds.has(post.id));
-                    const baseReactionCount = post.reactionCount ?? post.likes ?? 0;
+                    const baseReactionCount =
+                      post.reactionCount ?? post.likes ?? 0;
                     const count =
                       postReactions[post.id]?.counts?.[emoji] ??
                       (emoji === '❤️' ? baseReactionCount : 0);
@@ -935,7 +944,7 @@ export default function ForumScreen() {
   const hero = (
     <>
       <HeroBanner
-        badgeText="PEER TO PEER"
+        badgeText='PEER TO PEER'
         title={'Spill the tea,\nask away 💬'}
         subtitle="Real answers from real students who've been there."
         rightAction={
@@ -975,9 +984,7 @@ export default function ForumScreen() {
             }}
             autoFocus
           />
-          {isSearching && (
-            <ActivityIndicator size='small' color='#7B2FBE' />
-          )}
+          {isSearching && <ActivityIndicator size='small' color='#7B2FBE' />}
         </View>
       )}
     </>
@@ -989,7 +996,8 @@ export default function ForumScreen() {
       {targetAuthorId && (
         <View style={styles.activeAuthorBanner}>
           <Text style={styles.activeAuthorBannerText}>
-            👤 {myPosts === 'true' ? 'My Questions & Posts' : 'Filtered by User'}
+            👤{' '}
+            {myPosts === 'true' ? 'My Questions & Posts' : 'Filtered by User'}
           </Text>
           <TouchableOpacity
             onPress={() =>
@@ -1034,7 +1042,8 @@ export default function ForumScreen() {
             <Text
               style={[
                 styles.courseFilterChipText,
-                selectedCourseCode === 'all' && styles.courseFilterChipTextActive,
+                selectedCourseCode === 'all' &&
+                  styles.courseFilterChipTextActive,
               ]}
             >
               All courses
@@ -1050,9 +1059,7 @@ export default function ForumScreen() {
                   styles.courseFilterChip,
                   isActive && styles.courseFilterChipActive,
                 ]}
-                onPress={() =>
-                  setSelectedCourseCode(isActive ? 'all' : code)
-                }
+                onPress={() => setSelectedCourseCode(isActive ? 'all' : code)}
                 activeOpacity={0.8}
               >
                 <BookOpen size={12} color={isActive ? '#0D0D0D' : '#7B2FBE'} />

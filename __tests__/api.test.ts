@@ -73,22 +73,33 @@ describe('ApiClient', () => {
   });
 
   it.each(['get', 'authGet', 'forceRefresh'] as const)(
-    'invalidates rejected credentials through %s', async method => {
-      fetchMock.mockResolvedValueOnce(createResponse({ status: 401, body: '{}' }));
+    'invalidates rejected credentials through %s',
+    async method => {
+      fetchMock.mockResolvedValueOnce(
+        createResponse({ status: 401, body: '{}' })
+      );
       const client = new ApiClient('https://example.test');
       const invalidated = jest.fn();
       client.setToken('expired');
       client.setSessionInvalidationHandler(invalidated);
-      await expect(client[method]('/private')).rejects.toMatchObject({ status: 401 });
+      await expect(client[method]('/private')).rejects.toMatchObject({
+        status: 401,
+      });
       expect(invalidated).toHaveBeenCalledTimes(1);
-      await expect(client.authGet('/another')).rejects.toMatchObject({ status: 401 });
+      await expect(client.authGet('/another')).rejects.toMatchObject({
+        status: 401,
+      });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     }
   );
 
   it('does not invalidate a newer session after an old request fails', async () => {
     let finish!: (response: Response) => void;
-    fetchMock.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    fetchMock.mockReturnValueOnce(
+      new Promise(resolve => {
+        finish = resolve;
+      })
+    );
     const client = new ApiClient('https://example.test');
     const invalidated = jest.fn();
     client.setSessionInvalidationHandler(invalidated);

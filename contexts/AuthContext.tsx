@@ -78,63 +78,68 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setToken(null);
   }, []);
 
-  const checkAuth = useCallback(async (isResume = false) => {
-    if (signingIn.current) return;
-    const version = ++sessionVersion.current;
-    if (!isResume) {
-      setLoading(true);
-    }
-    try {
-      const storedValues = await AsyncStorage.multiGet([
-        AUTH_STORAGE_KEYS.user,
-        AUTH_STORAGE_KEYS.token,
-      ]);
-      const storedSession = parseStoredAuthSession(
-        storedValues[0]?.[1] ?? null,
-        storedValues[1]?.[1] ?? null
-      );
-      if (version !== sessionVersion.current) return;
-
-      if (!storedSession) {
-        clearSessionState();
-        await clearStoredSession();
-        return;
+  const checkAuth = useCallback(
+    async (isResume = false) => {
+      if (signingIn.current) return;
+      const version = ++sessionVersion.current;
+      if (!isResume) {
+        setLoading(true);
       }
+      try {
+        const storedValues = await AsyncStorage.multiGet([
+          AUTH_STORAGE_KEYS.user,
+          AUTH_STORAGE_KEYS.token,
+        ]);
+        const storedSession = parseStoredAuthSession(
+          storedValues[0]?.[1] ?? null,
+          storedValues[1]?.[1] ?? null
+        );
+        if (version !== sessionVersion.current) return;
 
-      api.setToken(storedSession.token);
-      // A saved token is only a candidate session until the server accepts it.
-      const response = await api.authGet<{ data: AuthUser | null }>(
-        '/user/profile',
-        false
-      );
-      if (version !== sessionVersion.current) return;
-      if (!response.data?.id ||
-          (storedSession.user.id && response.data.id !== storedSession.user.id)) {
-        throw new ApiError('Saved account is no longer available', 401);
-      }
-      setUser(storedSession.user);
-      setToken(storedSession.token);
-    } catch (error) {
-      if (version !== sessionVersion.current) return;
-      if (isResume) {
-        if (error instanceof ApiError && [401, 404].includes(error.status)) {
+        if (!storedSession) {
           clearSessionState();
-          await clearStoredSession().catch(() => {});
+          await clearStoredSession();
+          return;
         }
-      } else {
-        clearSessionState();
-        if (error instanceof ApiError && [401, 404].includes(error.status)) {
-          await clearStoredSession().catch(() => {});
+
+        api.setToken(storedSession.token);
+        // A saved token is only a candidate session until the server accepts it.
+        const response = await api.authGet<{ data: AuthUser | null }>(
+          '/user/profile',
+          false
+        );
+        if (version !== sessionVersion.current) return;
+        if (
+          !response.data?.id ||
+          (storedSession.user.id && response.data.id !== storedSession.user.id)
+        ) {
+          throw new ApiError('Saved account is no longer available', 401);
         }
+        setUser(storedSession.user);
+        setToken(storedSession.token);
+      } catch (error) {
+        if (version !== sessionVersion.current) return;
+        if (isResume) {
+          if (error instanceof ApiError && [401, 404].includes(error.status)) {
+            clearSessionState();
+            await clearStoredSession().catch(() => {});
+          }
+        } else {
+          clearSessionState();
+          if (error instanceof ApiError && [401, 404].includes(error.status)) {
+            await clearStoredSession().catch(() => {});
+          }
+        }
+        log.warn(
+          'Unable to restore the saved session',
+          error instanceof Error ? error.message : String(error)
+        );
+      } finally {
+        if (!isResume && version === sessionVersion.current) setLoading(false);
       }
-      log.warn(
-        'Unable to restore the saved session',
-        error instanceof Error ? error.message : String(error)
-      );
-    } finally {
-      if (!isResume && version === sessionVersion.current) setLoading(false);
-    }
-  }, [clearSessionState]);
+    },
+    [clearSessionState]
+  );
 
   const login = useCallback(async (credentials: LoginRequest) => {
     signingIn.current = true;
@@ -208,7 +213,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [clearSessionState]);
 
   useEffect(() => {
-    api.setSessionInvalidationHandler(() => { void logout(); });
+    api.setSessionInvalidationHandler(() => {
+      void logout();
+    });
     void checkAuth();
     let previousState = AppState.currentState;
     const subscription = AppState.addEventListener('change', state => {

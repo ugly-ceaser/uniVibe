@@ -62,10 +62,10 @@ export default function NotificationsScreen() {
   const handleMarkAsRead = async (item: NotificationItem) => {
     if (!item.read) {
       // Optimistic update
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
+      setNotifications(prev =>
+        prev.map(n => (n.id === item.id ? { ...n, read: true } : n))
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setUnreadCount(prev => Math.max(0, prev - 1));
       try {
         await notificationsApi().markAsRead(item.id);
       } catch (err) {
@@ -82,7 +82,7 @@ export default function NotificationsScreen() {
     if (unreadCount === 0 || markingAll) return;
     setMarkingAll(true);
     // Optimistic update
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     setUnreadCount(0);
     try {
       await notificationsApi().markAllAsRead();
@@ -96,14 +96,14 @@ export default function NotificationsScreen() {
   const getIconForType = (type: NotificationItem['type']) => {
     switch (type) {
       case 'FORUM_ANSWER':
-        return <MessageSquare size={20} color="#C4FF0E" strokeWidth={2.2} />;
+        return <MessageSquare size={20} color='#C4FF0E' strokeWidth={2.2} />;
       case 'FORUM_LIKE':
       case 'GUIDE_LIKE':
-        return <Heart size={20} color="#FF3B30" strokeWidth={2.2} />;
+        return <Heart size={20} color='#FF3B30' strokeWidth={2.2} />;
       case 'COURSE_UPDATE':
-        return <BookOpen size={20} color="#34C759" strokeWidth={2.2} />;
+        return <BookOpen size={20} color='#34C759' strokeWidth={2.2} />;
       default:
-        return <Bell size={20} color="#007AFF" strokeWidth={2.2} />;
+        return <Bell size={20} color='#007AFF' strokeWidth={2.2} />;
     }
   };
 
@@ -151,16 +151,16 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F0F16" />
+      <StatusBar barStyle='light-content' backgroundColor='#0F0F16' />
 
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
-          accessibilityLabel="Go back"
+          accessibilityLabel='Go back'
         >
-          <ArrowLeft size={22} color="#FFFFFF" strokeWidth={2.5} />
+          <ArrowLeft size={22} color='#FFFFFF' strokeWidth={2.5} />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Notifications</Text>
@@ -171,7 +171,7 @@ export default function NotificationsScreen() {
             onPress={handleMarkAllAsRead}
             disabled={markingAll}
           >
-            <CheckCheck size={16} color="#C4FF0E" strokeWidth={2.2} />
+            <CheckCheck size={16} color='#C4FF0E' strokeWidth={2.2} />
             <Text style={styles.markAllText}>Read all</Text>
           </TouchableOpacity>
         ) : (
@@ -182,32 +182,35 @@ export default function NotificationsScreen() {
       {/* Main List / States */}
       {loading && !refreshing ? (
         <View style={styles.centeredState}>
-          <ActivityIndicator size="large" color="#C4FF0E" />
+          <ActivityIndicator size='large' color='#C4FF0E' />
         </View>
       ) : (
         <FlatList
           data={notifications}
-          keyExtractor={(item) => item.id}
+          keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={
-            notifications.length === 0 ? styles.emptyContainer : styles.listContent
+            notifications.length === 0
+              ? styles.emptyContainer
+              : styles.listContent
           }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => fetchNotifications(true)}
-              tintColor="#C4FF0E"
+              tintColor='#C4FF0E'
               colors={['#C4FF0E']}
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Bell size={36} color="#8888AA" strokeWidth={1.8} />
+                <Bell size={36} color='#8888AA' strokeWidth={1.8} />
               </View>
               <Text style={styles.emptyTitle}>All Caught Up!</Text>
               <Text style={styles.emptySubtitle}>
-                You don't have any notifications right now. Check back later for updates.
+                You don't have any notifications right now. Check back later for
+                updates.
               </Text>
             </View>
           }

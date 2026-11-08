@@ -86,9 +86,19 @@ function SkeletonCard() {
     <View style={styles.skeletonCard}>
       <SkeletonBlock width={54} height={54} radius={14} />
       <View style={styles.skeletonTextCol}>
-        <SkeletonBlock width="70%" height={14} radius={6} style={{ marginBottom: 8 }} />
-        <SkeletonBlock width="90%" height={12} radius={6} style={{ marginBottom: 6 }} />
-        <SkeletonBlock width="55%" height={12} radius={6} />
+        <SkeletonBlock
+          width='70%'
+          height={14}
+          radius={6}
+          style={{ marginBottom: 8 }}
+        />
+        <SkeletonBlock
+          width='90%'
+          height={12}
+          radius={6}
+          style={{ marginBottom: 6 }}
+        />
+        <SkeletonBlock width='55%' height={12} radius={6} />
       </View>
     </View>
   );
@@ -192,9 +202,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
           // Dot spinner + optional label
           <>
             <DotSpinner />
-            {title ? (
-              <Text style={styles.label}>{title}</Text>
-            ) : null}
+            {title ? <Text style={styles.label}>{title}</Text> : null}
           </>
         )}
       </View>

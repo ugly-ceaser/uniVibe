@@ -1,0 +1,8 @@
+# Generated or native build output (also in .gitignore; Prettier 2 does not read it)
+node_modules/
+dist/
+coverage/
+android/
+ios/
+.expo/
+expo-env.d.ts

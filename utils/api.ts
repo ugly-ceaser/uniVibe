@@ -85,10 +85,7 @@ export const ApiErrorCode = {
  *   }
  * }
  */
-export function isApiError(
-  err: unknown,
-  status?: number
-): err is ApiError {
+export function isApiError(err: unknown, status?: number): err is ApiError {
   if (!(err instanceof ApiError)) return false;
   return status === undefined || err.status === status;
 }
@@ -360,7 +357,11 @@ export class ApiClient {
       if (!response.ok) {
         // Invalidate only the session that sent this request. A late response
         // from a previous account must never sign out a newly logged-in user.
-        if (response.status === 401 && requestToken && this.token === requestToken) {
+        if (
+          response.status === 401 &&
+          requestToken &&
+          this.token === requestToken
+        ) {
           this.clearToken();
           this.sessionInvalidationHandler?.();
         }
@@ -876,7 +877,10 @@ export const courseMaterialsApi = (api: ReturnType<typeof useApi>) => ({
       if (xhr.upload && onProgress) {
         xhr.upload.onprogress = event => {
           if (event.lengthComputable && event.total > 0) {
-            const pct = Math.min(99, Math.round((event.loaded / event.total) * 100));
+            const pct = Math.min(
+              99,
+              Math.round((event.loaded / event.total) * 100)
+            );
             onProgress(pct);
           }
         };
@@ -1862,7 +1866,8 @@ export const profileApi = (api: ReturnType<typeof useApi>) => {
         : undefined,
       phone: apiData.phone || '',
       nin: apiData.nin || '',
-      avatarUrl: apiData.avatarUrl || apiData.avatar || apiData.image || undefined,
+      avatarUrl:
+        apiData.avatarUrl || apiData.avatar || apiData.image || undefined,
       verificationStatus,
       status: validStatuses.includes(apiData.status)
         ? apiData.status
@@ -1925,30 +1930,41 @@ export const testConnection = (): Promise<boolean> =>
   apiClient.testConnection();
 
 export const notificationsApi = (apiInstance: ApiInstance = apiClient) => ({
-  getNotifications: async (page = 1, pageSize = 20): Promise<ApiResponse<NotificationListResponse>> => {
-    const res = await apiInstance.authGet<{ data: NotificationListResponse; status?: number; message?: string }>(
-      `/notifications?page=${page}&pageSize=${pageSize}`,
-      false
-    );
+  getNotifications: async (
+    page = 1,
+    pageSize = 20
+  ): Promise<ApiResponse<NotificationListResponse>> => {
+    const res = await apiInstance.authGet<{
+      data: NotificationListResponse;
+      status?: number;
+      message?: string;
+    }>(`/notifications?page=${page}&pageSize=${pageSize}`, false);
     return { data: res.data, status: res.status ?? 200, message: res.message };
   },
   getUnreadCount: async (): Promise<ApiResponse<{ unreadCount: number }>> => {
-    const res = await apiInstance.authGet<{ data: { unreadCount: number }; status?: number; message?: string }>(
-      '/notifications/unread-count',
-      false
-    );
+    const res = await apiInstance.authGet<{
+      data: { unreadCount: number };
+      status?: number;
+      message?: string;
+    }>('/notifications/unread-count', false);
     return { data: res.data, status: res.status ?? 200, message: res.message };
   },
-  markAsRead: async (id: string): Promise<ApiResponse<{ success: boolean }>> => {
-    const res = await apiInstance.authPatch<{ data: { success: boolean }; status?: number; message?: string }>(
-      `/notifications/${id}/read`
-    );
+  markAsRead: async (
+    id: string
+  ): Promise<ApiResponse<{ success: boolean }>> => {
+    const res = await apiInstance.authPatch<{
+      data: { success: boolean };
+      status?: number;
+      message?: string;
+    }>(`/notifications/${id}/read`);
     return { data: res.data, status: res.status ?? 200, message: res.message };
   },
   markAllAsRead: async (): Promise<ApiResponse<{ count: number }>> => {
-    const res = await apiInstance.authPatch<{ data: { count: number }; status?: number; message?: string }>(
-      '/notifications/read-all'
-    );
+    const res = await apiInstance.authPatch<{
+      data: { count: number };
+      status?: number;
+      message?: string;
+    }>('/notifications/read-all');
     return { data: res.data, status: res.status ?? 200, message: res.message };
   },
 });

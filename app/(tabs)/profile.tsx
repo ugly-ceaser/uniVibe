@@ -218,10 +218,7 @@ export default function ProfileScreen() {
           Alert.alert('Success', 'Profile photo updated!');
         }
       } catch (err: any) {
-        Alert.alert(
-          'Error',
-          err?.message || 'Failed to update profile photo.'
-        );
+        Alert.alert('Error', err?.message || 'Failed to update profile photo.');
       } finally {
         setUpdatingAvatar(false);
       }
@@ -473,9 +470,9 @@ export default function ProfileScreen() {
       <TabTransitionWrapper>
         <SafeAreaView style={styles.container} edges={['top']}>
           <HeroBanner
-            badgeText="YOUR CORNER"
+            badgeText='YOUR CORNER'
             title="That's you ✦"
-            subtitle="Your academic profile and details."
+            subtitle='Your academic profile and details.'
           />
           <View style={styles.loadingBox}>
             <ActivityIndicator size='large' color='#7B2FBE' />
@@ -512,9 +509,9 @@ export default function ProfileScreen() {
           >
             {/* ─── Hero Banner ─── */}
             <HeroBanner
-              badgeText="YOUR CORNER"
+              badgeText='YOUR CORNER'
               title={`That's you,\n${firstName} ✦`}
-              subtitle="Your academic profile and details."
+              subtitle='Your academic profile and details.'
               rightAction={
                 <TouchableOpacity
                   style={styles.editIconBtn}
@@ -580,7 +577,9 @@ export default function ProfileScreen() {
                   disabled={updatingAvatar}
                 >
                   <Text style={styles.changePhotoBtnText}>
-                    {updatingAvatar ? 'Updating photo…' : 'Change profile photo'}
+                    {updatingAvatar
+                      ? 'Updating photo…'
+                      : 'Change profile photo'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -607,7 +606,9 @@ export default function ProfileScreen() {
                   <TextInput
                     style={styles.editInput}
                     value={editForm.fullName}
-                    onChangeText={v => setEditForm(f => ({ ...f, fullName: v }))}
+                    onChangeText={v =>
+                      setEditForm(f => ({ ...f, fullName: v }))
+                    }
                     placeholder='Your full name'
                   />
                   <Text style={styles.editLabel}>Phone</Text>
@@ -622,7 +623,9 @@ export default function ProfileScreen() {
                   <TextInput
                     style={styles.editInput}
                     value={editForm.regNumber}
-                    onChangeText={v => setEditForm(f => ({ ...f, regNumber: v }))}
+                    onChangeText={v =>
+                      setEditForm(f => ({ ...f, regNumber: v }))
+                    }
                     placeholder='Your registration number'
                     autoCapitalize='characters'
                   />
@@ -757,7 +760,8 @@ export default function ProfileScreen() {
                     style={[
                       styles.editInput,
                       styles.selectButton,
-                      !hierarchy.selection.faculty && styles.selectButtonDisabled,
+                      !hierarchy.selection.faculty &&
+                        styles.selectButtonDisabled,
                     ]}
                     disabled={!hierarchy.selection.faculty || hierarchy.loading}
                     onPress={() =>
@@ -815,7 +819,8 @@ export default function ProfileScreen() {
                     }
                   >
                     <Text style={styles.selectButtonText}>
-                      {hierarchy.selection.programme?.name || 'Select Programme'}
+                      {hierarchy.selection.programme?.name ||
+                        'Select Programme'}
                     </Text>
                     <ChevronRight size={18} color='#555' />
                   </TouchableOpacity>
@@ -828,7 +833,9 @@ export default function ProfileScreen() {
                       !hierarchy.selection.programme &&
                         styles.selectButtonDisabled,
                     ]}
-                    disabled={!hierarchy.selection.programme || hierarchy.loading}
+                    disabled={
+                      !hierarchy.selection.programme || hierarchy.loading
+                    }
                     onPress={() =>
                       showPicker(
                         'Select Level',
@@ -863,7 +870,9 @@ export default function ProfileScreen() {
                       !hierarchy.selection.programme &&
                         styles.selectButtonDisabled,
                     ]}
-                    disabled={!hierarchy.selection.programme || hierarchy.loading}
+                    disabled={
+                      !hierarchy.selection.programme || hierarchy.loading
+                    }
                     onPress={() =>
                       showPicker(
                         'Select Semester',
@@ -898,10 +907,14 @@ export default function ProfileScreen() {
                   )}
                   {hierarchy.error && (
                     <View style={styles.hierarchyErrorRow}>
-                      <Text style={styles.hierarchyError}>{hierarchy.error}</Text>
+                      <Text style={styles.hierarchyError}>
+                        {hierarchy.error}
+                      </Text>
                       <TouchableOpacity
                         style={styles.hierarchyRetryButton}
-                        onPress={() => profile && void hierarchy.hydrate(profile)}
+                        onPress={() =>
+                          profile && void hierarchy.hydrate(profile)
+                        }
                       >
                         <Text style={styles.hierarchyRetryText}>Retry</Text>
                       </TouchableOpacity>
@@ -974,11 +987,15 @@ export default function ProfileScreen() {
                 }
                 activeOpacity={0.7}
               >
-                <View style={[styles.rowIconBox, { backgroundColor: '#EDE9FE' }]}>
+                <View
+                  style={[styles.rowIconBox, { backgroundColor: '#EDE9FE' }]}
+                >
                   <MessageCircle size={18} color='#7B2FBE' />
                 </View>
                 <View style={styles.rowContent}>
-                  <Text style={styles.rowLabel}>My Forum Questions & Posts</Text>
+                  <Text style={styles.rowLabel}>
+                    My Forum Questions & Posts
+                  </Text>
                   <Text style={styles.rowValue}>
                     {userPostsCount !== null
                       ? `${userPostsCount} question${
@@ -998,7 +1015,9 @@ export default function ProfileScreen() {
                 onPress={() => router.push('/create-post')}
                 activeOpacity={0.7}
               >
-                <View style={[styles.rowIconBox, { backgroundColor: '#DCFCE7' }]}>
+                <View
+                  style={[styles.rowIconBox, { backgroundColor: '#DCFCE7' }]}
+                >
                   <Plus size={18} color='#15803D' />
                 </View>
                 <View style={styles.rowContent}>
@@ -1060,7 +1079,9 @@ export default function ProfileScreen() {
             visible={pickerModal.visible}
             transparent={true}
             animationType='fade'
-            onRequestClose={() => setPickerModal(p => ({ ...p, visible: false }))}
+            onRequestClose={() =>
+              setPickerModal(p => ({ ...p, visible: false }))
+            }
           >
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>

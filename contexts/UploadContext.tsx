@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 
 export interface UploadTask {
   id: string;
@@ -37,11 +43,19 @@ interface UploadContextType {
 
 const UploadContext = createContext<UploadContextType | undefined>(undefined);
 
-export function UploadProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
+export function UploadProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
   const [tasks, setTasks] = useState<UploadTask[]>([]);
 
   const activeTask = useMemo(() => {
-    return tasks.find(t => t.status === 'uploading' || t.status === 'processing') || tasks[tasks.length - 1] || null;
+    return (
+      tasks.find(t => t.status === 'uploading' || t.status === 'processing') ||
+      tasks[tasks.length - 1] ||
+      null
+    );
   }, [tasks]);
 
   const dismissTask = useCallback((taskId: string) => {
@@ -98,13 +112,14 @@ export function UploadProvider({ children }: { children: React.ReactNode }): Rea
 
         setTasks(prev =>
           prev.map(t =>
-            t.id === taskId
-              ? { ...t, progress: 100, status: 'completed' }
-              : t
+            t.id === taskId ? { ...t, progress: 100, status: 'completed' } : t
           )
         );
       } catch (err: any) {
-        const errorMsg = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+        const errorMsg =
+          err instanceof Error
+            ? err.message
+            : 'Upload failed. Please try again.';
         setTasks(prev =>
           prev.map(t =>
             t.id === taskId
@@ -128,7 +143,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }): Rea
     [tasks, activeTask, startUpload, cancelUpload, dismissTask]
   );
 
-  return <UploadContext.Provider value={value}>{children}</UploadContext.Provider>;
+  return (
+    <UploadContext.Provider value={value}>{children}</UploadContext.Provider>
+  );
 }
 
 export function useUpload(): UploadContextType {

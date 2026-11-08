@@ -100,9 +100,9 @@ export default function HomeScreen() {
   const hero = (
     <>
       <HeroBanner
-        badgeText="CAMPUS SEASON"
+        badgeText='CAMPUS SEASON'
         title={`Hey ${firstName},\nlet's vibe check ✨`}
-        subtitle="Fresh guides, drops, and hacks to make uni actually make sense."
+        subtitle='Fresh guides, drops, and hacks to make uni actually make sense.'
         rightAction={<NotificationBell />}
       />
 
