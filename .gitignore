@@ -144,3 +144,5 @@ ios/Pods/
 
 expo-env.d.ts
 # @end expo-cli
+# Stray uploaded course materials (student content, never committed)
+media_storage/
